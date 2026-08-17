@@ -74,6 +74,7 @@
       <div><kbd>S / ↓</kbd>Brake · Reverse</div>
       <div><kbd>A D / ← →</kbd>Steer</div>
     </div>
+    <div class="result" id="results" style="display:none"></div>
     <br/>
     <button class="btn" id="startBtn">START RACE</button>
     <div class="sub" id="footnote" style="margin:16px 0 0 0">OR PRESS ENTER &nbsp;·&nbsp; 3 LAPS</div>
@@ -440,12 +441,14 @@ const titleEl  = el('title');
 const subEl    = el('subtitle');
 const keysEl   = el('keys');
 const footEl   = el('footnote');
+const resultsEl = el('results');
 
 function fmt(t) {
   if (t == null) return '--';
-  const m = Math.floor(t / 60);
-  const s = t - m * 60;
-  return m + ':' + (s < 10 ? '0' : '') + s.toFixed(1);
+  const d = Math.floor(t * 10); // tenths, floored once
+  const m = Math.floor(d / 600);
+  const ss = String(Math.floor((d % 600) / 10)).padStart(2, '0');
+  return m + ':' + ss + '.' + (d % 10);
 }
 
 /* ------------------------------------------------------------------ *
@@ -516,7 +519,8 @@ function finishRace() {
     false,
     'OR PRESS R'
   );
-  startBtn.addEventListener('click', () => startRace(), { once: true });
+  resultsEl.innerHTML = 'TOTAL <b>' + fmt(raceTime) + '</b> &nbsp;·&nbsp; BEST LAP <b>' + fmt(bestLap) + '</b>';
+  resultsEl.style.display = '';
 }
 
 function primaryAction() {
@@ -574,6 +578,7 @@ function lapComplete() {
 }
 
 function updateLapLogic() {
+  if (state !== 'racing') return;
   const { u } = nearestTrack();
   if (u > 0.4 && u < 0.6) midPassed = true;
   if (prevU > 0.85 && u < 0.15) {
@@ -596,8 +601,9 @@ function turnFactor(s) {
 }
 
 function updateDriver(dt) {
-  const throttle = (keys.up ? 1 : 0) - (keys.down ? 1 : 0);
-  const steerIn  = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
+  const racing = state === 'racing';
+  const throttle = racing ? (keys.up ? 1 : 0) - (keys.down ? 1 : 0) : 0;
+  const steerIn  = racing ? (keys.left ? 1 : 0) - (keys.right ? 1 : 0) : 0;
   steer += (steerIn - steer) * Math.min(1, 12 * dt);
 
   if (throttle > 0) {
