@@ -97,6 +97,7 @@ const DRAG       = 0.55;    // per-second exponential drag
 const OFF_DRAG   = 4.5;     // extra drag when off the asphalt
 const OFF_GRIP   = 0.45;    // acceleration multiplier off track
 const STEER_RATE = 2.7;     // base steering rate (rad/s @ full grip)
+const MAX_VISUAL_STEER = 0.5; // max front-wheel yaw (rad) at full steer
 const ROAD_HW    = 4.2;     // road half-width (u)
 const CURB_W     = 0.9;     // curb strip width
 const LAPS       = 3;
@@ -373,6 +374,7 @@ addBox(bodyGroup, 1.0, 0.5, 0.6, 0, 1.18, -0.55, darkMat);     // seat
 }
 
 const wheels = [];
+const frontPivots = [];
 const wheelGeo = new THREE.CylinderGeometry(WHEEL_R, WHEEL_R, 0.32, 18);
 wheelGeo.rotateZ(Math.PI / 2); // axle along local X
 
@@ -382,18 +384,18 @@ function addWheel(x, z, front) {
   const wheel = new THREE.Mesh(wheelGeo, tireMat);
   wheel.castShadow = true;
   wheel.add(hub);
-  wheel.position.set(x, WHEEL_R, z);
   if (front) {
-    const g = new THREE.Group(); // steering pivot
+    const g = new THREE.Group(); // steering pivot at wheel center
+    g.position.set(x, WHEEL_R, z);
+    wheel.position.set(0, 0, 0);
     g.add(wheel);
     kart.add(g);
+    frontPivots.push(g);
   } else {
+    wheel.position.set(x, WHEEL_R, z);
     kart.add(wheel);
   }
   wheels.push(wheel);
-  kart.add(wheel);
-  wheels.push(wheel);
-  return null;
 }
 addWheel( 0.85,  1.05, true);
 addWheel(-0.85,  1.05, true);
@@ -623,6 +625,7 @@ function updateDriver(dt) {
   // wheels
   wheelSpin += speed * dt / WHEEL_R;
   for (const w of wheels) w.rotation.x = wheelSpin;
+  for (const p of frontPivots) p.rotation.y = steer * MAX_VISUAL_STEER;
 
   // body tilt (pitch + roll)
   const sp = Math.min(Math.abs(speed) / MAX_SPEED, 1);
