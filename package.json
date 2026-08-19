@@ -1,0 +1,10 @@
+{
+  "name": "test-micro",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@eslint/js": "^9.11.0",
+    "eslint": "^9.11.0",
+    "globals": "^15.9.0"
+  }
+}
