@@ -18,9 +18,10 @@ export const CAM_DIST   = 7.5;
 export const CAM_HEIGHT = 3.3;
 export const N_SAMPLES  = 1000;    // track sampling resolution
 
-// AI opponents: N_AI total, skill in [0..1] drives their pace/cornering
+// AI opponents: N_AI total, skill in [0..1] drives their pace/cornering.
+// Deliberate spread: one front-runner, one mid-packer, one back-marker.
 export const N_AI         = 3;
-export const AI_SKILL     = [0.94, 0.90, 0.86];
+export const AI_SKILL     = [0.96, 0.85, 0.62];
 
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const P2D = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);

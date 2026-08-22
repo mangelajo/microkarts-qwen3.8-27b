@@ -69,6 +69,7 @@ export class Kart {
   constructor(opts) {
     this.isPlayer = !!opts.isPlayer;
     this.name = opts.name || (this.isPlayer ? 'YOU' : 'RIVALE');
+    this.skill = opts.skill ?? 0.9;
     const color = opts.color || 0xe0392b;
     const accent = opts.accent ?? (((color >> 8) & 255) | 0x808080);
     this.mesh = makeKart(color, accent);
@@ -186,17 +187,40 @@ export class Kart {
 }
 
 /* ------------------------------------------------------------------ *
- *  AI driver — follows the racing line, brakes for corners
+ *  AI driver — pure-pursuit line following + curvature-aware braking
+ *
+ *  skill in [0..1] shapes: top speed, cornering grip, how far ahead the
+ *  driver scans, steering accuracy (bias + wander) and recovery reflexes.
  * ------------------------------------------------------------------ */
 const _aiPt = new THREE.Vector3();
 
+function aiParams(skill) {
+  return {
+    maxSp:    s => Math.min(MAX_SPEED, MAX_SPEED * (0.38 + 0.65 * skill) * (1 + 0.012 * s)), // top speed by skill
+    grip:     4.5 + 6.5 * skill,       // cornering aptitude; v_corner = sqrt(gripScale*9.8*skillish / K)
+    gripScale: 0.8 + 1.4 * skill,      // how much of their theoretical corner speed they actually hold
+    margin:   1 + 0.45 * (1 - skill),  // weak drivers brake earlier / leave more space
+    look:     s => 0.7 * s + 6 * (1 - skill),  // pursue point, arc units ahead (weak = aims earlier, slower)
+    gain:     2.2 + 1.0 * skill,       // steering gain (low = sloppy, high = sharp)
+    errMax:   0.16 * (1 - skill),      // steady-state heading bias: strong≈0, weak≈9°
+    wobble:   0.10 * (1 - skill),      // restless steering wobble at speed
+    cornerK:  0.2 + 0.8 * skill,        // usable corner speed (hesitation in hairpins)
+  };
+}
+
+// max speed the chassis can hold at curvature K (yaw-rate limited), found by bisection
+function cornerCap(K) {
+  let lo = 2, hi = MAX_SPEED * 1.3;
+  for (let i = 0; i < 24; i++) {
+    const mid = 0.5 * (lo + hi);
+    if (K * mid < STEER_RATE * turnFactor(mid)) lo = mid; else hi = mid;
+  }
+  return lo;
+}
+
 export function aiControl(k, karts) {
-  const skill = k.skill ?? 0.9;
-  // rivals pace up over the race, but stay below top speed
-  const maxSp = k.offRoad ? 8
-    : Math.min(MAX_SPEED, 7 + 9.5 * skill + 2.6 * skill * k.lapDone); // u/s
-  const grip = 6 + 7 * skill;                        // corner aptitude; v_corner = sqrt(grip/|K|)
-  const margin = 1 + 1.1 * (1 - skill);              // weak drivers brake earlier
+  const P = aiParams(k.skill ?? 0.9);
+  const n = N_SAMPLES;
 
   // preferred lane, nudge away from whoever is right in front of us
   let lane = clamp(k.lane || 0, -(ROAD_HW - 1.6), ROAD_HW - 1.6);
@@ -212,41 +236,58 @@ export function aiControl(k, karts) {
     const side = relPos.x * hx + relPos.z * hz;    // + = they're to our left
     if (Math.abs(side) < 3) lane -= Math.sign(side || 1) * Math.max(0, 4 - Math.abs(side)) * 0.6;
   }
+  // weak drivers drift in and out of their lane as they drive
+  lane += P.wobble * 1.6 * Math.sin(k.speed * 0.35 + myIdx * 0.05);
   lane = clamp(lane, -(ROAD_HW - 1.6), ROAD_HW - 1.6);
 
-  // 1) scan ahead for the fastest corner entry speed we can manage
-  const horizon = (3 + 0.55 * k.speed) * (0.6 + 0.4 * skill); // u of track to look at
+  // --- speed plan: fastest the driver can hold given corners in range ---
+  const topSp = P.maxSp(k.lapDone);
+  const maxSp = k.offRoad ? Math.min(8, topSp) : topSp;
+  const dist = 25 + 2.4 * Math.max(0, k.speed);    // arc units the driver can react in
   let vNeed = Infinity;
+  const du = trackLen > 0 ? dist / trackLen : 0.05;
   for (let s = 1; s <= 40; s++) {
-    const K = curvatureAt(k.prevU + s * horizon / (trackLen * 40));
+    const K = Math.abs(curvatureAt(k.prevU + du * s / 40));
     if (K > 0.0004) {
-      vNeed = Math.min(vNeed, Math.sqrt(grip / K) * margin);
+      let v = Math.sqrt((P.grip * P.gripScale * 2.2) / K) * P.margin;  // 2.2: steady yaw inside off-road threshold
+      v = Math.min(v, cornerCap(K) * P.cornerK);  // hesitation: weak drivers under-use their steering in the hairpins
+      vNeed = Math.min(vNeed, v);
       if (vNeed < maxSp * 0.3) break;
     }
   }
   vNeed = Math.min(vNeed, maxSp);
-  const throttle = k.speed > vNeed + 0.5 ? -1 : k.speed < vNeed ? 1 : 0;
+  const th0 = k.speed > vNeed + 0.9 ? -1 : k.speed < vNeed - 0.4 ? 1 : 0;
+  // hysteresis so throttle doesn't chatter at the boundary
+  let throttle = th0;
 
-  // 2) aim down the racing line at the apex of the next corner
-  const Kcur = Math.abs(curvatureAt(k.prevU + 0.01));
-  const aAhead = 0.25 + 0.75 * Math.min(1, Kcur / 0.0022);
-  const lt = k.prevU + (0.015 + 0.05 * aAhead);
-  const it = Math.floor(((lt % 1) + 1) % 1 * N_SAMPLES) % N_SAMPLES;
-  const P = _aiPt.copy(samples[it]);
+  // --- steering: pure pursuit, aim at a point ahead on the preferred line ---
+  const look = P.look(Math.max(0, k.speed)) + (k.offRoad ? dist * 0.5 : 0);
+  const lu = k.prevU + look / (trackLen || 1);
+  const it = Math.floor((((lu % 1) + 1) % 1) * n) % n;
+  const Pt = _aiPt.copy(samples[it]);
   const Nx = -Math.cos(sampleHead[it]), Nz = Math.sin(sampleHead[it]); // "left of travel"
-  P.x += Nx * lane; P.z += Nz * lane;
-  const dTgt = Math.atan2(P.x - k.pos.x, P.z - k.pos.z);
-  const err = Math.atan2(Math.sin(dTgt - k.heading), Math.cos(dTgt - k.heading));
+  Pt.x += Nx * lane; Pt.z += Nz * lane;
+  const dTgt = Math.atan2(Pt.x - k.pos.x, Pt.z - k.pos.z);
+  let err = Math.atan2(Math.sin(dTgt - k.heading), Math.cos(dTgt - k.heading));
+  // imprecise drivers never quite line up; strong ones track to ~0.5°
+  err -= P.errMax * Math.sign(err || 1) * Math.min(1, Math.abs(err) / 0.6);
+  err += P.wobble * 0.5 * Math.sin(k.lapDone * 7 + k.prevU * 90);
+  let steer = clamp(err * P.gain, -1.5, 1.5);
 
-  // lost the track? back up, then steer into the line
+  // --- recovery: lost the road? chase the line back hard instead of limping ---
   const dp = k.pos.distanceTo(samples[k.trackIdx]);
-  if (dp > ROAD_HW * 2.2) {
-    if (Math.abs(err) > 0.6) return { throttle: -0.7, steer: Math.sign(err) }; // wrong way — reverse
-    const ahead = samples[(k.trackIdx + 3) % N_SAMPLES];
-    const da = Math.atan2(ahead.x - k.pos.x, ahead.z - k.pos.z);
-    return { throttle: 0.9, steer: clamp(angDiff(da, k.heading) * 2.2, -1, 1) };
+  if (dp > ROAD_HW * 2.2 && Math.abs(err) > 1.1) {
+    return { throttle: -0.9, steer: clamp(err * 1.5, -1, 1) }; // facing wrong way — back up
   }
-  return { throttle, steer: clamp(err * 2.6, -1.5, 1.5) };
+  if (dp > ROAD_HW * 1.2) {
+    const rIdx = (myIdx + Math.min(6, Math.round(6 + P.look(0) / 8))) % n;
+    const RT = samples[rIdx];
+    const rDt = Math.atan2(RT.x - k.pos.x, RT.z - k.pos.z);
+    const rErr = Math.atan2(Math.sin(rDt - k.heading), Math.cos(rDt - k.heading));
+    steer = clamp(rErr * (P.gain * 1.8 + 1.5), -1.5, 1.5);   // sharper pursuit while recovering
+    if (throttle === 1 && k.speed < topSp * 0.5) throttle = 0.7; // don't floor it back onto the line
+  }
+  return { throttle, steer };
 }
 
 /* ------------------------------------------------------------------ *

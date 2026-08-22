@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { addSky } from './sky.js';
 
 /* ------------------------------------------------------------------ *
  *  Renderer / scene / lights
@@ -37,3 +38,6 @@ scene.add(sun, sun.target);
 const fill = new THREE.DirectionalLight(0xbfd4ff, 0.35);
 fill.position.set(-40, 30, 50);
 scene.add(fill);
+
+// dusk sky dome + sun glow (procedural, see sky.js)
+addSky(scene, sun.position.clone());
