@@ -3,6 +3,8 @@
  *  - engine + skid follow the player's speed / steering
  *  - small one-shot SFX (countdown, lap, crash, go)
  *  - chiptune background music, sequenced on the audio clock
+ * Music and sfx run on separate buses so they can be muted independently;
+ * the sfx bus also sits 2 dB below the music bus.
  * Audio is only created after a user gesture (browser autoplay policy).
  */
 
@@ -17,9 +19,10 @@ const ARP = [0, 1, 2, 4, 0, 2, 1, 2, 0, 1, 2, 4, 2, 4, 2, 1];
 const BASSP = [0, 0, 3, 4, 2, 0, 3, 2, 0, 0, 3, 4, 2, 0, 3, 2];
 const midiHz = m => 440 * Math.pow(2, (m - 69) / 12);
 
-let ctx, master, engGain, engFilter, engOsc = [], skidGain, skidSrc;
+let ctx, master, musicGain, sfxGain, engGain, engFilter, engOsc = [], skidGain, skidSrc;
 let noiseBuf;
-let muted = false;
+const SFX_GAIN = Math.pow(10, -2 / 20); // sfx bus level when enabled (-2 dB)
+let musicMuted = false, sfxMuted = false;
 let musicTimer = 0, nextNote = 0, step = 0;
 
 function noise(a) {
@@ -33,28 +36,49 @@ function noise(a) {
   return s;
 }
 
-export function isMuted() { return muted; }
-
 /** must be called from a user gesture (start button / keydown); also builds the engine bed */
 export function ensureAudio() {
   if (ctx) return;
-  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  ctx = new (window.AudioContext || window.webkitAudioContext());
   master = ctx.createGain();
-  master.gain.value = muted ? 0 : 0.7;
+  master.gain.value = 0.7;
   master.connect(ctx.destination);
+  // separate buses so music and sfx can be muted independently
+  musicGain = ctx.createGain(); musicGain.gain.value = musicMuted ? 0 : 1;
+  musicGain.connect(master);
+  sfxGain = ctx.createGain(); sfxGain.gain.value = sfxMuted ? 0 : SFX_GAIN;
+  sfxGain.connect(master);
   buildEngine();
   // resume can fail silently if the gesture chain is odd — just no sound
   if (ctx.state !== 'running') ctx.resume();
 }
 
-export function toggleMuted() {
-  muted = !muted;
-  try { localStorage.setItem('mkr-muted', muted ? '1' : ''); } catch { /* private mode */ }
-  if (master) master.gain.value = muted ? 0 : 0.7;
-  return muted;
+function applyBusMute() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  musicGain.gain.setTargetAtTime(musicMuted ? 0 : 1, t, 0.02);
+  sfxGain.gain.setTargetAtTime(sfxMuted ? 0 : SFX_GAIN, t, 0.02);
 }
 
-export function setMuted(m) { if (m !== muted) toggleMuted(); }
+export function isMusicMuted() { return musicMuted; }
+export function isSfxMuted() { return sfxMuted; }
+
+export function toggleMusicMute() {
+  musicMuted = !musicMuted;
+  try { localStorage.setItem('mkr-music', musicMuted ? '1' : ''); } catch { /* private mode */ }
+  applyBusMute();
+  return musicMuted;
+}
+
+export function toggleSfxMute() {
+  sfxMuted = !sfxMuted;
+  try { localStorage.setItem('mkr-sfx', sfxMuted ? '1' : ''); } catch { /* private mode */ }
+  applyBusMute();
+  return sfxMuted;
+}
+
+export function setMusicMuted(m) { if (m !== musicMuted) toggleMusicMute(); }
+export function setSfxMuted(m) { if (m !== sfxMuted) toggleSfxMute(); }
 
 export function startMusic() {
   if (!ctx || musicTimer) return;   // not created yet, or already playing
@@ -99,20 +123,20 @@ function noiseHit(a, t, dur, vol, type, freq, q = 1, dest) {
   const gn = a.createGain();
   gn.gain.setValueAtTime(vol, t);
   gn.gain.exponentialRampToValueAtTime(0.0008, t + dur);
-  s.connect(f).connect(gn).connect(dest || master);
+  s.connect(f).connect(gn).connect(dest || sfxGain);
   s.start(t); s.stop(t + dur + 0.02);
 }
 
 function scheduleStep(s, t, chord) {
   const midi = CHORDS[chord];
-  if (s % 4 === 0) note(ctx, t, midiHz(ROOTS[chord] + BASSP[s]), BEAT * 0.72, 'square', 0.13);
-  note(ctx, t, midiHz(60 + midi[0] + ARP[s]), SIX * 1.6, 'triangle', 0.075);
-  if (s % 4 === 2) note(ctx, t, midiHz(midi[2] + 24), SIX * 3, 'triangle', 0.045); // lead blip (chord 3rd, 2 oct up)
-  if (s % 4 === 0) note(ctx, t, midiHz(150), 0.13, 'sine', 0.5, master, 42);         // kick
-  if (s === 4 || s === 12) noiseHit(ctx, t, 0.09, 0.18, 'highpass', 1600, 0.8);      // snare
+  if (s % 4 === 0) note(ctx, t, midiHz(ROOTS[chord] + BASSP[s]), BEAT * 0.72, 'square', 0.13, musicGain);
+  note(ctx, t, midiHz(60 + midi[0] + ARP[s]), SIX * 1.6, 'triangle', 0.075, musicGain);
+  if (s % 4 === 2) note(ctx, t, midiHz(midi[2] + 24), SIX * 3, 'triangle', 0.045, musicGain); // lead blip (chord 3rd, 2 oct up)
+  if (s % 4 === 0) note(ctx, t, midiHz(150), 0.13, 'sine', 0.5, musicGain, 42);         // kick
+  if (s === 4 || s === 12) noiseHit(ctx, t, 0.09, 0.18, 'highpass', 1600, 0.8, musicGain);      // snare
   if (s % 2 === 0) {                                                                  // hats
     const vol = s % 4 === 2 ? 0.06 : 0.035;
-    noiseHit(ctx, t, 0.035, vol, 'highpass', 8000, 0.7);
+    noiseHit(ctx, t, 0.035, vol, 'highpass', 8000, 0.7, musicGain);
   }
 }
 
@@ -141,7 +165,7 @@ function buildEngine() {
   engFilter.frequency.value = 400;
   engGain = ctx.createGain();
   engGain.gain.value = 0;
-  engFilter.connect(engGain).connect(master);
+  engFilter.connect(engGain).connect(sfxGain);
   for (const g of [1, 0.5]) {
     const o = ctx.createOscillator();
     o.type = g === 1 ? 'sawtooth' : 'triangle';
@@ -156,7 +180,7 @@ function buildEngine() {
   sf.type = 'bandpass'; sf.frequency.value = 950; sf.Q.value = 0.9;
   skidGain = ctx.createGain();
   skidGain.gain.value = 0;
-  skidSrc.connect(sf).connect(skidGain).connect(master);
+  skidSrc.connect(sf).connect(skidGain).connect(sfxGain);
   skidSrc.start();
 }
 
@@ -164,26 +188,26 @@ function buildEngine() {
 export function beep(freq) {
   if (!ctx) return;
   const t = ctx.currentTime;
-  note(ctx, t, freq, 0.16, 'square', 0.16);
+  note(ctx, t, freq, 0.16, 'square', 0.16, sfxGain);
   noiseHit(ctx, t, 0.06, 0.05, 'highpass', 4000, 0.7);
 }
 
 export function go() {
   if (!ctx) return;
   beep(880);
-  note(ctx, ctx.currentTime + 0.16, 880, 0.3, 'square', 0.16);
+  note(ctx, ctx.currentTime + 0.16, 880, 0.3, 'square', 0.16, sfxGain);
 }
 
 export function crash(intensity) {
   if (!ctx) return;
   const t = ctx.currentTime;
   noiseHit(ctx, t, 0.14, 0.28 * intensity, 'bandpass', 280, 0.7);
-  note(ctx, t, 120, 0.18, 'sine', 0.3 * intensity, master, 38);
+  note(ctx, t, 120, 0.18, 'sine', 0.3 * intensity, sfxGain, 38);
 }
 
 export function lap() {
   if (!ctx) return;
   const t = ctx.currentTime;
-  note(ctx, t, 660, 0.1, 'square', 0.14);
-  note(ctx, t + 0.1, 990, 0.16, 'square', 0.14);
+  note(ctx, t, 660, 0.1, 'square', 0.14, sfxGain);
+  note(ctx, t + 0.1, 990, 0.16, 'square', 0.14, sfxGain);
 }

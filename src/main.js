@@ -51,7 +51,8 @@ addEventListener('keydown', e => {
   const k = KEYMAP[e.code];
   if (k) { keys[k] = true; e.preventDefault(); }
   if (e.code === 'Enter' || e.code === 'KeyR') primaryAction();
-  if (e.code === 'KeyM') updateMute();
+  if (e.code === 'KeyM') updateMusicMute();
+  if (e.code === 'KeyN') updateSfxMute();
   if (e.code === 'Space') e.preventDefault();
 });
 addEventListener('keyup', e => {
@@ -127,10 +128,16 @@ function primaryAction() {
   if (game.state === 'menu' || game.state === 'finished') startRace();
 }
 
-function updateMute() {
-  const m = audio.toggleMuted();
-  el('mute').textContent = m ? 'MUTED' : 'M';
-  el('mute').classList.toggle('on', m);
+function updateMusicMute() {
+  const m = audio.toggleMusicMute();
+  el('muteMusic').textContent = m ? 'MUSIC OFF' : 'MUSIC';
+  el('muteMusic').classList.toggle('on', m);
+}
+
+function updateSfxMute() {
+  const m = audio.toggleSfxMute();
+  el('muteSfx').textContent = m ? 'SFX OFF' : 'SFX';
+  el('muteSfx').classList.toggle('on', m);
 }
 
 startBtn.addEventListener('click', () => {
@@ -139,10 +146,17 @@ startBtn.addEventListener('click', () => {
   startBtn.blur();
 });
 
-// restore mute preference
-try { if (localStorage.getItem('mkr-muted') === '1') { audio.setMuted(true); } } catch { /* private mode */ }
-updateMute();
-el('mute').addEventListener('click', e => { audio.ensureAudio(); updateMute(); e.target.blur(); });
+// restore mute preferences
+try {
+  if (localStorage.getItem('mkr-music') === '1') audio.setMusicMuted(true);
+  if (localStorage.getItem('mkr-sfx') === '1') audio.setSfxMuted(true);
+} catch { /* private mode */ }
+el('muteMusic').textContent = audio.isMusicMuted() ? 'MUSIC OFF' : 'MUSIC';
+el('muteMusic').classList.toggle('on', audio.isMusicMuted());
+el('muteSfx').textContent = audio.isSfxMuted() ? 'SFX OFF' : 'SFX';
+el('muteSfx').classList.toggle('on', audio.isSfxMuted());
+el('muteMusic').addEventListener('click', e => { audio.ensureAudio(); updateMusicMute(); e.target.blur(); });
+el('muteSfx').addEventListener('click', e => { audio.ensureAudio(); updateSfxMute(); e.target.blur(); });
 
 /* ------------------------------------------------------------------ *
  *  Race progress, positions & collisions
