@@ -57,14 +57,19 @@ export function toggleMuted() {
 export function setMuted(m) { if (m !== muted) toggleMuted(); }
 
 export function startMusic() {
-  if (!ctx || !musicTimer) return;
+  if (!ctx || musicTimer) return;   // not created yet, or already playing
   step = 0;
   nextNote = ctx.currentTime + 0.08;
   musicTimer = setInterval(() => {
-    while (nextNote < ctx.currentTime + 0.22) {
-      scheduleStep(step, nextNote);
-      nextNote += SIX;
-      step = (step + 1) % 16;
+    try {
+      while (nextNote < ctx.currentTime + 0.22) {
+        scheduleStep(step & 15, nextNote, (step >> 4) % 4);
+        nextNote += SIX;
+        step++;
+      }
+    } catch (e) {
+      // a scheduling hiccup shouldn't kill the music forever
+      console.warn('audio scheduler hiccup', e);
     }
   }, 50);
 }
@@ -98,9 +103,9 @@ function noiseHit(a, t, dur, vol, type, freq, q = 1, dest) {
   s.start(t); s.stop(t + dur + 0.02);
 }
 
-function scheduleStep(s, t) {
-  const midi = CHORDS[step >> 4];
-  if (s % 4 === 0) note(ctx, t, midiHz(ROOTS[(s >> 4) % 4] + BASSP[s]), BEAT * 0.72, 'square', 0.13);
+function scheduleStep(s, t, chord) {
+  const midi = CHORDS[chord];
+  if (s % 4 === 0) note(ctx, t, midiHz(ROOTS[chord] + BASSP[s]), BEAT * 0.72, 'square', 0.13);
   note(ctx, t, midiHz(60 + midi[0] + ARP[s]), SIX * 1.6, 'triangle', 0.075);
   if (s % 4 === 2) note(ctx, t, midiHz(midi[2] + 24), SIX * 3, 'triangle', 0.045); // lead blip (chord 3rd, 2 oct up)
   if (s % 4 === 0) note(ctx, t, midiHz(150), 0.13, 'sine', 0.5, master, 42);         // kick
