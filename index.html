@@ -34,6 +34,8 @@
     color:#ffd07a; text-shadow:0 4px 18px rgba(0,0,0,.8); opacity:0; transition:opacity .15s, transform .1s; z-index:6; }
   #countdown.on { opacity:1; }
   #countdown.go { color:#9fe08a; font-size:84px; letter-spacing:8px; }
+  #mute { bottom:18px; left:20px; font-size:12px; letter-spacing:2px; color:#d8b07f; cursor:pointer; pointer-events:auto; opacity:.75; }
+  #mute.on { color:#ff9d6b; opacity:1; }
 
   #overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
     background:radial-gradient(ellipse at center, rgba(22,14,7,.5), rgba(10,6,3,.88)); z-index:10; }
@@ -76,6 +78,7 @@
   <div class="unit">KM/H</div>
 </div>
 <div class="hud" id="warn">OFF TRACK</div>
+<div class="hud" id="mute" title="Mute (M)">M</div>
 <div class="hud" id="countdown"></div>
 
 <div id="overlay">
@@ -86,6 +89,7 @@
       <div><kbd>W / ↑</kbd>Accelerate</div>
       <div><kbd>S / ↓</kbd>Brake · Reverse</div>
       <div><kbd>A D / ← →</kbd>Steer</div>
+      <div><kbd>M</kbd>Sound on/off</div>
     </div>
     <div class="result" id="results" style="display:none"></div>
     <br/>

@@ -8,6 +8,7 @@ import { Kart, aiControl } from './kart.js';
 import {
   fmt, el, startBtn, resultsEl, showOverlay, hideOverlay, hideCountdown, updateHud,
 } from './hud.js';
+import * as audio from './audio.js';
 
 /* ------------------------------------------------------------------ *
  *  Karts: the player + computer opponents
@@ -46,9 +47,11 @@ const KEYMAP = {
   KeyD: 'right', ArrowRight: 'right',
 };
 addEventListener('keydown', e => {
+  audio.ensureAudio();
   const k = KEYMAP[e.code];
   if (k) { keys[k] = true; e.preventDefault(); }
   if (e.code === 'Enter' || e.code === 'KeyR') primaryAction();
+  if (e.code === 'KeyM') updateMute();
   if (e.code === 'Space') e.preventDefault();
 });
 addEventListener('keyup', e => {
@@ -72,6 +75,8 @@ const _cdVec = new THREE.Vector3();
 el('nCars').textContent = String(karts.length);
 
 function startRace() {
+  audio.ensureAudio();
+  audio.startMusic();
   resetKarts();
   game.raceTime = 0;
   game.raceOverAt = 0;
@@ -111,6 +116,7 @@ function finishRace() {
     place === karts.length ? 'LAST PLACE ON THE DINNER TABLE' :
     'YOU FINISHED ' + place + ' OF ' + karts.length;
   showOverlay('RACE COMPLETE', placeMsg, 'RACE AGAIN', false, 'OR PRESS R');
+  audio.stopMusicTimer();
   resultsEl.innerHTML = '<b>TOTAL ' + fmt(game.raceTime) + '</b> &nbsp;·&nbsp; BEST LAP <b>' +
     fmt(best) + '</b><div style="font-size:13px;letter-spacing:1px;margin-top:10px">' +
     rows.join(' &nbsp;&nbsp; ') + '</div>';
@@ -121,7 +127,22 @@ function primaryAction() {
   if (game.state === 'menu' || game.state === 'finished') startRace();
 }
 
-startBtn.addEventListener('click', () => { primaryAction(); startBtn.blur(); });
+function updateMute() {
+  const m = audio.toggleMuted();
+  el('mute').textContent = m ? 'MUTED' : 'M';
+  el('mute').classList.toggle('on', m);
+}
+
+startBtn.addEventListener('click', () => {
+  audio.ensureAudio();
+  primaryAction();
+  startBtn.blur();
+});
+
+// restore mute preference
+try { if (localStorage.getItem('mkr-muted') === '1') { audio.setMuted(true); } } catch { /* private mode */ }
+updateMute();
+el('mute').addEventListener('click', e => { audio.ensureAudio(); updateMute(); e.target.blur(); });
 
 /* ------------------------------------------------------------------ *
  *  Race progress, positions & collisions
@@ -159,6 +180,7 @@ function collideKarts() {
           b.speed += Math.sin(b.heading) * jimp * 0.5 + Math.cos(b.heading) * jimp * 0.5;
           a.speed = clamp(a.speed, -MAX_REV, MAX_SPEED + 3);
           b.speed = clamp(b.speed, -MAX_REV, MAX_SPEED + 3);
+          if (a.isPlayer || b.isPlayer) audio.crash(Math.min(1, -dv / 14));
         }
       }
     }
@@ -199,6 +221,7 @@ function animate() {
     const txt = remain <= 0 ? 'GO' : String(remain > 3 ? 3 : Math.ceil(remain - 1e-6));
     if (txt !== game.cdText) {
       game.cdText = txt;
+      if (txt === 'GO') audio.go(); else audio.beep(440);
       const c = el('countdown');
       c.textContent = txt;
       c.classList.add('on');
@@ -225,6 +248,12 @@ function animate() {
       k.step(dt, throttle, steerIn, now);
     }
     collideKarts();
+    const pSteer = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
+    audio.updateEngine(player.speed, pSteer, !player.offRoad);
+    if (player.lapDone !== game.lastLapBeep) {
+      game.lastLapBeep = player.lapDone;
+      if (player.lapDone > 0 && !player.raceDone) audio.lap();
+    }
     if (game.state === 'racing') {
       refreshPositions();
       const finishedKarts = karts.filter(k => k.raceDone).length;
