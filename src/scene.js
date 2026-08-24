@@ -20,9 +20,10 @@ scene.fog = new THREE.Fog(0x180f0a, 130, 320);
 
 export const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 500);
 
-scene.add(new THREE.HemisphereLight(0xfff2dd, 0x2a1a10, 0.85));
+export const hemi = new THREE.HemisphereLight(0xfff2dd, 0x2a1a10, 0.85);
+scene.add(hemi);
 
-const sun = new THREE.DirectionalLight(0xfff0d8, 1.6);
+export const sun = new THREE.DirectionalLight(0xfff0d8, 1.6);
 sun.position.set(60, 90, -35);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -35,7 +36,7 @@ sun.shadow.camera.far = 300;
 sun.shadow.bias = -0.0008;
 scene.add(sun, sun.target);
 
-const fill = new THREE.DirectionalLight(0xbfd4ff, 0.35);
+export const fill = new THREE.DirectionalLight(0xbfd4ff, 0.35);
 fill.position.set(-40, 30, 50);
 scene.add(fill);
 

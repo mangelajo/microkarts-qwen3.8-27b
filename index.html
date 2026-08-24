@@ -55,6 +55,15 @@
     padding:12px 32px; box-shadow:0 4px 0 #8a5a1e; transition:transform .06s, box-shadow .06s; }
   .btn:hover { filter:brightness(1.06); }
   .btn:active { transform:translateY(3px); box-shadow:0 1px 0 #8a5a1e; }
+  .trk { margin:0 0 22px 0; }
+  .trk-label { font-size:10px; letter-spacing:3px; color:#d8b07f; margin-bottom:8px; }
+  .trk-row { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+  .tchip { pointer-events:auto; cursor:pointer; font:inherit; font-size:12px; letter-spacing:1px;
+    color:#ffe9c9; background:rgba(42,29,18,.85); border:1px solid rgba(255,200,120,.22);
+    border-radius:8px; padding:7px 14px; transition:transform .06s, border-color .12s, color .12s; }
+  .tchip:hover { border-color:rgba(255,200,120,.5); }
+  .tchip.sel { color:#1a0f06; background:linear-gradient(#ffd07a,#f0a94a); border-color:#f0a94a;
+    font-weight:700; box-shadow:0 3px 0 #8a5a1e; }
   .result { font-size:15px; line-height:2.1; margin-bottom:24px; }
   .result b { color:#ffd07a; }
 </style>
@@ -66,10 +75,11 @@
   <div class="big" id="lap">LAP 1/3</div>
   <div>TIME <span id="time">0:00.0</span></div>
 </div>
-<div class="hud hudbox" id="pos-hud">
+  <div class="hud hudbox" id="pos-hud">
   <div class="big"><span id="pos">1</span><span class="dim">/</span><span id="nCars">4</span></div>
   <div>POS</div>
 </div>
+<div class="hud" id="trackName" style="top:18px; left:50%; transform:translateX(-50%); font-size:11px; letter-spacing:3px; opacity:.75"></div>
 <div class="hud hudbox" id="time-hud">
   <div>LAP <span class="val" id="laptime">0:00.0</span></div>
   <div class="lbl" id="best">BEST <span class="val">--</span></div>
@@ -90,8 +100,11 @@
       <div><kbd>W / ↑</kbd>Accelerate</div>
       <div><kbd>S / ↓</kbd>Brake · Reverse</div>
       <div><kbd>A D / ← →</kbd>Steer</div>
-      <div><kbd>M</kbd>Music on/off</div>
-      <div><kbd>N</kbd>SFX on/off</div>
+      <div><kbd>M</kbd>Music · <kbd>N</kbd> SFX</div>
+    </div>
+    <div class="trk" id="trackWrap">
+      <div class="trk-label">TRACK</div>
+      <div class="trk-row" id="trackRow"></div>
     </div>
     <div class="result" id="results" style="display:none"></div>
     <br/>

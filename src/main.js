@@ -5,8 +5,10 @@ import {
 } from './config.js';
 import { renderer, scene, camera } from './scene.js';
 import { Kart, aiControl } from './kart.js';
+import { selectTrack } from './track.js';
 import {
   fmt, el, startBtn, resultsEl, showOverlay, hideOverlay, hideCountdown, updateHud,
+  initTrackPicker, cycleTrack, getTrackIdx,
 } from './hud.js';
 import * as audio from './audio.js';
 
@@ -53,6 +55,12 @@ addEventListener('keydown', e => {
   if (e.code === 'Enter' || e.code === 'KeyR') primaryAction();
   if (e.code === 'KeyM') updateMusicMute();
   if (e.code === 'KeyN') updateSfxMute();
+  // on the menu, arrows double as track switching (race steering unaffected —
+  // the game isn't racing, so no conflict)
+  if ((game.state === 'menu' || game.state === 'finished') && !e.repeat) {
+    if (e.code === 'ArrowLeft') { audio.ensureAudio(); cycleTrack(-1); audio.beep(330); }
+    if (e.code === 'ArrowRight') { audio.ensureAudio(); cycleTrack(1); audio.beep(440); }
+  }
   if (e.code === 'Space') e.preventDefault();
 });
 addEventListener('keyup', e => {
@@ -145,6 +153,13 @@ startBtn.addEventListener('click', () => {
   primaryAction();
   startBtn.blur();
 });
+
+// track picker: chips + persistence. Rebuild the scene on selection;
+// track.js already built TRACKS[0] eagerly at import, so skip a redundant build.
+initTrackPicker(
+  idx => { selectTrack(idx); },
+);
+if (getTrackIdx() !== 0) selectTrack(getTrackIdx());
 
 // restore mute preferences
 try {

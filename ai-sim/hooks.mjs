@@ -1,10 +1,16 @@
 const FAKE_SCENE = `
-export const scene = { add: () => {}, remove: () => {} };
+export const scene = {
+  add: () => {}, remove: () => {}, userData: {},
+  fog: { color: { set: () => {} } }, background: { set: () => {} },
+};
+export const sun = { intensity: 1 };
+export const hemi = { intensity: 1 };
+export const fill = { intensity: 1 };
 export const camera = { aspect: 1, updateProjectionMatrix: () => {} };
 export const renderer = { domElement: {}, setPixelRatio: () => {}, setSize: () => {} };
 export const container = {};
 `;
-const FAKE_TEXTURES = `const t = () => ({ repeat: { set: () => {} } });
+const FAKE_TEXTURES = `const t = () => ({ repeat: { set: () => {} }, dispose: () => {}, colorSpace: 0 });
 export const woodTexture = t;
 export const checkerTexture = t;
 export const curbTexture = t;

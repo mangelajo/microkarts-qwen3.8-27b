@@ -12,12 +12,21 @@ python3 -m http.server 8000
 # open http://localhost:8000
 ```
 
-Headless AI test bench (verifies the drivers stay on track and finish):
+Headless AI test bench (runs the full suite on **every** track; fails the build on a
+broken shape):
 
 ```bash
 make sim
 ```
 
+All game constants live in `src/config.js`: `ACCEL`, `BRAKE`, `MAX_SPEED`,
+`STEER_RATE`, `ROAD_HW`, `LAPS`, `AI_SKILL`, …
+
+To add a track, append an entry to `TRACKS` in `src/tracks.js` — a `name`,
+a `theme` (reuses one of the palettes or define a new one), and a closed list
+of `[x, z]` control points that stays within the 420u table. Then run
+`make sim`: the AI harness drives all three skills on the new loop and exits
+non-zero if a driver can't hold the road or recover.
 ## Controls
 
 | Key            | Action            |
@@ -25,13 +34,33 @@ make sim
 | `W` / `↑`      | Accelerate        |
 | `S` / `↓`      | Brake / reverse   |
 | `A` `D` / `←` `→` | Steer          |
-| `M`            | Sound on/off      |
+| `←` `→` (menu)  | Pick track        |
+| `M`            | Music on/off      |
+| `N`            | SFX on/off        |
 | `Enter` / `R`  | Start / restart   |
 
 3 laps to finish. Best lap time is tracked in the HUD.
 
+## Tracks
+
+Three circuits on the same dinner table, each with its own theme palette
+(sky, fog, lighting, table wood, road colour):
+
+| # | Track | Style |
+|---|-------|-------|
+| 1 | BUTTERFINGO LOOP | the original dusk circuit |
+| 2 | CANDY TANGLE | S-chicane + hairpin, candy-lit |
+| 3 | MIDNIGHT TEARDROP | one long flowing bank, night |
+
+Pick with the chips on the menu (or `←`/`→`); the choice is remembered.
+Adding a track = a new entry in `src/tracks.js` (points + theme) and a
+`make sim` run — the AI is track-agnostic and the harness runs every
+take in the catalogue. All track shapes are validated headlessly.
+
 ## Features
 
+- Three data-driven tracks (Catmull-Rom control points in `src/tracks.js`) with
+  per-track theme palettes; menu selection persisted in localStorage
 - Closed Catmull-Rom spline track swept into a ribbon road with curbs + checkered start line
 - Low-poly cart with steering/rolling wheels, body pitch & roll, chase camera
 - Arcade physics (delta-time based): accel, brake, drag, speed-scaled steering
@@ -49,9 +78,10 @@ make sim
 | File               | What it does |
 |--------------------|--------------|
 | `src/config.js`   | Tunable constants (speed, steering, track, AI skill levels) |
-| `src/track.js`    | Spline → samples → ribbon road, curbs, table, props |
+| `src/tracks.js`   | Track catalogue: control points + name + theme palette per track |
+| `src/track.js`    | `buildTrack()`: spline → samples → ribbon road, curbs, table, props |
 | `src/scene.js`    | Renderer, lights, fog, sky |
-| `src/sky.js`      | Procedural sky dome + sun |
+| `src/sky.js`      | Procedural sky dome + sun (re-paintable gradient per theme) |
 | `src/kart.js`     | Kart mesh, physics `step()`, AI driver |
 | `src/main.js`     | Game loop, input, race lifecycle, camera |
 | `src/hud.js`      | DOM HUD + overlays |
@@ -63,6 +93,6 @@ make sim
 All game constants live in `src/config.js`: `ACCEL`, `BRAKE`, `MAX_SPEED`,
 `STEER_RATE`, `ROAD_HW`, `LAPS`, `AI_SKILL`, …
 
-To change the track shape, edit the `curve` control-point array in `src/track.js`
+To change a track shape, edit its control-point array in `src/tracks.js`
 (closed Catmull-Rom loop). After adjusting AI or physics, run `make sim` to make
-sure the drivers stay on track.
+sure the drivers hold the road on every track.

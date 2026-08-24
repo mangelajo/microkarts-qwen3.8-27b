@@ -16,7 +16,7 @@ node --import ./ai-sim/stub.js ai-sim/sim.mjs
   reports: laps completed, % of time off-road, stalling, recovery time after a
   knock-out, best lap.
 
-## Scenarios
+## Scenarios (run against **every** track in `src/tracks.js`)
 1. **clean start** — on the racing line from the grid.
 2. **knocked-out start** — 8u off the road, facing 45° the wrong way.
 3. **head-on start** — on the road, facing the wrong way.
@@ -29,6 +29,8 @@ node --import ./ai-sim/stub.js ai-sim/sim.mjs
 * Skills come from `AI_SKILL` in `src/config.js`; change them and re-run
   `make sim` to see the new pace spread (best-lap times should separate).
 
-**Targets for a good AI (per the current track):** off-road < 5% over 3 laps
-in every scenario, 3 laps completed, and a clean finishing order
-(front-runner clearly ahead of the back-marker).
+**Targets for a good AI (per track):** off-road < 5% over 3 laps and
+no stalling in the clean/held scenarios, every driver recovers from a
+knock-out, and the pack race finishes for the player. `make sim` exits
+non-zero if any track fails, so a broken control-point set in
+`src/tracks.js` is caught here, not in the browser.

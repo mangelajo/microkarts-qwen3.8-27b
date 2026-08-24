@@ -1,4 +1,5 @@
 import { LAPS, game } from './config.js';
+import { TRACKS } from './tracks.js';
 
 /* ------------------------------------------------------------------ *
  *  HUD
@@ -45,4 +46,52 @@ export function updateHud(r, l, karts) {
   el('pos').textContent = String(p.posIdx || 1);
   el('pos').parentElement.classList.toggle('lead', p.posIdx === 1);
   el('warn').classList.toggle('on', p.offRoad && game.state === 'racing');
+}
+
+/* ------------------------------------------------------------------ *
+ *  Track picker — chips on the menu; persisted in localStorage
+ * ------------------------------------------------------------------ */
+const trackSel = { idx: 0, onChange: null };
+const trackRow = el('trackRow');
+const trackChips = [];
+export const getTrackIdx = () => trackSel.idx;
+
+export function initTrackPicker(onChange) {
+  trackSel.onChange = onChange;
+  for (let i = 0; i < TRACKS.length; i++) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'tchip';
+    chip.textContent = (i + 1) + '. ' + TRACKS[i].name;
+    chip.addEventListener('click', e => { setTrack(i); e.target.blur(); });
+    trackRow.appendChild(chip);
+    trackChips.push(chip);
+  }
+  loadPersisted();
+}
+
+export function setTrack(i) {
+  const n = ((i % TRACKS.length) + TRACKS.length) % TRACKS.length;
+  if (n === trackSel.idx) return;
+  trackSel.idx = n;
+  trackChips.forEach((c, j) => c.classList.toggle('sel', j === n));
+  el('trackName').textContent = TRACKS[n].name;
+  try { localStorage.setItem('mkr-track', String(n)); } catch { /* private mode */ }
+  trackSel.onChange && trackSel.onChange(n);
+}
+
+export function cycleTrack(dir) {
+  const n = ((trackSel.idx + dir) % TRACKS.length + TRACKS.length) % TRACKS.length;
+  setTrack(n);
+}
+
+function loadPersisted() {
+  let i = 0;
+  try {
+    const v = parseInt(localStorage.getItem('mkr-track'), 10);
+    if (v >= 0 && v < TRACKS.length) i = v;
+  } catch { /* private mode */ }
+  trackSel.idx = i;
+  trackChips.forEach((c, j) => c.classList.toggle('sel', j === i));
+  el('trackName').textContent = TRACKS[i].name;
 }

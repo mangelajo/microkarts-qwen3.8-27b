@@ -1,48 +1,20 @@
 import * as THREE from 'three';
 import { N_SAMPLES, ROAD_HW, CURB_W } from './config.js';
-import { scene } from './scene.js';
+import { scene, sun, hemi, fill } from './scene.js';
 import { woodTexture, checkerTexture, curbTexture } from './textures.js';
+import { TRACKS, trackTheme } from './tracks.js';
+import { retintSky } from './sky.js';
 
 /* ------------------------------------------------------------------ *
- *  The table + track
+ *  Track data — filled IN PLACE by buildTrack().
+ *  kart.js / ai-sim hold live bindings to these, so rebuilding a track
+ *  keeps every consumer working without re-importing anything.
  * ------------------------------------------------------------------ */
-const table = new THREE.Mesh(
-  new THREE.PlaneGeometry(420, 420),
-  new THREE.MeshStandardMaterial({ map: woodTexture(), roughness: 0.92, metalness: 0 })
-);
-table.rotation.x = -Math.PI / 2;
-table.position.y = -0.05;
-table.receiveShadow = true;
-scene.add(table);
-
-export const curve = new THREE.CatmullRomCurve3([
-  [   0,    0],
-  [  38,   -4],
-  [  66,    8],
-  [  74,   38],
-  [  54,   60],
-  [  30,   48],
-  [  12,   64],
-  [ -12,   48],
-  [ -34,   60],
-  [ -62,   46],
-  [ -74,   18],
-  [ -56,   -6],
-  [ -28,  -14],
-].map(([x, z]) => new THREE.Vector3(x, 0, z)), true, 'catmullrom', 0.5);
-
-// even arc-length samples
 export const samples = [];
-for (let i = 0; i < N_SAMPLES; i++) samples.push(curve.getPointAt(i / N_SAMPLES));
+for (let i = 0; i < N_SAMPLES; i++) samples.push(new THREE.Vector3());
 export let trackLen = 0;
-for (let i = 1; i < N_SAMPLES; i++) trackLen += samples[i].distanceTo(samples[i - 1]);
-
-// per-sample heading so the AI can read local curvature
 export const sampleHead = new Float32Array(N_SAMPLES);
-for (let i = 0; i < N_SAMPLES; i++) {
-  const A = samples[(i + N_SAMPLES - 1) % N_SAMPLES], B = samples[(i + 1) % N_SAMPLES];
-  sampleHead[i] = Math.atan2(B.x - A.x, B.z - A.z);
-}
+
 export const headingAt = t => sampleHead[Math.floor((((t % 1) + 1) % 1) * N_SAMPLES) % N_SAMPLES];
 export const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 export function curvatureAt(t) { // signed 1/u: rate of heading change per unit arc-length
@@ -50,13 +22,50 @@ export function curvatureAt(t) { // signed 1/u: rate of heading change per unit 
   return angDiff(headingAt(t + w), headingAt(t - w)) / 16;
 }
 
-// sweep a ribbon along the curve
-function buildRibbon(inner, outer, y, material) {
+/* ------------------------------------------------------------------ *
+ *  The table — built once; its wood is re-painted per track theme
+ * ------------------------------------------------------------------ */
+let table = null;
+function setTableWood(base) {
+  const tex = woodTexture(base);
+  if (!table) {
+    table = new THREE.Mesh(
+      new THREE.PlaneGeometry(420, 420),
+      new THREE.MeshStandardMaterial({ map: tex, roughness: 0.92, metalness: 0 }),
+    );
+    table.rotation.x = -Math.PI / 2;
+    table.position.y = -0.05;
+    table.receiveShadow = true;
+    scene.add(table);
+  } else {
+    table.material.map.dispose();
+    table.material.map = tex;
+    table.material.needsUpdate = true;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  buildTrack(def) — (re)build curve data + visible meshes + palette.
+ *  def = { name, points, theme } from tracks.js
+ * ------------------------------------------------------------------ */
+const group = new THREE.Group(); // swappable: road, curbs, start line, props
+scene.add(group);
+let curve = null;
+let prevMats = [];
+let propMats = [];
+
+// live "current track" record — mutate the fields, keep the reference stable
+export const current = { name: '', theme: '' };
+
+const stickMat = new THREE.MeshStandardMaterial({ color: 0xf5f0e8, roughness: 0.8 });
+const pencilMat = new THREE.MeshStandardMaterial({ color: 0xff8f00, roughness: 0.5 });
+
+function buildRibbon(parent, c, inner, outer, y, material) {
   const pos = [], uv = [], idx = [];
   for (let i = 0; i <= N_SAMPLES; i++) {
     const t = (i % N_SAMPLES) / N_SAMPLES;
-    const p = curve.getPointAt(t);
-    const tan = curve.getTangentAt(t);
+    const p = c.getPointAt(t);
+    const tan = c.getTangentAt(t);
     const nx = -tan.z, nz = tan.x; // perpendicular in XZ
     const il = (i % N_SAMPLES) / N_SAMPLES, iu = i / N_SAMPLES;
     pos.push(p.x + nx * inner, y, p.z + nz * inner);
@@ -65,8 +74,8 @@ function buildRibbon(inner, outer, y, material) {
     uv.push(iu, 1);
   }
   for (let i = 0; i < N_SAMPLES; i++) {
-    const a = i * 2, b = a + 1, c = a + 2, d = a + 3;
-    idx.push(a, b, c, b, d, c);
+    const a = i * 2, b = a + 1, c2 = a + 2, d = a + 3;
+    idx.push(a, b, c2, b, d, c2);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -75,41 +84,11 @@ function buildRibbon(inner, outer, y, material) {
   g.computeVertexNormals();
   const m = new THREE.Mesh(g, material);
   m.receiveShadow = true;
-  scene.add(m);
+  parent.add(m);
   return m;
 }
 
-const roadMat = new THREE.MeshStandardMaterial({ color: 0x2e2e33, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
-buildRibbon(-ROAD_HW, ROAD_HW, 0.01, roadMat);
-
-const curbMat = new THREE.MeshStandardMaterial({ map: curbTexture(), roughness: 0.85, side: THREE.DoubleSide });
-curbMat.map.repeat.set(Math.round(trackLen / 6), 1);
-buildRibbon(ROAD_HW, ROAD_HW + CURB_W, 0.005, curbMat);
-buildRibbon(-ROAD_HW, -(ROAD_HW + CURB_W), 0.005, curbMat);
-
-// start / finish line
-const startP = samples[0];
-const startT = samples[1].clone().sub(samples[0]).normalize();
-const startHeading = Math.atan2(startT.x, startT.z);
-const line = new THREE.Mesh(
-  new THREE.PlaneGeometry(ROAD_HW * 2, 2.4),
-  new THREE.MeshStandardMaterial({ map: checkerTexture(), roughness: 0.9 })
-);
-line.rotation.x = -Math.PI / 2;
-line.rotation.z = startHeading;
-line.position.set(startP.x, 0.02, startP.z);
-line.receiveShadow = true;
-scene.add(line);
-
-/* ------------------------------------------------------------------ *
- *  Scattered "tabletop" props (decor only)
- * ------------------------------------------------------------------ */
-const propMats = [0xf48fb1, 0xffcc80, 0x80d8ff, 0xc5e1a5, 0xfff176, 0xce93d8]
-  .map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6 }));
-const stickMat = new THREE.MeshStandardMaterial({ color: 0xf5f0e8, roughness: 0.8 });
-const pencilMat = new THREE.MeshStandardMaterial({ color: 0xff8f00, roughness: 0.5 });
-
-function scatterProps() {
+function scatterProps(parent) {
   for (let attempt = 0; attempt < 20; attempt++) {
     const x = (Math.random() * 2 - 1) * 95;
     const z = (Math.random() * 2 - 1) * 85;
@@ -156,7 +135,86 @@ function scatterProps() {
       obj.position.set(x, 0.25, z);
     }
     obj.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
-    scene.add(obj);
+    parent.add(obj);
   }
 }
-scatterProps();
+
+export function buildTrack(def) {
+  const pts = def.points.map(([x, z]) => new THREE.Vector3(x, 0, z));
+  curve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.5);
+
+  // --- data: refill in place so live bindings stay valid ---
+  trackLen = 0;
+  for (let i = 0; i < N_SAMPLES; i++) samples[i].copy(curve.getPointAt(i / N_SAMPLES));
+  for (let i = 1; i < N_SAMPLES; i++) trackLen += samples[i].distanceTo(samples[i - 1]);
+  for (let i = 0; i < N_SAMPLES; i++) {
+    const A = samples[(i + N_SAMPLES - 1) % N_SAMPLES], B = samples[(i + 1) % N_SAMPLES];
+    sampleHead[i] = Math.atan2(B.x - A.x, B.z - A.z);
+  }
+
+  // --- visible: swap the track group's contents (dispose old) ---
+  while (group.children.length) {
+    const c = group.children.pop();
+    c.traverse(n => { if (n.isMesh) n.geometry.dispose(); });
+  }
+  if (!propMats.length) {
+    propMats = [0xf48fb1, 0xffcc80, 0x80d8ff, 0xc5e1a5, 0xfff176, 0xce93d8]
+      .map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6 }));
+  }
+
+  const th = trackTheme(def);
+  const builtMats = [];
+  const trackMat = m => { builtMats.push(m); return m; };
+
+  const roadMat = trackMat(new THREE.MeshStandardMaterial({ color: th.road, roughness: 0.95, metalness: 0, side: THREE.DoubleSide }));
+  buildRibbon(group, curve, -ROAD_HW, ROAD_HW, 0.01, roadMat);
+
+  const curbMat = trackMat(new THREE.MeshStandardMaterial({ map: curbTexture(), roughness: 0.85, side: THREE.DoubleSide }));
+  curbMat.map.repeat.set(Math.round(trackLen / 6), 1);
+  buildRibbon(group, curve, ROAD_HW, ROAD_HW + CURB_W, 0.005, curbMat);
+  buildRibbon(group, curve, -ROAD_HW, -(ROAD_HW + CURB_W), 0.005, curbMat);
+
+  // start / finish line
+  const startP = samples[0];
+  const startT = samples[1].clone().sub(samples[0]).normalize();
+  const startHeading = Math.atan2(startT.x, startT.z);
+  const line = new THREE.Mesh(
+    new THREE.PlaneGeometry(ROAD_HW * 2, 2.4),
+    trackMat(new THREE.MeshStandardMaterial({ map: checkerTexture(), roughness: 0.9 }))
+  );
+  line.rotation.x = -Math.PI / 2;
+  line.rotation.z = startHeading;
+  line.position.set(startP.x, 0.02, startP.z);
+  line.receiveShadow = true;
+  group.add(line);
+
+  scatterProps(group);
+
+  // dispose the previous build's per-track materials (shared prop mats persist)
+  for (const m of prevMats) m.dispose();
+  prevMats = builtMats;
+
+  // --- palette: fog/sky, lights, table wood ---
+  scene.fog?.color.set(th.fog);
+  scene.background?.set(th.fog);
+  retintSky(scene, th.sky);
+  if (sun) sun.intensity = th.light.sun;
+  if (hemi) hemi.intensity = th.light.hemi;
+  if (fill) fill.intensity = th.light.fill;
+  setTableWood(th.wood);
+
+  // --- remember the current track ---
+  current.name = def.name;
+  current.theme = def.theme;
+
+  return { trackLen, name: def.name, points: def.points.length };
+}
+
+// eager build of the first track so imported data (samples etc.) is valid
+// the moment track.js loads (browser AND ai-sim); main.js re-builds the
+// user's persisted choice at boot.
+buildTrack(TRACKS[0]);
+export function selectTrack(idx) {
+  const def = TRACKS[((idx % TRACKS.length) + TRACKS.length) % TRACKS.length];
+  return buildTrack(def);
+}

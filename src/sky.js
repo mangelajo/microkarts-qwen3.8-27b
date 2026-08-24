@@ -6,7 +6,13 @@ import * as THREE from 'three';
  * All generated on a canvas, so no external assets.
  */
 
-function makeSkyTexture() {
+// default dusk band (zenith -> horizon); stops are [offset, hex] pairs
+const DEFAULT_SKY = [
+  [0.00, 0x35598f], [0.35, 0x4f7cb4], [0.62, 0x7ba2cf],
+  [0.82, 0xa7a99f], [0.93, 0xc99b5e], [1.00, 0xd9a25c],
+];
+
+function makeSkyTexture(stops = DEFAULT_SKY) {
   // Upper-hemisphere equirect band: canvas TOP = zenith, BOTTOM = horizon.
   // (The dome is a half-sphere, so this entire texture is used.)
   const W = 1024, H = 512;
@@ -14,14 +20,9 @@ function makeSkyTexture() {
   cv.width = W; cv.height = H;
   const g = cv.getContext('2d');
 
-  // vertical gradient: zenith (top, lighter blue) -> horizon (bottom, warm glow)
+  // vertical gradient: zenith (top) -> horizon (bottom warm glow)
   const grad = g.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0.00, '#35598f');
-  grad.addColorStop(0.35, '#4f7cb4');
-  grad.addColorStop(0.62, '#7ba2cf');
-  grad.addColorStop(0.82, '#a7a99f');
-  grad.addColorStop(0.93, '#c99b5e');
-  grad.addColorStop(1.00, '#d9a25c'); // sunset glow right at the horizon
+  for (const [off, hex] of stops) grad.addColorStop(off, '#' + hex.toString(16).padStart(6, '0'));
   g.fillStyle = grad;
   g.fillRect(0, 0, W, H);
 
@@ -95,10 +96,10 @@ function makeSunTexture() {
 }
 
 /** attach the sky dome to the scene; sunDir should match the directional light direction */
-export function addSky(scene, sunDir = new THREE.Vector3(60, 90, -35)) {
+export function addSky(scene, sunDir = new THREE.Vector3(60, 90, -35), stops = DEFAULT_SKY) {
   const dome = new THREE.Mesh(
     new THREE.SphereGeometry(450, 48, 32, 0, Math.PI * 2, 0, Math.PI / 2), // upper hemisphere only
-    new THREE.MeshBasicMaterial({ map: makeSkyTexture(), side: THREE.BackSide, fog: false, toneMapped: false }),
+    new THREE.MeshBasicMaterial({ map: makeSkyTexture(stops), side: THREE.BackSide, fog: false, toneMapped: false }),
   );
   scene.add(dome);
 
@@ -108,4 +109,17 @@ export function addSky(scene, sunDir = new THREE.Vector3(60, 90, -35)) {
   sun.position.copy(sunDir).normalize().multiplyScalar(380);
   sun.scale.setScalar(170);
   scene.add(sun);
+
+  // hold a reference so later track themes can repaint the gradient
+  scene.userData.skyDome = dome;
+}
+
+/** repaint the sky dome of a scene with a new gradient (array of [offset, hex]) */
+export function retintSky(scene, stops) {
+  const dome = scene.userData?.skyDome;
+  if (!dome) return;
+  const old = dome.material.map;
+  dome.material.map = makeSkyTexture(stops);
+  dome.material.needsUpdate = true;
+  old.dispose();
 }

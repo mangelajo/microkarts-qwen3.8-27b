@@ -14,7 +14,6 @@ Check items off as they land.
 
 - **Zero audio** — a kart game with no engine sound is half-dead
 - **No rubber-banding / items** — races are 100% deterministic
-- **One track** — variety is the fun in kart racers
 - **Sparse player feedback** — no speed-FOV, no drift, no minimap
 - **No mobile/touch**
 - **No persistence** — best laps lost on refresh
@@ -35,7 +34,12 @@ Check items off as they land.
 
 ## Phase 2 — *Depth* ("why do I want to play again")
 
-- [ ] **More tracks** — extract `curve` into data (`src/tracks.js`: control-point sets + names + palettes); menu picks 1–3. AI is track-agnostic (reads `samples`/`curvatureAt`)
+- [x] **More tracks** (`src/tracks.js`, done in `test-micro`) — 3 named tracks, each with its own control-point set **and theme palette** (sky gradient, fog, light levels, table wood tint, road colour):
+  - **BUTTERFINGO LOOP** (dusk, the original), **CANDY TANGLE** (19-point S-chicane hairpin, candy theme), **MIDNIGHT TEARDROP** (9-point flowing bank, midnight theme)
+  - `track.js` now exposes `buildTrack(def)` / `selectTrack(idx)`: refills `samples`/`sampleHead`/`trackLen` **in place** so the kart physics + AI + sim keep working untouched, and swaps a `THREE.Group` of road/curbs/props with old geometries+materials disposed
+  - menu picks a track via chips or `←`/`→` (persisted in `localStorage mkr-track`); HUD shows the current track name
+  - **`make sim` now runs the full AI suite against every track** — a broken control-point set fails the harness instead of the browser (exit code 1)
+  - AI stays track-agnostic: it only reads `samples`/`curvatureAt`. Adding a track = add an entry to `TRACKS` and run `make sim`
 - [ ] **Items / boost pads** — boost pads on straights (track data); a simple item box (turbo / rubber band / wall); AI skips smart use, player with `Space`
 - [ ] **Skid-to-drift** — hold `Space` at speed: reduced lateral grip + extra steering, builds charge released as mini-boost. Small `step()` physics tweak; sim harness makes tuning safe
 - [ ] **Local 2-player** — second controller on the same keyboard (`IJKL`). `Kart` already supports `ai=false`; add a second input reader. Big "party game" unlock
@@ -60,13 +64,14 @@ Check items off as they land.
 
 ```
 Phase 1 (audio → feel)        →  "playable demo"
+Phase 2.1 (3 tracks)          →  ✅ done — "variety demo"
 Phase 2.4 (2-player)          →  "party demo"
-Phase 2.1 + Phase 3.1         →  "content" milestone (tracks + split code)
+Phase 2.1 + Phase 3.1         →  content milestone: add tracks (Phase 2.1 ✅ done) + split code
 Phase 3.3 (ghost)             →  "comeback" milestone
 ```
 
 **Top-3 picks if only doing three:**
 
-1. Phase 1.1 — **audio** (transforms the feel)
+1. ~~Phase 1.1 — **audio**~~ ✅ done
 2. Phase 2.4 — **2-player** (transforms the audience)
-3. Phase 2.1 — **more tracks** (transforms replay value)
+3. ~~Phase 2.1 — **more tracks**~~ ✅ done (3 tracks + themes)

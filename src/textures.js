@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 
-export function woodTexture() {
+export function woodTexture(base = '#8a5a33') {
   const c = document.createElement('canvas'); c.width = c.height = 512;
   const g = c.getContext('2d');
-  g.fillStyle = '#8a5a33'; g.fillRect(0, 0, 512, 512);
+  g.fillStyle = base; g.fillRect(0, 0, 512, 512);
   for (let y = 0; y < 512; y += 64) {
     g.fillStyle = `rgba(30,15,5,${0.25 + Math.random() * 0.15})`;
     g.fillRect(0, y, 512, 3);
