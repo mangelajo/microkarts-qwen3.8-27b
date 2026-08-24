@@ -18,7 +18,9 @@ export const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x180f0a);
 scene.fog = new THREE.Fog(0x180f0a, 130, 320);
 
-export const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 500);
+// far must exceed dome radius (450) + max camera distance from center (~250),
+// otherwise the far wall of the sky dome gets clipped and shows scene.background
+export const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 1200);
 
 export const hemi = new THREE.HemisphereLight(0xfff2dd, 0x2a1a10, 0.85);
 scene.add(hemi);
