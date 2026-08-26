@@ -39,14 +39,23 @@ export function collideKarts(karts, crashFor) {
       if (d2 < min * min && d2 > 1e-6) {
         const d = Math.sqrt(d2);
         const nx = dx / d, nz = dz / d;
-        const push = (min - d) / 2 + 0.01;
-        a.pos.x -= nx * push; a.pos.z -= nz * push;
-        b.pos.x += nx * push; b.pos.z += nz * push;
+        // Positional separation: no constant shove — only the real overlap, and
+        // a fraction of it per tick (smooth, no teleport). Weighted by inverse
+        // speed so the kart that is being driven (faster) gets pushed out LESS:
+        // "the driver wins, the parked kart rolls out of the way" (fixes the
+        // reverse-into-a-kart shove-forward feel).
+        const wA = 1 + Math.min(Math.abs(b.speed), 12) / 6;
+        const wB = 1 + Math.min(Math.abs(a.speed), 12) / 6;
+        const wsum = wA + wB, sep = (min - d) * 0.55;
+        a.pos.x -= nx * sep * (wB / wsum); a.pos.z -= nz * sep * (wB / wsum);
+        b.pos.x += nx * sep * (wA / wsum); b.pos.z += nz * sep * (wA / wsum);
         const va = Math.sin(a.heading) * a.speed * nx + Math.cos(a.heading) * a.speed * nz;
         const vb = Math.sin(b.heading) * b.speed * nx + Math.cos(b.heading) * b.speed * nz;
         const dv = vb - va;
         if (dv < 0) {
-          const jimp = -0.58 * dv;
+          // low restitution: the bounce must not re-launch a kart that a driver
+          // is holding into the contact (was 0.58 — it re-fired every tick)
+          const jimp = -0.3 * dv;
           a.speed -= Math.sin(a.heading) * jimp * 0.5 + Math.cos(a.heading) * jimp * 0.5;
           b.speed += Math.sin(b.heading) * jimp * 0.5 + Math.cos(b.heading) * jimp * 0.5;
           a.speed = clamp(a.speed, -MAX_REV, MAX_SPEED + 3);

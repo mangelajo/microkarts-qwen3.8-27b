@@ -4,7 +4,7 @@ import {
   CAM_DIST, CAM_HEIGHT, SIM_DT, INTERP_DELAY, P2_COLOR, LAPS,
   game,
 } from './config.js';
-import { renderer, scene, camera } from './scene.js';
+import { renderer, scene, camera, updateDust, dustForKart } from './scene.js';
 import { Kart, aiControl } from './kart.js';
 import { selectTrack } from './track.js';
 import { GRID, simulateTick, raceOrder } from './race.js';
@@ -287,6 +287,7 @@ function clientStart(info) {
   }
   game.laps = info.laps;
   clientRing = new FrameRing();
+  lastClientSp = 0;
   clientLapSeen = racers().map(() => 0);
   clientLapMark = racers().map(() => 0);
   netStartWall = performance.now();
@@ -325,6 +326,7 @@ function clientRaceBookkeeping(st) {
   }
 }
 
+let lastClientSp = 0; // own-kart speed from the last applied frame (impact estimate)
 function applyClientState(dt) {
   if (!clientRing || clientRing.size < 1) return;
   const st = sampleState(clientRing, performance.now() - INTERP_DELAY);
@@ -340,6 +342,16 @@ function applyClientState(dt) {
     k.posIdx = m.posIdx;
     k.sync(dt); // cosmetic: wheels, roll, pitch (fed by interpolated speed)
   }
+  // collision juice on the client: we don't run the sim, so estimate our own
+  // impact from how hard our kart's speed dropped since the last frame
+  const sk = selfKart();
+  const drop = lastClientSp - sk.speed;
+  if (drop > 5 && sk.speed > 1) {
+    sk.jolt = Math.min(1, drop / 16);
+    addShake(sk.jolt * 0.8);
+    audio.crash(sk.jolt);
+  }
+  lastClientSp = Math.abs(sk.speed);
   game.raceTime = st.hostMs / 1000;
   const you = list.length - 2; // client "you" = p2; updateHud reads the last kart
   const lapStartMs = clientLapMark[you] || COUNTDOWN_MS; // host clock: GO at cdMs
@@ -365,6 +377,15 @@ function clientFinish(order, lapsMs) {
     place === 1 ? 'YOU WRECKED THE TABLE!' :
     'YOU WERE ' + place + ' OF ' + list.length;
   showOverlay('RACE COMPLETE', placeMsg, 'WAIT FOR HOST', false, 'HOST CAN RACE AGAIN');
+}
+
+/* Collision juice: jolt both karts + shake the camera if it's our kart */
+function crashJuice(a, b, v) {
+  a.jolt = Math.min(1, Math.max(a.jolt, v));
+  b.jolt = Math.min(1, Math.max(b.jolt, v));
+  if (a === player || b === player) addShake(v * 0.9);
+  if (a === p2 || b === p2) addShake(v * 0.9); // client: our kart is p2
+  if (a === player || b === player) audio.crash(v);
 }
 
 /* ------------------------------------------------------------------ *
@@ -564,6 +585,9 @@ function hostInputFor(k, racing) {
 /* ------------------------------------------------------------------ *
  *  Cameras
  * ------------------------------------------------------------------ */
+let camShake = 0; // collision camera shake, decays
+function addShake(v) { camShake = Math.min(1, camShake + v); }
+
 function snapChaseCam(dt) {
   const p = selfKart();
   const fx = Math.sin(p.heading), fz = Math.cos(p.heading);
@@ -572,6 +596,19 @@ function snapChaseCam(dt) {
   camera.position.copy(camPos);
   camLook.lerp(_cdVec.set(p.pos.x + fx * 3.5, 0.9, p.pos.z + fz * 3.5), 1 - Math.exp(-7 * dt));
   camera.lookAt(camLook);
+  // speed-FOV: widens with speed for a sense of pace (55 -> ~70 at top speed)
+  const fovT = 55 + 15 * Math.min(Math.abs(p.speed) / 30, 1);
+  camera.fov += (fovT - camera.fov) * Math.min(1, 4 * dt);
+  camera.updateProjectionMatrix();
+  // collision shake: high-frequency offset, decays fast
+  if (camShake > 0.003) {
+    const t = performance.now() * 0.05;
+    camera.position.x += Math.sin(t * 1.7) * camShake * 0.28;
+    camera.position.y += Math.sin(t * 2.3 + 1.3) * camShake * 0.22;
+    camera.position.z += Math.sin(t * 1.9 + 2.1) * camShake * 0.28;
+    camera.lookAt(camLook);
+    camShake *= Math.exp(-9 * dt);
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -648,7 +685,7 @@ function animate() {
         p2.netOn = true;
         simulateTick(list, hostInputFor, SIM_DT, hostSimT, {
           racing: hostRacing,
-          crashFor: (a, b, v) => { if (a === player || b === player) audio.crash(v); },
+          crashFor: crashJuice,
         });
         if (net.open && hostRacing) broadcastState();
         hostAcc -= SIM_DT;
@@ -679,7 +716,7 @@ function animate() {
       const racing = game.state === 'racing';
       simulateTick(list, soloInputFor, dt, now, {
         racing,
-        crashFor: (a, b, v) => { if (a === player || b === player) audio.crash(v); },
+        crashFor: crashJuice,
       });
       const pSteer = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
       audio.updateEngine(player.speed, pSteer, !player.offRoad);
@@ -703,6 +740,10 @@ function animate() {
       }
       if (racing && (player.raceDone || (game.raceOverAt && now >= game.raceOverAt))) finishRace();
     }
+  }
+  if (game.state !== 'menu') {
+    for (const k of list) dustForKart(k, dt);
+    updateDust(dt);
   }
   renderer.render(scene, camera);
 }

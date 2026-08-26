@@ -14,7 +14,7 @@ import { samples, selectTrack, angDiff, curvatureAt, trackLen } from '../src/tra
 import { TRACKS } from '../src/tracks.js';
 import { N_SAMPLES, SIM_DT, LAPS, AI_SKILL, clamp } from '../src/config.js';
 import { Kart, aiControl } from '../src/kart.js';
-import { GRID, simulateTick, raceOrder, progress } from '../src/race.js';
+import { GRID, simulateTick, raceOrder, progress, collideKarts } from '../src/race.js';
 import { FrameRing, sampleState, sampleRat } from '../src/interp.js';
 import {
   encTrack, encPrep, encStart, decStart,
@@ -57,12 +57,48 @@ function humanPilot(k, list) {
   return { throttle, steer: clamp(err * 2.5, -1, 1) };
 }
 
+/* Regression (user-reported): reversing into another kart's front used to pin
+   the driver and shove them forward. A faces -z (heading pi), holds full
+   reverse (drives +z) into B's front (B at +2.0, facing -z, idle). After 3 s:
+   A must keep making backwards progress; B must roll out of the way. */
+function reverseCollisionRegression() {
+  const A = new Kart({ isPlayer: true });
+  const B = new Kart({ isPlayer: false, net: true, color: 0x111111 });
+  A.pos.set(0, 0, 0);    A.heading = Math.PI;   // facing -z; reverse drives +z
+  B.pos.set(0, 0, 2.0);  B.heading = Math.PI;   // facing A, idle
+  let now = 0, contact = 0;
+  for (let i = 0; i < 180; i++) {
+    now += 1000 / 60;
+    A.step(1 / 60, -1, 0, now);   // full reverse
+    B.step(1 / 60, 0, 0, now);    // idle
+    const d = Math.hypot(A.pos.x - B.pos.x, A.pos.z - B.pos.z);
+    if (d < 2.15) contact++;
+    collideKarts([A, B]);
+  }
+  const aMove = A.pos.z;            // strongly +z expected (kept reversing)
+  const bMove = B.pos.z - 2.0;      // +z expected (rolled out of the way)
+  const gap = B.pos.z - A.pos.z;    // karts must NOT cross over each other
+  const aFwd = Math.sin(A.heading) * A.speed; // + = moving where A's nose points (against held reverse)
+  mark(aMove > 1.5, `A keeps reversing into contact (moved +${aMove.toFixed(2)}u, want >+1.5) — was pinned/shoved forward`);
+  mark(bMove > 0.8, `B rolled out of the way (moved +${bMove.toFixed(2)}u, want >+0.8)`);
+  mark(gap > 1.5, `A not shoved through B (final gap ${gap.toFixed(2)}u, want >1.5)`);
+  mark(aFwd < 1.5, `A's forward jolt bounded (end fwd-speed ${aFwd.toFixed(2)}u/s, want <1.5)`);
+  // sustained smooth contact (no oscillating push/bounce — the old constant
+  // shove made the pair judder apart and back ~3.5x/sec, which read as
+  // "the kart I'm reversing into gets shoved forward")
+  mark(contact > 150, `contact is smooth and sustained (${contact}/180 ticks, want >150 — old code oscillated)`);
+  console.log(`  reverse-into-front: A +${aMove.toFixed(2)}u, B +${bMove.toFixed(2)}u, gap ${gap.toFixed(2)}u, contact ${contact}/180`);
+}
+
 let failures = 0;
 const mark = (ok, why) => { if (!ok) { failures++; console.log(`  !! FAIL: ${why}`); } };
 
 /* ------------------------------------------------------------------ *
  *  Wire round-trip (pure — same code the browser ships)
  * ------------------------------------------------------------------ */
+console.log('\n== regression: reverse-collision shove ==');
+reverseCollisionRegression();
+
 console.log('== wire round-trip ==');
 mark(new DataView(encTrack(2)).getUint8(0) === T_TRACK, 'track type');
 mark(new DataView(encTrack(2)).getUint8(1) === 2, 'track idx');

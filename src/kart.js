@@ -90,6 +90,8 @@ export class Kart {
     this.steerVel = 0;
     this.wheelSpin = 0;
     this.posIdx = 0;
+    this.jolt = 0;        // collision impact intensity 0..1 — decays, drives the body kick
+    this.joltPhase = Math.random() * 6.28; // per-kart phase so paired karts kick differently
   }
 
   placeAt(t, offset) {
@@ -184,8 +186,12 @@ export class Kart {
     const sp = Math.min(Math.abs(this.speed) / MAX_SPEED, 1);
     const rollT = this.steerVel * 0.22 * sp;
     const pitchT = (Math.abs(this.speed) > 0.5 ? -0.03 : 0) * (sp + 0.3);
-    this.mesh.bodyGroup.rotation.z += (rollT - this.mesh.bodyGroup.rotation.z) * Math.min(1, 8 * dt);
-    this.mesh.bodyGroup.rotation.x += (pitchT - this.mesh.bodyGroup.rotation.x) * Math.min(1, 6 * dt);
+    // collision juice: a fast, damped roll/pitch kick on impact
+    const j = this.jolt * Math.cos(this.joltPhase + 22 * dt) * 0.35;
+    this.mesh.bodyGroup.rotation.z += (rollT + j - this.mesh.bodyGroup.rotation.z) * Math.min(1, 14 * dt);
+    this.mesh.bodyGroup.rotation.x += (pitchT + j * 0.5 - this.mesh.bodyGroup.rotation.x) * Math.min(1, 14 * dt);
+    this.jolt *= Math.exp(-6 * dt);
+    if (this.jolt < 0.01) this.jolt = 0;
   }
 }
 

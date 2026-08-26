@@ -44,3 +44,63 @@ scene.add(fill);
 
 // dusk sky dome + sun glow (procedural, see sky.js)
 addSky(scene, sun.position.clone());
+
+/* ------------------------------------------------------------------ *
+ *  Off-road dust — small particle pool puffed behind karts when they
+ *  churn through the tabletop "terrain" (feels the off-road penalty).
+ * ------------------------------------------------------------------ */
+const DUST_N = 90;
+const dustGeo = new THREE.BufferGeometry();
+const dustPos = new Float32Array(DUST_N * 3);
+const dustVel = new Float32Array(DUST_N * 3);
+const dustAge = new Float32Array(DUST_N).fill(10); // age > life = dead
+const dustLife = new Float32Array(DUST_N);
+dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+const dustMat = new THREE.PointsMaterial({
+  color: 0xcdb489, size: 0.42, transparent: true, opacity: 0.55,
+  depthWrite: false, sizeAttenuation: true,
+});
+const dust = new THREE.Points(dustGeo, dustMat);
+dust.frustumCulled = false;
+scene.add(dust);
+let dustCursor = 0;
+
+export function emitDust(x, z, vx, vz, amount) {
+  for (let i = 0; i < amount; i++) {
+    const j = dustCursor = (dustCursor + 1) % DUST_N;
+    dustPos[j * 3] = x + (Math.random() - 0.5) * 0.9;
+    dustPos[j * 3 + 1] = 0.25 + Math.random() * 0.2;
+    dustPos[j * 3 + 2] = z + (Math.random() - 0.5) * 0.9;
+    dustVel[j * 3] = vx + (Math.random() - 0.5) * 1.2;
+    dustVel[j * 3 + 1] = 0.7 + Math.random() * 1.1;
+    dustVel[j * 3 + 2] = vz + (Math.random() - 0.5) * 1.2;
+    dustAge[j] = 0;
+    dustLife[j] = 0.4 + Math.random() * 0.35;
+  }
+}
+
+export function updateDust(dt) {
+  let live = false;
+  for (let i = 0; i < DUST_N; i++) {
+    if (dustAge[i] >= dustLife[i]) continue;
+    live = true;
+    dustAge[i] += dt;
+    const t = dustAge[i] / dustLife[i];
+    if (t >= 1) { dustPos[i * 3 + 1] = -100; continue; } // park dead puffs below the table
+    dustPos[i * 3] += dustVel[i * 3] * dt;
+    dustPos[i * 3 + 1] += dustVel[i * 3 + 1] * dt;
+    dustPos[i * 3 + 2] += dustVel[i * 3 + 2] * dt;
+    dustVel[i * 3 + 1] *= 1 - 1.5 * dt; // slow rise
+  }
+  if (live) dustGeo.attributes.position.needsUpdate = true;
+}
+
+// per-frame emitter: dust behind a kart that's off-road and moving
+export function dustForKart(k, dt) {
+  if (!k.offRoad || Math.abs(k.speed) < 3) return;
+  const rate = Math.min(3, Math.abs(k.speed) / 8 + 1); // puffs/sec
+  if (Math.random() > rate * dt) return;
+  const fx = Math.sin(k.heading), fz = Math.cos(k.heading);
+  const bx = k.pos.x - fx * 1.1, bz = k.pos.z - fz * 1.1; // behind the kart
+  emitDust(bx, bz, -fx * Math.abs(k.speed) * 0.25, -fz * Math.abs(k.speed) * 0.25, 2);
+}
