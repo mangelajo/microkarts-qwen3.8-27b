@@ -8,7 +8,7 @@
  * Audio is only created after a user gesture (browser autoplay policy).
  */
 
-const BPM = 126;
+const BPM = 140;
 const BEAT = 60 / BPM;        // sec per beat
 const SIX = BEAT / 4;         // 16th note
 
@@ -129,15 +129,17 @@ function noiseHit(a, t, dur, vol, type, freq, q = 1, dest) {
 
 function scheduleStep(s, t, chord) {
   const midi = CHORDS[chord];
-  if (s % 4 === 0) note(ctx, t, midiHz(ROOTS[chord] + BASSP[s]), BEAT * 0.72, 'square', 0.13, musicGain);
-  note(ctx, t, midiHz(60 + midi[0] + ARP[s]), SIX * 1.6, 'triangle', 0.075, musicGain);
-  if (s % 4 === 2) note(ctx, t, midiHz(midi[2] + 24), SIX * 3, 'triangle', 0.045, musicGain); // lead blip (chord 3rd, 2 oct up)
-  if (s % 4 === 0) note(ctx, t, 150, 0.13, 'sine', 0.5, musicGain, 42);                  // kick (Hz, not MIDI)
-  if (s === 4 || s === 12) noiseHit(ctx, t, 0.09, 0.18, 'highpass', 1600, 0.8, musicGain);      // snare
-  if (s % 2 === 0) {                                                                  // hats
-    const vol = s % 4 === 2 ? 0.06 : 0.035;
-    noiseHit(ctx, t, 0.035, vol, 'highpass', 8000, 0.7, musicGain);
-  }
+  if (s === 0 && chord > 0) noiseHit(ctx, t, 0.5, 0.12, 'highpass', 5000, 0.6, musicGain); // crash on bar change
+  // driving 8th-note bass with offbeat pump
+  if (s % 2 === 0) note(ctx, t, midiHz(ROOTS[chord] + BASSP[s]), BEAT * 0.45, 'square', s % 4 === 0 ? 0.15 : 0.09, musicGain);
+  note(ctx, t, midiHz(60 + midi[0] + ARP[s]), SIX * 1.4, 'triangle', 0.08, musicGain);
+  if (s % 4 === 2) note(ctx, t, midiHz(midi[2] + 24), SIX * 3, 'triangle', 0.05, musicGain);       // lead blip (chord 3rd, 2 oct up)
+  if (s === 11 && chord % 2 === 1) note(ctx, t, midiHz(84 + midi[2]), SIX * 0.8, 'square', 0.05, musicGain); // sparkle on bars 2 & 4
+  if (s % 4 === 0) note(ctx, t, 150, 0.13, 'sine', 0.55, musicGain, 42);                           // four-on-the-floor kick
+  if (s === 4 || s === 12) noiseHit(ctx, t, 0.09, 0.2, 'highpass', 1600, 0.8, musicGain);          // snare
+  if (s === 7) noiseHit(ctx, t, 0.05, 0.07, 'highpass', 2400, 1, musicGain);                       // ghost snare into beat 3
+  if (s % 2 === 0) noiseHit(ctx, t, 0.03, s % 4 === 2 ? 0.07 : 0.045, 'highpass', 9000, 1, musicGain); // tight 8th hats
+  else if (s % 4 === 3) noiseHit(ctx, t, 0.09, 0.05, 'highpass', 7500, 0.7, musicGain);            // open hat on the "and"
 }
 
 /* ---------------- engine + skid (continuous) ---------------- */
