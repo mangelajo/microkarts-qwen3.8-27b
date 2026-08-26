@@ -23,17 +23,36 @@ export const N_SAMPLES  = 1000;    // track sampling resolution
 export const N_AI         = 3;
 export const AI_SKILL     = [0.96, 0.85, 0.62];
 
+// 2-player LAN (see plans/2_player_lan.md)
+export const SIM_DT       = 1 / 60;  // fixed sim step for the networked host (solo keeps variable step)
+export const INTERP_DELAY = 50;      // ms the client interpolates in the past (hides LAN jitter)
+export const P2_COLOR     = 0x1fc9b8; // player-2 kart (teal), distinct from solo red
+export const N_AI_2P      = 2;       // 2P default roster: 2 humans + 2 AI
+
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const P2D = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+
+// steering authority vs speed (shared by kart.js and the net client's extrapolator)
+export function turnFactor(s) {
+  const a = Math.abs(s);
+  const grip = Math.min(a / 6, 1);                            // no turning while (nearly) still
+  const calm = 1 - 0.3 * Math.min(a / MAX_SPEED, 1);          // less twitchy at speed
+  return grip * calm;
+}
 
 /* ------------------------------------------------------------------ *
  *  Shared game state — mutate properties, never reassign
  * ------------------------------------------------------------------ */
 export const game = {
   state: 'menu',        // menu | countdown | racing | finished
+  laps: LAPS,           // laps for the current race (2P host broadcasts via start frame)
+  roster: '2ai',        // 2P roster: '2ai' = 2 humans + 2 AI · '1v1' = humans only
   raceStart: 0,
   raceTime: 0,
   cdText: -1,
   raceOverAt: 0,
   dt: 1 / 60,
+  lastLapBeep: 0,       // player lapDone when we last beeped (lap audio debounce)
+  // 2P render mirror (client only): host-authoritative values we copy
+  net: null,            // { hostMs, karts, echoPing } latest raw state frame
 };

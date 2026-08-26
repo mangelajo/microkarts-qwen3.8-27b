@@ -6,17 +6,18 @@ Check items off as they land.
 ## Current state (what's already solid)
 
 - Arcade physics with off-road handling; lap/checkpoint counting with midpoint gate
-- 3 distinct AI drivers + headless test bench (`make sim`, `ai-sim/`)
+- **2-player LAN over WebRTC** — serverless code-paste pairing, host-authoritative fixed-step sim,
+  60 Hz state stream + 80 ms client interpolation, 2 humans + 2 AI or 1 v 1 (`plans/2_player_lan.md`)
+- 3 distinct AI drivers + headless test bench (`make sim` AI · `make netsim` wire + 2P race, `ai-sim/`)
 - Fully procedural scene: wood table, tabletop props, dusk sky + mountains — no assets
 - Shadows, chase camera, HUD, countdown/results flow
 
 ## What's missing
 
-- **Zero audio** — a kart game with no engine sound is half-dead
 - **No rubber-banding / items** — races are 100% deterministic
 - **Sparse player feedback** — no speed-FOV, no drift, no minimap
 - **No mobile/touch**
-- **No persistence** — best laps lost on refresh
+- **No best-lap persistence** — track pick + mutes survive refresh; laps don't
 
 ---
 
@@ -42,11 +43,11 @@ Check items off as they land.
   - AI stays track-agnostic: it only reads `samples`/`curvatureAt`. Adding a track = add an entry to `TRACKS` and run `make sim`
 - [ ] **Items / boost pads** — boost pads on straights (track data); a simple item box (turbo / rubber band / wall); AI skips smart use, player with `Space`
 - [ ] **Skid-to-drift** — hold `Space` at speed: reduced lateral grip + extra steering, builds charge released as mini-boost. Small `step()` physics tweak; sim harness makes tuning safe
-- [ ] **Local 2-player** — second controller on the same keyboard (`IJKL`). `Kart` already supports `ai=false`; add a second input reader. Big "party game" unlock
+- [x] **2-player** (superseded the local plan — went LAN instead): WebRTC DataChannel P2P, manual code pairing (no server), host runs the authoritative fixed-step sim, client interpolates. Headless safety net: `make netsim` (wire round-trips, interp unit checks, full 2P races on every track). Remaining: QR pairing (v1.5), local-prediction polish if the peer's own kart feels laggy
 
 ## Phase 3 — *Structure* (keep the project sustainable)
 
-- [ ] **Split monoliths** — `kart.js` (301 lines) → `physics.js` (step/off-road); `aiControl` → `ai.js`; `main.js` (247) → `game.js` (menu/countdown/racing/results state machine)
+- [ ] **Split monoliths** — `kart.js` (301 lines) → `physics.js` (step/off-road); `aiControl` → `ai.js`; `main.js` (now ~700 with the 2P contexts) → `game.js` (state machine) + `net2p.js` (host/join orchestration)
 - [ ] **`ai-sim/` as tuning playground** — `--watch` mode or a browser port (pure data in, telemetry out): tune physics/drift against a live canvas instead of guessing
 - [ ] **localStorage best laps + ghost** — record best lap as a position timeline; render a semi-transparent ghost kart. "Beat your ghost" hook (~80 lines)
 - [ ] **Mobile / touch** — on-screen pedals + tilt steering; pause the loop when the tab is hidden
@@ -65,7 +66,7 @@ Check items off as they land.
 ```
 Phase 1 (audio → feel)        →  "playable demo"
 Phase 2.1 (3 tracks)          →  ✅ done — "variety demo"
-Phase 2.4 (2-player)          →  "party demo"
+Phase 2.4 (2-player)          →  ✅ done (LAN, not local) — "party demo"
 Phase 2.1 + Phase 3.1         →  content milestone: add tracks (Phase 2.1 ✅ done) + split code
 Phase 3.3 (ghost)             →  "comeback" milestone
 ```
@@ -73,5 +74,5 @@ Phase 3.3 (ghost)             →  "comeback" milestone
 **Top-3 picks if only doing three:**
 
 1. ~~Phase 1.1 — **audio**~~ ✅ done
-2. Phase 2.4 — **2-player** (transforms the audience)
+2. ~~Phase 2.4 — **2-player**~~ ✅ done — LAN/WebRTC with `make netsim` safety net (transforms the audience)
 3. ~~Phase 2.1 — **more tracks**~~ ✅ done (3 tracks + themes)

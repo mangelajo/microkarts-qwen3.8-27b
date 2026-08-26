@@ -35,9 +35,79 @@ export function hideCountdown() {
   game.cdText = -1;
 }
 
+/* ------------------------------------------------------------------ *
+ *  2P LAN UI — mode chips (SOLO / HOST / JOIN), pairing panel, status
+ * ------------------------------------------------------------------ */
+const modeRow = el('modeRow');
+export const hostCode  = el('hostCode');
+export const joinInField  = el('joinInField');
+export const joinOutCode = el('joinOutCode');
+export const netStatus = el('netStatus');
+export const rosterRow = el('rosterRow');
+export const hostMsg   = el('hostMsg');
+export const joinMsg   = el('joinMsg');
+export let netPanel    = el('netPanel');
+let hostPanel = el('hostPanel');
+let joinPanel = el('joinPanel');
+let mode = 'solo'; // solo | host | join
+
+export function getMode() { return mode; }
+
+export function setMode(m) {
+  mode = m;
+  hostPanel.style.display = m === 'host' ? '' : 'none';
+  joinPanel.style.display = m === 'join' ? '' : 'none';
+  rosterRow.style.display  = m === 'host' ? '' : 'none';
+  if (m === 'join') { // fresh join attempt
+    joinInField.innerText = '';
+    joinOutCode.textContent = '—';
+    joinOutCode.classList.add('hidden');
+    el('joinOutLabel').style.display = 'none';
+  }
+  netPanel.classList.toggle('hidden', m === 'solo');
+  trackWrapEl().style.display = m === 'join' ? 'none' : '';
+  for (const c of modeRow.children) c.classList.toggle('sel', c.dataset.mode === m);
+  setStatus(m === 'solo' ? '' : 'standby');
+}
+
+export function setStatus(s) {
+  netStatus.style.display = s ? '' : 'none';
+  netStatus.textContent = s;
+  netStatus.classList.toggle('on', !!s && s.indexOf('CONNECTED') >= 0);
+}
+
+function trackWrapEl() { return el('trackWrap'); }
+
+let hostRoster = '2ai'; // '2ai' | '1v1' — host-owned, broadcast on start
+export function setHostRoster(r) {
+  hostRoster = r;
+  for (const c of rosterRow.children) c.classList.toggle('sel', c.dataset.roster === r);
+}
+export function getHostRoster() { return hostRoster; }
+
+
+export function initModePicker(onMode, onHostAnswer, onJoinSend, onRoster) {
+  for (const c of modeRow.children) {
+    c.addEventListener('click', e => { onMode(c.dataset.mode); e.target.blur(); });
+  }
+  el('answerBtn').addEventListener('click', e => { onHostAnswer(); e.target.blur(); });
+  el('joinBtn').addEventListener('click', e => { onJoinSend(); e.target.blur(); });
+  for (const c of rosterRow.children) {
+    c.addEventListener('click', e => { onRoster(c.dataset.roster); e.target.blur(); });
+  }
+  el('joinInField').addEventListener('input', () => { joinInField.innerText = joinInField.innerText.trimStart(); });
+  joinOutCode.addEventListener('click', () => {
+    if (joinOutCode.textContent === '—') return;
+    try { navigator.clipboard.writeText(joinOutCode.textContent); joinMsg.textContent = 'Copied! Paste it in the host STEP 2 box.'; }
+    catch { joinMsg.textContent = 'Select + copy the code, then paste it on the host’s screen.'; }
+  });
+}
+
+
 export function updateHud(r, l, karts) {
   const p = karts[karts.length - 1]; // player is pushed last
-  el('lap').textContent = 'LAP ' + Math.min(p.lapDone + 1, LAPS) + '/' + LAPS;
+  const laps = p.laps || LAPS;
+  el('lap').textContent = 'LAP ' + Math.min(p.lapDone + 1, laps) + '/' + laps;
   el('time').textContent = fmt(r);
   el('laptime').textContent = fmt(l);
   el('speed').textContent = Math.round(Math.abs(p.speed) * 7);

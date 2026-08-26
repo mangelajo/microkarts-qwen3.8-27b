@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ACCEL, BRAKE, MAX_SPEED, MAX_REV, DRAG, OFF_DRAG, OFF_GRIP, STEER_RATE, MAX_VISUAL_STEER, ROAD_HW, WHEEL_R, N_SAMPLES, LAPS, clamp } from './config.js';
+import { ACCEL, BRAKE, MAX_SPEED, MAX_REV, DRAG, OFF_DRAG, OFF_GRIP, STEER_RATE, MAX_VISUAL_STEER, ROAD_HW, WHEEL_R, N_SAMPLES, LAPS, clamp, turnFactor } from './config.js';
 import { scene } from './scene.js';
 import { samples, sampleHead, angDiff, curvatureAt, trackLen } from './track.js';
 
@@ -68,6 +68,7 @@ export function makeKart(bodyColor, accentColor) {
 export class Kart {
   constructor(opts) {
     this.isPlayer = !!opts.isPlayer;
+    this.net = !!opts.net; // driven over the LAN (host routes input from the wire, never aiControl)
     this.name = opts.name || (this.isPlayer ? 'YOU' : 'RIVALE');
     this.skill = opts.skill ?? 0.9;
     const color = opts.color || 0xe0392b;
@@ -78,6 +79,7 @@ export class Kart {
     this.speed = 0;
     this.offRoad = false;
     this.lapDone = 0;
+    this.laps = LAPS;          // per-race lap count (net host sets it from the start frame)
     this.lapStart = 0;
     this.lapTimes = [];
     this.hasMid = false;
@@ -108,6 +110,7 @@ export class Kart {
     this.trackIdx = Math.floor(tt * n) % n;
     this.lapTimes = [];
     this.raceDone = false;
+    this.netOn = false;      // host-side: peer's kart drives from the wire after GO
     this.steerVel = 0;
     this.posIdx = 0;
     this.lane = offset * 0.9;      // keep the grid side as a racing lane
@@ -145,7 +148,7 @@ export class Kart {
       if (this.hasMid) {
         const t = (now - this.lapStart) / 1000;
         this.lapDone++;
-        if (this.lapDone >= LAPS) this.raceDone = true;
+        if (this.lapDone >= (this.laps || LAPS)) this.raceDone = true;
         this.lapTimes.push(t);
         this.finalLapTime = t;
         this.lapStart = now;
@@ -291,11 +294,7 @@ export function aiControl(k, karts) {
 }
 
 /* ------------------------------------------------------------------ *
- *  Driving
+ *  Driving (turnFactor lives in config.js so the net client's
+ *  extrapolator can reuse the exact same steering authority)
  * ------------------------------------------------------------------ */
-export function turnFactor(s) {
-  const a = Math.abs(s);
-  const grip = Math.min(a / 6, 1);                            // no turning while (nearly) still
-  const calm = 1 - 0.3 * Math.min(a / MAX_SPEED, 1);          // less twitchy at speed
-  return grip * calm;
-}
+

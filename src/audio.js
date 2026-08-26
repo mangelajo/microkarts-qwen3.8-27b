@@ -132,7 +132,7 @@ function scheduleStep(s, t, chord) {
   if (s % 4 === 0) note(ctx, t, midiHz(ROOTS[chord] + BASSP[s]), BEAT * 0.72, 'square', 0.13, musicGain);
   note(ctx, t, midiHz(60 + midi[0] + ARP[s]), SIX * 1.6, 'triangle', 0.075, musicGain);
   if (s % 4 === 2) note(ctx, t, midiHz(midi[2] + 24), SIX * 3, 'triangle', 0.045, musicGain); // lead blip (chord 3rd, 2 oct up)
-  if (s % 4 === 0) note(ctx, t, midiHz(150), 0.13, 'sine', 0.5, musicGain, 42);         // kick
+  if (s % 4 === 0) note(ctx, t, 150, 0.13, 'sine', 0.5, musicGain, 42);                  // kick (Hz, not MIDI)
   if (s === 4 || s === 12) noiseHit(ctx, t, 0.09, 0.18, 'highpass', 1600, 0.8, musicGain);      // snare
   if (s % 2 === 0) {                                                                  // hats
     const vol = s % 4 === 2 ? 0.06 : 0.035;

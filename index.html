@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%8F%8E%3C/text%3E%3C/svg%3E" />
 <title>Micro Kart Racing</title>
 <style>
   :root { color-scheme: dark; }
@@ -41,6 +42,7 @@
   #overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
     background:radial-gradient(ellipse at center, rgba(22,14,7,.5), rgba(10,6,3,.88)); z-index:10; }
   #overlay.hidden { display:none; }
+  .hidden { display:none !important; }
   .panel { text-align:center; color:#ffe9c9; padding:36px 48px; max-width:540px;
     background:rgba(18,12,7,.78); border:1px solid rgba(255,200,120,.25); border-radius:16px;
     backdrop-filter:blur(6px); }
@@ -66,6 +68,18 @@
     font-weight:700; box-shadow:0 3px 0 #8a5a1e; }
   .result { font-size:15px; line-height:2.1; margin-bottom:24px; }
   .result b { color:#ffd07a; }
+  .net { margin:0 0 22px 0; text-align:center; }
+  .ncode { font-size:15px; letter-spacing:1px; word-break:break-all; background:rgba(30,20,12,.85);
+    border:1px dashed rgba(255,200,120,.4); border-radius:8px; padding:10px 12px; margin:6px 0 10px;
+    min-height:20px; color:#ffe9c9; max-height:88px; overflow-y:auto; cursor:pointer; }
+  .npaste { font-size:13px; letter-spacing:1px; word-break:break-all; background:rgba(30,20,12,.85);
+    border:1px solid rgba(255,200,120,.4); border-radius:8px; padding:10px 12px; margin:6px 0 12px;
+    min-height:44px; color:#ffe9c9; max-height:110px; overflow-y:auto; outline:none; text-align:left; }
+  .npaste:focus { border-color:#ffd07a; }
+  .btn.sm { font-size:13px; padding:9px 20px; }
+  #netStatus { position:fixed; top:110px; right:20px; z-index:7; font-size:11px; letter-spacing:2px;
+    color:#ff9d6b; background:rgba(12,8,5,.5); padding:6px 12px; border-radius:8px; display:none; }
+  #netStatus.on { color:#9fe08a; }
 </style>
 </head>
 <body>
@@ -89,6 +103,7 @@
   <div class="unit">KM/H</div>
 </div>
 <div class="hud" id="warn">OFF TRACK</div>
+<div id="netStatus"></div>
 <div class="hud" id="mutes"><span id="muteMusic" title="Music on/off (M)">MUSIC</span><span id="muteSfx" title="SFX on/off (N)">SFX</span></div>
 <div class="hud" id="countdown"></div>
 
@@ -101,6 +116,37 @@
       <div><kbd>S / ↓</kbd>Brake · Reverse</div>
       <div><kbd>A D / ← →</kbd>Steer</div>
       <div><kbd>M</kbd>Music · <kbd>N</kbd> SFX</div>
+    </div>
+    <div class="trk" id="modeWrap">
+      <div class="trk-label">MODE</div>
+      <div class="trk-row" id="modeRow">
+        <button type="button" class="tchip sel" data-mode="solo">SOLO</button>
+        <button type="button" class="tchip" data-mode="host">HOST 2P</button>
+        <button type="button" class="tchip" data-mode="join">JOIN 2P</button>
+      </div>
+    </div>
+    <div class="net hidden" id="netPanel">
+      <div id="hostPanel">
+        <div class="trk-label">STEP 1 — SEND THIS CODE TO PLAYER 2 (CLICK TO COPY)</div>
+        <div class="ncode" id="hostCode" title="Click to copy">—</div>
+        <div class="sub" id="hostMsg">Waiting for player 2…</div>
+        <div class="trk-row" id="rosterRow" style="justify-content:center">
+          <button type="button" class="tchip sel" data-roster="2ai">2 HUMANS + 2 AI</button>
+          <button type="button" class="tchip" data-roster="1v1">1 v 1</button>
+        </div>
+        <br/>
+        <div class="trk-label">STEP 2 — PASTE P2'S CODE HERE</div>
+        <div contenteditable="true" class="npaste" id="answerField"></div>
+        <button class="btn sm" id="answerBtn">CONNECT — PASTE P2'S CODE</button>
+      </div>
+      <div id="joinPanel" style="display:none">
+        <div class="trk-label">STEP 1 — PASTE THE HOST'S CODE</div>
+        <div contenteditable="true" class="npaste" id="joinInField"></div>
+        <button class="btn sm" id="joinBtn">CONNECT — GET MY CODE</button>
+        <div class="trk-label" id="joinOutLabel" style="display:none; margin-top:14px">STEP 2 — YOUR CODE: PASTE IT ON THE HOST'S SCREEN (CLICK TO COPY)</div>
+        <div class="ncode hidden" id="joinOutCode" title="Click to copy">—</div>
+        <div class="sub" id="joinMsg">…</div>
+      </div>
     </div>
     <div class="trk" id="trackWrap">
       <div class="trk-label">TRACK</div>

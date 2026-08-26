@@ -72,6 +72,11 @@ take in the catalogue. All track shapes are validated headlessly.
   wood-textured table, scattered tabletop props (donuts, lollipops, pencil, …)
 - Fully synthesized audio (`src/audio.js`): engine, tire skids, crashes, lap &
   countdown SFX, chiptune background music at 126 BPM
+- **2-player LAN** over WebRTC DataChannel (no server): host or join from the
+  menu, pair by pasting codes (`MKR-…`), then race 2 humans + 2 AI (or 1 v 1).
+  The host runs the authoritative fixed-step sim and streams state frames at
+  60 Hz; the joiner renders with 80 ms interpolation and sends input at 60 Hz.
+  Protocol + simulation are verified headlessly (`make netsim`)
 
 ## Code layout
 
@@ -83,10 +88,13 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/scene.js`    | Renderer, lights, fog, sky |
 | `src/sky.js`      | Procedural sky dome + sun (re-paintable gradient per theme) |
 | `src/kart.js`     | Kart mesh, physics `step()`, AI driver |
-| `src/main.js`     | Game loop, input, race lifecycle, camera |
-| `src/hud.js`      | DOM HUD + overlays |
+| `src/race.js`     | Headless race core: grid, progress, positions, collisions, `simulateTick()` |
+| `src/net.js`      | 2P wire protocol (enc/dec) + `NetSession` (pairing, DataChannel routing) |
+| `src/interp.js`   | Client-side interpolation ring + sampler (80 ms delay, angular wrap) |
+| `src/main.js`     | Game loop, input, race lifecycle, camera, 2P host/join orchestration |
+| `src/hud.js`      | DOM HUD + overlays, 2P mode/roster pickers + net panels |
 | `src/audio.js`    | WebAudio SFX + music sequencer |
-| `ai-sim/`         | Node harness to test the AI headlessly (`make sim`) |
+| `ai-sim/`         | Node harnesses: `make sim` (AI) · `make netsim` (wire + 2P race sim) |
 
 ## Tuning
 
