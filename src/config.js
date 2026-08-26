@@ -5,6 +5,8 @@ export const ACCEL      = 15;      // engine accel (u/s^2)
 export const BRAKE      = 26;      // braking decel
 export const MAX_SPEED  = 30;      // top speed (u/s)
 export const MAX_REV    = 8;       // max reverse speed
+export const KMH_PER_U    = 7;          // speed readout: km/h = |speed| * KMH_PER_U
+export const BLAST_KMH    = 180;        // exhaust flame + smoke kicks in above this speed
 export const DRAG       = 0.55;    // per-second exponential drag
 export const OFF_DRAG   = 4.5;     // extra drag when off the asphalt
 export const OFF_GRIP   = 0.45;    // acceleration multiplier off track

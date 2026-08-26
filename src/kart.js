@@ -1,66 +1,205 @@
 import * as THREE from 'three';
-import { ACCEL, BRAKE, MAX_SPEED, MAX_REV, DRAG, OFF_DRAG, OFF_GRIP, STEER_RATE, MAX_VISUAL_STEER, ROAD_HW, WHEEL_R, N_SAMPLES, LAPS, clamp, turnFactor } from './config.js';
+import { ACCEL, BRAKE, MAX_SPEED, MAX_REV, KMH_PER_U, BLAST_KMH, DRAG, OFF_DRAG, OFF_GRIP, STEER_RATE, MAX_VISUAL_STEER, ROAD_HW, WHEEL_R, N_SAMPLES, LAPS, clamp, turnFactor } from './config.js';
 import { scene } from './scene.js';
 import { samples, sampleHead, angDiff, curvatureAt, trackLen } from './track.js';
 
-/* ------------------------------------------------------------------ *
- *  The kart
- * ------------------------------------------------------------------ */
+/**
+ *  One soft circular glow, shared by every kart's exhaust FX (cheap + no
+ *  re-upload). Additive for flame, normal blend for smoke.
+ */
+let _fxTex = null;
+function fxTexture() {
+  if (_fxTex) return _fxTex;
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0.0, 'rgba(255,255,255,1)');
+  gr.addColorStop(0.4, 'rgba(255,255,255,0.75)');
+  gr.addColorStop(1.0, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  _fxTex = new THREE.CanvasTexture(c);
+  return _fxTex;
+}
+
 export function makeKart(bodyColor, accentColor) {
   const root = new THREE.Group();
-  const bodyGroup = new THREE.Group();
+  const bodyGroup = new THREE.Group();        // jolts: chassis, driver, cockpit, aero
   root.add(bodyGroup);
-  const bodyMat  = new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.35, metalness: 0.15 });
-  const accMat   = new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.4 });
-  const darkMat  = new THREE.MeshStandardMaterial({ color: 0x23262b, roughness: 0.6 });
-  const tireMat  = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.9 });
-  const addBox = (parent, w, h, d, x, y, z, mat) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+
+    // --- materials -------------------------------------------------------
+  const paint    = new THREE.MeshStandardMaterial({ color: bodyColor,  roughness: 0.28, metalness: 0.15 });
+  const accent   = new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.32, metalness: 0.25 });
+  const carbon   = new THREE.MeshStandardMaterial({ color: 0x1a1c21,      roughness: 0.5,  metalness: 0.4 });
+  const chrome   = new THREE.MeshStandardMaterial({ color: 0xb9c0c9,      roughness: 0.18, metalness: 0.95 });
+  const rimMat   = new THREE.MeshStandardMaterial({ color: 0xd6d7dc,      roughness: 0.3,  metalness: 0.9 });
+  const tireMat  = new THREE.MeshStandardMaterial({ color: 0x131315,      roughness: 0.95 });
+  const discMat  = new THREE.MeshStandardMaterial({ color: 0x8b9098,      roughness: 0.35, metalness: 0.85 });
+  const caliperMat = new THREE.MeshStandardMaterial({ color: accentColor, emissive: new THREE.Color(accentColor), emissiveIntensity: 0.35, roughness: 0.4, metalness: 0.2 });
+  const helmetMat = new THREE.MeshStandardMaterial({ color: 0xf2f2f4,     roughness: 0.24, metalness: 0.1 });
+  const visorMat  = new THREE.MeshStandardMaterial({ color: 0x101a24,     roughness: 0.08, metalness: 0.6 });
+  const exhaustGlow = new THREE.MeshStandardMaterial({ color: 0xff7a24, emissive: new THREE.Color(0xff5210), emissiveIntensity: 1.0, roughness: 0.4 });
+  const brakeLight = new THREE.MeshStandardMaterial({ color: 0xff2a1a, emissive: new THREE.Color(0xff2010), emissiveIntensity: 1.3, roughness: 0.3 });
+
+    // --- helpers ---------------------------------------------------------
+  const addMesh = (geo, mat, x, y, z, parent = bodyGroup) => {
+    const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
     m.castShadow = true;
     parent.add(m);
     return m;
-  };
-  addBox(bodyGroup, 1.7, 0.5, 1.6, 0, 0.78, -0.15, bodyMat);   // body
-  addBox(bodyGroup, 1.2, 0.35, 0.9, 0, 0.72, 1.35, accMat);    // nose
-  addBox(bodyGroup, 1.0, 0.5, 0.6, 0, 1.18, -0.55, darkMat);   // seat
-  {
-    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.1, 8), darkMat);
-    bar.geometry.rotateZ(Math.PI / 2);
-    bar.position.set(0, 1.38, 0.5);
-    bar.castShadow = true;
-    bodyGroup.add(bar);
-  }
+    };
+  const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
+    // a strut / arm between two points (suspension legs, wing struts, exhaust pipes)
+  const arm = (ax, ay, az, bx, by, bz, r, mat, parent = bodyGroup, seg = 6) => {
+     _a.set(ax, ay, az); _b.set(bx, by, bz);
+      _d.subVectors(_b, _a); const len = _d.length();
+    if (len < 1e-4) return;
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, seg), mat);
+     _d.normalize();
+    m.position.set((ax + bx) * 0.5, (ay + by) * 0.5, (az + bz) * 0.5);
+    m.quaternion.setFromUnitVectors(_up, _d);
+    m.castShadow = true;
+    parent.add(m);
+    return m;
+    };
+  const box = (g, w, h, d, x, y, z, mat) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z); m.castShadow = true; g.add(m); return m;
+    };
+
+    /* --- chassis / bodywork -------------------------------------------- */
+  box(bodyGroup, 1.5, 0.16, 2.5, 0, 0.35, -0.05, carbon);          // carbon floor / skid pan
+  box(bodyGroup, 0.9, 0.06, 1.9, 0, 0.24, -0.1, carbon);           // low under-tray
+  for (const s of [1, -1]) box(bodyGroup, 0.36, 0.42, 1.3, s * 0.56, 0.58, -0.1, paint);    // sidepods
+  for (const s of [1, -1]) box(bodyGroup, 0.30, 0.10, 1.1, s * 0.56, 0.42, -0.1, carbon);   // intake slot
+  box(bodyGroup, 1.3, 0.42, 1.5, 0, 0.62, 0.25, paint);            // main tub (front-weighted)
+  box(bodyGroup, 0.94, 0.34, 0.8, 0, 0.94, -0.85, paint);          // raised engine deck / hump
+  box(bodyGroup, 0.5, 0.14, 0.2, 0, 1.14, -0.72, carbon).rotation.x = -0.5;                // angled air scoop
+  box(bodyGroup, 0.7, 0.10, 0.12, 0, 1.06, -1.05, accent);                                // top intake trim
+
+    /* --- nose + front wing --------------------------------------------- */
+  const nose = addMesh(new THREE.ConeGeometry(0.5, 1.0, 14), paint, 0, 0.42, 1.02);
+  nose.rotation.x = Math.PI / 2; nose.scale.set(1.05, 1.4, 1.0);        // stretch lengthwise
+  addMesh(new THREE.BoxGeometry(1.7, 0.07, 0.4), carbon, 0, 0.28, 1.5);              // front splitter
+  addMesh(new THREE.BoxGeometry(1.5, 0.06, 0.5), paint, 0, 0.40, 1.42);            // front wing plate
+  for (const s of [1, -1]) addMesh(new THREE.BoxGeometry(0.06, 0.20, 0.5), paint, s * 0.78, 0.36, 1.42);    // endplates
+  for (const s of [1, -1]) addMesh(new THREE.BoxGeometry(0.34, 0.12, 0.1), carbon, s * 0.34, 0.44, 1.18);    // coolers
+
+    /* --- open cockpit + driver + helmet -------------------------------- */
+  addMesh(new THREE.BoxGeometry(0.66, 0.16, 0.44), accent, 0, 0.84, -0.20);        // cockpit rim
+  addMesh(new THREE.BoxGeometry(0.62, 0.10, 0.66), carbon, 0, 0.74, -0.22);        // seat base
+  addMesh(new THREE.BoxGeometry(0.60, 0.46, 0.10), carbon, 0, 0.98, -0.5).rotation.x = 0.32;   // seat back
+    // roll hoop: two posts + arch bar behind the driver
+  arm(-0.16, 1.0, -0.62, -0.16, 1.46, -0.60, 0.05, carbon);
+  arm( 0.16, 1.0, -0.62,  0.16, 1.46, -0.60, 0.05, carbon);
+  addMesh(new THREE.BoxGeometry(0.36, 0.10, 0.10), carbon, 0, 1.47, -0.60);
+    // steering wheel in front of the driver (ring faces +z, toward the helmet)
+  addMesh(new THREE.TorusGeometry(0.15, 0.028, 8, 20), chrome, 0, 0.90, 0.16);
+  addMesh(new THREE.CylinderGeometry(0.04, 0.04, 0.14, 10), carbon, 0, 0.90, 0.16).rotation.x = Math.PI / 2;
+    // helmet + tinted visor + accent fin/stripe
+  addMesh(new THREE.SphereGeometry(0.20, 16, 14), helmetMat, 0, 1.06, -0.34);
+  const visor = addMesh(new THREE.SphereGeometry(0.17, 12, 10), visorMat, 0, 1.07, -0.19);
+  visor.scale.set(0.9, 0.62, 0.6);
+  addMesh(new THREE.BoxGeometry(0.14, 0.14, 0.03), accent, 0, 1.25, -0.32);        // top fin
+  addMesh(new THREE.BoxGeometry(0.05, 0.30, 0.34), accent, 0, 1.05, -0.32);        // side stripe
+
+    /* --- rear wing ----------------------------------------------------- */
+  for (const s of [1, -1]) arm(0, 1.0, -1.25, s * 0.7, 1.36, -1.35, 0.045, chrome);   // struts
+  addMesh(new THREE.BoxGeometry(1.7, 0.06, 0.46), paint, 0, 1.38, -1.35);            // main element
+  addMesh(new THREE.BoxGeometry(1.5, 0.05, 0.28), carbon, 0, 1.30, -1.2);           // flap
+  for (const s of [1, -1]) addMesh(new THREE.BoxGeometry(0.07, 0.34, 0.5), paint, s * 0.82, 1.30, -1.35);   // endplates
+  addMesh(new THREE.BoxGeometry(1.4, 0.05, 0.05), accent, 0, 1.34, -1.05);          // centre spine
+  addMesh(new THREE.BoxGeometry(0.5, 0.06, 0.05), brakeLight, 0, 1.30, -1.58);      // taillight
+
+    /* --- dual chrome exhausts with glowing tips ------------------------ */
+  for (const s of [1, -1]) {
+    arm(s * 0.30, 0.86, -0.98, s * 0.34, 0.98, -1.5, 0.05, chrome);
+    addMesh(new THREE.CylinderGeometry(0.055, 0.055, 0.1, 10), exhaustGlow, s * 0.35, 1.0, -1.55).rotation.x = Math.PI / 2;
+    }
+
+     /* --- exhaust blast: flame + smoke when the kart is above BLAST_KMH --- */
+     // FX group parents to root so it inherits heading + position; particles are
+     // emitted at the two rear exhaust tips and trail backwards (-z).
+  const tips = [new THREE.Vector3( 0.35, 1.0, -1.55), new THREE.Vector3(-0.35, 1.0, -1.55)];
+  const tex = fxTexture();
+  const fx = new THREE.Group();
+  root.add(fx);
+  const makePool = (n, kind) => {
+    const arr = [];
+    for (let i = 0; i < n; i++) {
+      const mat = new THREE.SpriteMaterial({
+        map: tex,
+        color: kind === 'fire' ? 0xff5a1e : 0x9a9aa2,
+        transparent: true,
+        depthWrite: false,
+        blending: kind === 'fire' ? THREE.AdditiveBlending : THREE.NormalBlending,
+        opacity: 0,
+        });
+      const sprite = new THREE.Sprite(mat);
+      sprite.visible = false;
+      sprite.renderOrder = kind === 'fire' ? 3 : 2;        // fire draws over the bright track
+       fx.add(sprite);
+      arr.push({ s: sprite, kind, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, base: 1, life: 0, ttl: 1 });
+       }
+    return arr;
+     };
+  const fire = makePool(10, 'fire');
+  const smoke = makePool(6, 'smoke');
+  const blast = { fire, smoke, tips, fireT: 0, smokeT: 0 };
+
+    /* --- livery -------------------------------------------------------- */
+  addMesh(new THREE.BoxGeometry(0.16, 0.03, 1.5), accent, 0, 0.86, 0.2);            // centre stripe
+  for (const s of [1, -1]) addMesh(new THREE.BoxGeometry(0.05, 0.36, 1.1), accent, s * 0.55, 0.58, -0.1);   // side accent
+
+    /* --- wheels: tyre + tread ring, 5-spoke rim, hub, disc, caliper, arm */
   const wheels = [];
   const frontPivots = [];
-  const wheelGeo = new THREE.CylinderGeometry(WHEEL_R, WHEEL_R, 0.32, 18);
-  wheelGeo.rotateZ(Math.PI / 2); // axle along local X
+  const wheelGeo = new THREE.CylinderGeometry(WHEEL_R, WHEEL_R, 0.34, 22);
+  wheelGeo.rotateZ(Math.PI / 2);               // axle along local X
+  const treadGeo = new THREE.TorusGeometry(WHEEL_R, 0.055, 8, 22); treadGeo.rotateY(Math.PI / 2); // tread ring around X
+  const discGeo = new THREE.CylinderGeometry(WHEEL_R * 0.6, WHEEL_R * 0.6, 0.05, 16); discGeo.rotateZ(Math.PI / 2);
+  const hubGeo = new THREE.CylinderGeometry(WHEEL_R * 0.34, WHEEL_R * 0.42, 0.12, 12); hubGeo.rotateZ(Math.PI / 2);
+  const spokeGeo = new THREE.BoxGeometry(0.05, WHEEL_R * 1.05, 0.05);
   const addWheel = (x, z, front) => {
-    const hub = new THREE.Mesh(new THREE.CylinderGeometry(WHEEL_R * 0.5, WHEEL_R * 0.5, 0.34, 12), accMat);
-    hub.geometry.rotateZ(Math.PI / 2);
-    const wheel = new THREE.Mesh(wheelGeo, tireMat);
-    wheel.castShadow = true;
-    wheel.add(hub);
-    if (front) {
-      const g = new THREE.Group(); // steering pivot at wheel center
-      g.position.set(x, WHEEL_R, z);
-      wheel.position.set(0, 0, 0);
-      g.add(wheel);
-      root.add(g);
-      frontPivots.push(g);
-    } else {
-      wheel.position.set(x, WHEEL_R, z);
-      root.add(wheel);
-    }
+      // anchor = steering pivot (front) or static mount (rear), centred on the wheel
+    const anchor = new THREE.Group();
+    anchor.position.set(x, WHEEL_R, z);
+    root.add(anchor);
+    if (front) frontPivots.push(anchor);
+    const outer = Math.sign(x) || 1;         // which way faces away from the car centre
+    const inb = -outer * 0.10;               // inboard (toward car centre)
+    const wheel = new THREE.Mesh(wheelGeo, tireMat); wheel.castShadow = true;
+    anchor.add(wheel);                        // wheel spins; its children spin with it
+      // tread ring on the outer face
+    const tread = new THREE.Mesh(treadGeo, tireMat); tread.position.x = outer * 0.12; wheel.add(tread);
+      // rim cap + 5 rotating spokes
+    addMesh(hubGeo, rimMat, 0, 0, outer * 0.10, wheel);
+    for (let i = 0; i < 5; i++) {
+      const ang = (i / 5) * Math.PI * 2;
+      const sp = new THREE.Mesh(spokeGeo, rimMat);
+      sp.position.set(outer * 0.10, Math.cos(ang) * WHEEL_R * 0.42, Math.sin(ang) * WHEEL_R * 0.42);
+      sp.rotation.x = ang;
+      sp.castShadow = true;
+      wheel.add(sp);
+      }
+      // brake disc (spins with wheel) + caliper (fixed to the knuckle, does not spin)
+    const disc = new THREE.Mesh(discGeo, discMat); disc.position.x = inb; wheel.add(disc);
+    box(anchor, 0.10, 0.16, 0.14, inb, 0.02, 0.0, caliperMat);                  // caliper fixed to the knuckle
+      // A-arm suspension: two inboard chassis links -> wheel hub
+    arm(inb * 1.6, 0.44, z + 0.16, x, WHEEL_R, z + 0.02, 0.035, carbon, root);
+    arm(inb * 1.6, 0.18, z - 0.16, x, WHEEL_R, z - 0.02, 0.035, carbon, root);
     wheels.push(wheel);
-  };
-  addWheel( 0.85,  1.05, true);
-  addWheel(-0.85,  1.05, true);
-  addWheel( 0.85, -1.05, false);
-  addWheel(-0.85, -1.05, false);
+    return wheel;
+    };
+  addWheel( 0.85,    1.05, true);
+  addWheel(-0.85,    1.05, true);
+  addWheel( 0.85,   -1.05, false);
+  addWheel(-0.85,   -1.05, false);
+
   scene.add(root);
-  return { root, bodyGroup, wheels, frontPivots };
+  return { root, bodyGroup, wheels, frontPivots, exhaustGlow, blast };
 }
+
 
 /* ------------------------------------------------------------------ *
  *  Kart entity: integrates arcade driving physics along the track
@@ -184,6 +323,9 @@ export class Kart {
     for (const w of this.mesh.wheels) w.rotation.x = this.wheelSpin;
     for (const p of this.mesh.frontPivots) p.rotation.y = this.steerVel * MAX_VISUAL_STEER;
     const sp = Math.min(Math.abs(this.speed) / MAX_SPEED, 1);
+     // exhaust tips flare from an idle glow up to a hot orange as revs build
+    const glow = this.mesh.exhaustGlow;
+    if (glow) glow.emissiveIntensity = 0.35 + sp * 1.7 + 0.18 * Math.abs(Math.sin(this.wheelSpin * 2.3 + this.joltPhase));
     const rollT = this.steerVel * 0.22 * sp;
     const pitchT = (Math.abs(this.speed) > 0.5 ? -0.03 : 0) * (sp + 0.3);
     // collision juice: a fast, damped roll/pitch kick on impact
@@ -192,6 +334,65 @@ export class Kart {
     this.mesh.bodyGroup.rotation.x += (pitchT + j * 0.5 - this.mesh.bodyGroup.rotation.x) * Math.min(1, 14 * dt);
     this.jolt *= Math.exp(-6 * dt);
     if (this.jolt < 0.01) this.jolt = 0;
+      // exhaust blast: above BLAST_KMH the kart sprays flame + smoke from its tips
+    const b = this.mesh.blast;
+    if (b) {
+      const over = Math.abs(this.speed) * KMH_PER_U > BLAST_KMH
+          ? Math.min((Math.abs(this.speed) * KMH_PER_U - BLAST_KMH) / 30, 1) : 0;   // 0..1, hottest at the top end
+        // emission only above the threshold
+      if (over > 0) {
+        b.fireT -= dt;
+        while (b.fireT <= 0) {
+          const t = b.tips[(Math.random() * 2) | 0];
+          const slot = b.fire[(Math.random() * b.fire.length) | 0];
+          slot.x = t.x; slot.y = t.y - 0.05; slot.z = t.z;
+          slot.vx = (Math.random() - 0.5) * 0.25;
+          slot.vy = 0.1 + Math.random() * 0.2;
+          slot.vz = -(4.0 + over * 6.0) - Math.random() * 1.5;         // shoot backward (-z)
+          slot.base = 0.14 + over * 0.22 + Math.random() * 0.06;
+          slot.ttl = 0.16 + Math.random() * 0.14; slot.life = slot.ttl;
+          slot.s.material.color.setHex(over > 0.55 ? 0xffd24a : 0xff4e10);
+          slot.s.visible = true;
+          b.fireT += 0.028 - over * 0.022;            // faster cadence when hotter
+             }
+        b.smokeT -= dt;
+        while (b.smokeT <= 0) {
+          const t = b.tips[(Math.random() * 2) | 0];
+          const slot = b.smoke[(Math.random() * b.smoke.length) | 0];
+          slot.x = t.x; slot.y = t.y; slot.z = t.z - 0.2;
+          slot.vx = (Math.random() - 0.5) * 0.3;
+          slot.vy = 0.3 + Math.random() * 0.3;
+          slot.vz = -(2.0 + over * 2.5);
+          slot.base = 0.22 + over * 0.12;
+          slot.ttl = 0.7 + Math.random() * 0.5; slot.life = slot.ttl;
+          slot.s.visible = true;
+          b.smokeT += 0.09;
+             }
+            }
+        // integrate both pools every frame so they trail + fade after the kart slows
+      const fade = Math.exp(-1.0 * dt), slow = Math.exp(-1.4 * dt);
+      for (const p of b.fire) {
+        if (p.life <= 0) { if (p.s.visible) p.s.visible = false; continue; }
+        p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+        p.vx *= fade; p.vz *= slow;
+        const k = Math.max(p.life / p.ttl, 0);
+        p.s.position.set(p.x, p.y, p.z);
+        p.s.material.opacity = 0.95 * k;
+        p.s.scale.setScalar(p.base * (0.35 + 0.65 * k));
+        if (p.life <= 0) p.s.visible = false;
+          }
+      for (const p of b.smoke) {
+        if (p.life <= 0) { if (p.s.visible) p.s.visible = false; continue; }
+        p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+        p.vy += 0.3 * dt;                  // buoyant rise
+        p.vx *= fade; p.vz *= slow;
+        const k = Math.max(p.life / p.ttl, 0);
+        p.s.position.set(p.x, p.y, p.z);
+        p.s.material.opacity = 0.4 * k;
+        p.s.scale.setScalar(p.base * (0.6 + (1 - k) * 1.8));
+        if (p.life <= 0) p.s.visible = false;
+          }
+        }
   }
 }
 

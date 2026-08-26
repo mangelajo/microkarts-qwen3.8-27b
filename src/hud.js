@@ -1,4 +1,4 @@
-import { LAPS, game } from './config.js';
+import { LAPS, game, KMH_PER_U, BLAST_KMH } from './config.js';
 import { TRACKS } from './tracks.js';
 
 /* ------------------------------------------------------------------ *
@@ -110,7 +110,10 @@ export function updateHud(r, l, karts) {
   el('lap').textContent = 'LAP ' + Math.min(p.lapDone + 1, laps) + '/' + laps;
   el('time').textContent = fmt(r);
   el('laptime').textContent = fmt(l);
-  el('speed').textContent = Math.round(Math.abs(p.speed) * 7);
+  const kmh = Math.abs(p.speed) * KMH_PER_U;
+  el('speed').textContent = Math.round(kmh);
+     // glow the readout when the exhaust is on full (above BLAST_KMH)
+  el('speed').style.color = kmh > BLAST_KMH ? '#ff6a3d' : '';
   const best = p.lapDone ? Math.min(...p.lapTimes) : null;
   el('best').innerHTML = 'BEST <span class="val">' + (best == null ? '--' : fmt(best)) + '</span>';
   el('pos').textContent = String(p.posIdx || 1);
