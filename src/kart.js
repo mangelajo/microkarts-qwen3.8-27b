@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ACCEL, BRAKE, MAX_SPEED, MAX_REV, KMH_PER_U, BLAST_KMH, DRAG, OFF_DRAG, OFF_GRIP, STEER_RATE, MAX_VISUAL_STEER, ROAD_HW, WHEEL_R, N_SAMPLES, LAPS, clamp, turnFactor } from './config.js';
 import { scene } from './scene.js';
 import { samples, sampleHead, angDiff, curvatureAt, trackLen } from './track.js';
+import { obstacleAvoid, blockingHazard } from './obstacles.js';
 
 /**
  *  One soft circular glow, shared by every kart's exhaust FX (cheap + no
@@ -10,6 +11,7 @@ import { samples, sampleHead, angDiff, curvatureAt, trackLen } from './track.js'
 let _fxTex = null;
 function fxTexture() {
   if (_fxTex) return _fxTex;
+  if (typeof document === 'undefined') return null;   // headless (ai-sim): FX is visual-only
   const c = document.createElement('canvas'); c.width = c.height = 64;
   const g = c.getContext('2d');
   const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
@@ -429,8 +431,44 @@ function cornerCap(K) {
 }
 
 export function aiControl(k, karts) {
+  // per-hazard escape cooldown: prevents the endless clip→escape→re-clip loop
+  if ((k._coolUntil || 0) > 0) k._coolUntil--;
   const P = aiParams(k.skill ?? 0.9);
   const n = N_SAMPLES;
+
+  // --- deadlock escape (safety net). Steering avoidance (obstacleAvoid) is the
+  // primary defense and dodges the candy. But a driver who ends up pressed UP
+  // against a hazard at crawl speed is wedged: turnFactor(speed) → ~0 means a
+  // parked kart can't steer out of the way. So — like a human — the driver puts
+  // it in reverse, back up ~8u to make room, then the avoidance routine takes
+  // over the re-approach with room to actually swerve. The trigger is a hazard
+  // in reach while (nearly) stopped; the release is WORLD distance to the
+  // remembered candy spot (heading-based distance would oscillate, because
+  // reversing rotates the heading 180°). A per-hazard COOLDOWN then stops the
+  // endless “escape → re-clip → escape” loop on one piece of candy.
+  {
+    if (k._escId !== undefined && k._escId !== -1) {
+      const wd = Math.hypot(k.pos.x - k._escX, k.pos.z - k._escZ);
+      if (wd < 8) {
+        // plain reverse along the racing line (nose tracks the line 7 samples
+        // behind us), so we pull back along it without arcing off-road.
+        const bi = ((Math.floor((k.prevU || 0.5) * n) - 7) + n) % n;
+        const BP = samples[bi];
+        const rErr = Math.atan2(Math.sin(Math.atan2(BP.x - k.pos.x, BP.z - k.pos.z) - k.heading),
+                                Math.cos(Math.atan2(BP.x - k.pos.x, BP.z - k.pos.z) - k.heading));
+        k._escAge = (k._escAge || 0) + 1;
+        return { throttle: -0.7, steer: clamp(rErr * 2.0, -1.2, 1.2) };
+      }
+      k._escId = -1;               // 8u clear — avoidance takes over the re-approach
+      k._coolUntil = 60 * 6;       // ~6s before escape may fire for this candy again
+    }
+    const bh = blockingHazard(k);
+    // only start if this candy isn't in cooldown (its avoid was just given a shot)
+    if (bh && !(bh.iid === k._coolId && (k._coolUntil || 0) > 0)) {
+      k._escId = bh.iid; k._escX = bh.x; k._escZ = bh.z; k._escR = bh.r; k._escAge = 0;
+      k._coolId = bh.iid;
+    }
+  }
 
   // preferred lane, nudge away from whoever is right in front of us
   let lane = clamp(k.lane || 0, -(ROAD_HW - 1.6), ROAD_HW - 1.6);
@@ -454,7 +492,12 @@ export function aiControl(k, karts) {
   const topSp = P.maxSp(k.lapDone);
   const maxSp = k.offRoad ? Math.min(8, topSp) : topSp;
   const dist = 25 + 2.4 * Math.max(0, k.speed);    // arc units the driver can react in
-  let vNeed = Infinity;
+  // sugar hazards: aim the pursuit line at the far side of a candy in our
+  // path. A strong driver commits hard and goes around clean; a weak one
+  // barely adjusts and clips it (jolt + speed loss) — that's the point.
+  const laneLo = -(ROAD_HW - 1.6), laneHi = ROAD_HW - 1.6;
+  lane = clamp(lane + obstacleAvoid(k, dist, k.skill ?? 0.9, laneLo, laneHi), laneLo, laneHi);
+let vNeed = Infinity;
   const du = trackLen > 0 ? dist / trackLen : 0.05;
   for (let s = 1; s <= 40; s++) {
     const K = Math.abs(curvatureAt(k.prevU + du * s / 40));

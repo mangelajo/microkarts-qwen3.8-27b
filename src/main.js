@@ -8,13 +8,15 @@ import { renderer, scene, camera, updateDust, dustForKart } from './scene.js';
 import { Kart, aiControl } from './kart.js';
 import { selectTrack } from './track.js';
 import { GRID, simulateTick, raceOrder } from './race.js';
+import { setObstaclesOn, getObstaclesOn } from './obstacles.js';
 import { NetSession, makeStateEncoder, encFinish } from './net.js';
 import { FrameRing, sampleState } from './interp.js';
 import {
   fmt, el, startBtn, resultsEl, showOverlay, hideOverlay, hideCountdown, updateHud,
   initTrackPicker, setTrack, cycleTrack, getTrackIdx,
-  setMode, setStatus, hostCode, hostMsg, joinMsg,
+  setMode, setStatus, hostCode, hostMsg, joinMsg, getMode,
   initModePicker, setHostRoster,
+  initHazardPicker, setHazard, getHazardOn, loadHazardPref,
 } from './hud.js';
 import * as audio from './audio.js';
 
@@ -91,6 +93,9 @@ addEventListener('keydown', e => {
   if ((game.state === 'menu' || game.state === 'finished') && !e.repeat) {
     if (e.code === 'ArrowLeft') { audio.ensureAudio(); cycleTrack(-1); audio.beep(330); }
     if (e.code === 'ArrowRight') { audio.ensureAudio(); cycleTrack(1); audio.beep(440); }
+    if (e.code === 'KeyZ' && getMode() !== 'join') {
+      audio.ensureAudio(); toggleHazard(); audio.beep(getObstaclesOn() ? 440 : 330);
+    }
   }
   if (e.code === 'Space') e.preventDefault();
 });
@@ -134,7 +139,7 @@ function sessionCbs() {
     onOpen: () => {
       setStatus('CONNECTED');
       audio.beep(880);
-      if (netRole() === 'host') { net.sendTrack(getTrackIdx()); hostMsg.textContent = 'P2 connected! Pick a track, then press START RACE.'; }
+      if (netRole() === 'host') { net.sendTrack(getTrackIdx(), getObstaclesOn()); hostMsg.textContent = 'P2 connected! Pick a track, then press START RACE.'; }
       if (netRole() === 'join') joinMsg.textContent = 'CONNECTED! Now wait — the host picks the track and starts the race.';
     },
     onStatus: s => {
@@ -171,10 +176,15 @@ function sessionCbs() {
         hideCountdown();
       }
     },
-    onTrack: idx => { // host → live picker preview (client watches the host's chips)
+    onTrack: (idx, haz) => { // host → live picker preview (client watches the host's chips)
       if (netRole() !== 'join') return;
-      if (idx === getTrackIdx()) return;
-      setTrack(idx); // mirrors chips AND calls selectTrack via the init callback
+      const wantObs = haz === undefined ? getObstaclesOn() : !!haz;
+      const obsChanged = getObstaclesOn() !== wantObs;
+      const idxChanged = idx !== getTrackIdx();
+      if (!idxChanged && !obsChanged) return;
+      if (obsChanged) setObstaclesOn(wantObs);
+      if (idx === getTrackIdx()) selectTrack(idx);  // flag-only change: rebuild, chips already right
+      else setTrack(idx);                            // idx change: rebuild + chips via onChange
     },
     onStart: info => {
       if (netRole() !== 'join') return;
@@ -388,6 +398,13 @@ function crashJuice(a, b, v) {
   if (a === player || b === player) audio.crash(v);
 }
 
+/* Sugar-hazard juice: jolt + shake + thump when one of OUR karts clips candy */
+function obJuice(k, v) {
+  k.jolt = Math.min(1, Math.max(k.jolt, v));
+  if (k === player || k === p2) addShake(v * 0.7);
+  if (k === player || k === p2) audio.crash(v * 0.8);
+}
+
 /* ------------------------------------------------------------------ *
  *  Race lifecycle
  * ------------------------------------------------------------------ */
@@ -399,7 +416,7 @@ el('nCars').textContent = String(karts.length);
 
 function startRace() {
   audio.ensureAudio();
-  audio.startMusic();
+  audio.startMusic(getTrackIdx());
   game.laps = LAPS;
   resetKarts();
   game.raceTime = 0;
@@ -503,10 +520,23 @@ startBtn.addEventListener('click', () => {
 initTrackPicker(
   idx => {
     selectTrack(idx);
-    if (netRole() === 'host') net.sendTrack(getTrackIdx()); // client previews the host's track
+    if (netRole() === 'host') net.sendTrack(getTrackIdx(), getObstaclesOn()); // client previews the host's track
   },
 );
-if (getTrackIdx() !== 0) selectTrack(getTrackIdx());
+
+// sugar hazards: restore the persisted toggle BEFORE the first rebuild so the
+// boot-up track already has its candy; Z on the menu toggles it too.
+function toggleHazard() { setHazard(!getHazardOn()); }
+setObstaclesOn(loadHazardPref());
+initHazardPicker(
+  on => {
+    setObstaclesOn(on);
+    selectTrack(getTrackIdx());
+    if (netRole() === 'host') net.sendTrack(getTrackIdx(), getObstaclesOn()); // client mirrors hazards
+  },
+  getObstaclesOn(),
+);
+if (getTrackIdx() !== 0 || getObstaclesOn()) selectTrack(getTrackIdx());
 
 // restore mute preferences
 try {
@@ -686,6 +716,7 @@ function animate() {
         simulateTick(list, hostInputFor, SIM_DT, hostSimT, {
           racing: hostRacing,
           crashFor: crashJuice,
+          obFor: obJuice,
         });
         if (net.open && hostRacing) broadcastState();
         hostAcc -= SIM_DT;
@@ -717,6 +748,7 @@ function animate() {
       simulateTick(list, soloInputFor, dt, now, {
         racing,
         crashFor: crashJuice,
+        obFor: obJuice,
       });
       const pSteer = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
       audio.updateEngine(player.speed, pSteer, !player.offRoad);

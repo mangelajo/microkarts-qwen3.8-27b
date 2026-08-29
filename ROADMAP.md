@@ -26,7 +26,7 @@ Check items off as they land.
 - [x] **Procedural audio** (`src/audio.js`, keeps the no-assets policy)
   - WebAudio engine oscillator, pitch tied to speed, gear-like stepping ✅
   - Skid noise when |steer| high & speed high; thud on collision; lap chime; countdown beeps ✅
-  - Chiptune background music (A-minor 126 BPM, sequenced on the audio clock) ✅
+  - One chiptune per track (drive / pop / wave; sequenced on the audio clock) ✅
   - `M` key / HUD button toggles mute (persisted in localStorage) ✅
 - [x] **Speed feel** — FOV widens 55 → 70 with speed (smoothed); collision camera shake + per-kart jolt kick (damped roll/pitch in `sync()`) ✅
 - [x] **Particle dust** — `THREE.Points` pool (90 puffs) puffs behind karts off-road at speed (`dustForKart` in `scene.js`) ✅
@@ -41,6 +41,8 @@ Check items off as they land.
   - menu picks a track via chips or `←`/`→` (persisted in `localStorage mkr-track`); HUD shows the current track name
   - **`make sim` now runs the full AI suite against every track** — a broken control-point set fails the harness instead of the browser (exit code 1)
   - AI stays track-agnostic: it only reads `samples`/`curvatureAt`. Adding a track = add an entry to `TRACKS` and run `make sim`
+- [x] **Sugar-hazard road obstacles** (`src/obstacles.js`, pure + headless) — candy (gumdrop / dice / gumball / jawbreaker / lolly / bean) scattered on the asphalt on a **seed-per-track RNG**, so the **host and every LAN client build the identical layout from the track index alone** — nothing is streamed over the wire, and the 100%-deterministic-race property the net-sim relies on holds. Start-menu toggle (chip + `Z`, persisted in `localStorage mkr-hazard`), client mirrors the host's pick in join mode. `collideObstacles` (karts pop clear + decel + `obJuice` jolt / camera shake / crash sfx) lives in `race.js` simulateTick (solo + host + net-sim all run the same code).
+  - **AI dodges like a human, not a physics bug**: `obstacleAvoid` (primary defense) steers the pursuit lane around the nearest in-lane hazard — strength scales with skill (strong drivers clear it clean; weak ones under-steer and clip it, which is the point) + per-driver hysteresis so they hold a side instead of weaving. If a driver *does* end up wedged against a candy at crawl speed (turnFactor → ~0, can't steer out), they **reverse ~8u to make room** then the avoidance re-approaches it — with a **per-hazard 6s cooldown** that kills the endless clip→reverse→re-clip loop. `make sim` checks all 3 tracks × 3 skill levels (off-road <1%, 0 stalls); `make netsim` checks the seeded-layout determinism + a 4-kart hazard host race (4/4 finish)
 - [ ] **Items / boost pads** — boost pads on straights (track data); a simple item box (turbo / rubber band / wall); AI skips smart use, player with `Space`
 - [ ] **Skid-to-drift** — hold `Space` at speed: reduced lateral grip + extra steering, builds charge released as mini-boost. Small `step()` physics tweak; sim harness makes tuning safe
 - [x] **2-player** (superseded the local plan — went LAN instead): WebRTC DataChannel P2P, manual code pairing (no server), host runs the authoritative fixed-step sim, client interpolates. Headless safety net: `make netsim` (wire round-trips, interp unit checks, full 2P races on every track). Remaining: QR pairing (v1.5), local-prediction polish if the peer's own kart feels laggy
@@ -50,7 +52,7 @@ Check items off as they land.
 - [ ] **Split monoliths** — `kart.js` (301 lines) → `physics.js` (step/off-road); `aiControl` → `ai.js`; `main.js` (now ~700 with the 2P contexts) → `game.js` (state machine) + `net2p.js` (host/join orchestration)
 - [ ] **`ai-sim/` as tuning playground** — `--watch` mode or a browser port (pure data in, telemetry out): tune physics/drift against a live canvas instead of guessing
 - [ ] **localStorage best laps + ghost** — record best lap as a position timeline; render a semi-transparent ghost kart. "Beat your ghost" hook (~80 lines)
-- [ ] **Mobile / touch** — on-screen pedals + tilt steering; pause the loop when the tab is hidden
+- [ ] **Mobile / touch** — on-screen pull controls, measure the diff from the initial touch point to the drag point to calculate the drive vector;
 
 ## Phase 4 — *Polish* (endless, pick by mood)
 

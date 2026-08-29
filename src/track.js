@@ -4,6 +4,7 @@ import { scene, sun, hemi, fill } from './scene.js';
 import { woodTexture, checkerTexture, curbTexture } from './textures.js';
 import { TRACKS, trackTheme } from './tracks.js';
 import { retintSky } from './sky.js';
+import { buildObstacles, obstacleList, getObstaclesOn, HAZ_COLOR } from './obstacles.js';
 
 /* ------------------------------------------------------------------ *
  *  Track data — filled IN PLACE by buildTrack().
@@ -139,7 +140,72 @@ function scatterProps(parent) {
   }
 }
 
-export function buildTrack(def) {
+/* ------------------------------------------------------------------ *
+ *  Sugar hazards — candy that karts must swerve around. The collision
+ *  field is built deterministically per track in obstacles.js; this only
+ *  draws the meshes, which live on the track group so they swap + dispose
+ *  with every rebuild. No-op when hazards are off.
+ * ------------------------------------------------------------------ */
+let hazardMats = null; // persistent: ring + base + per-kind body, like propMats
+function ensureHazardMats() {
+  if (hazardMats) return hazardMats;
+  const ring = new THREE.MeshStandardMaterial({ color: 0x241008, emissive: 0xff5a1e, emissiveIntensity: 0.85, roughness: 0.6 });
+  const base = new THREE.MeshStandardMaterial({ color: 0x140f0a, roughness: 0.95 });
+  const body = {};
+  for (const [kind, c] of Object.entries(HAZ_COLOR)) {
+    body[kind] = new THREE.MeshStandardMaterial({ color: c, roughness: 0.32, metalness: 0.15 });
+  }
+  hazardMats = { ring, base, body };
+  return hazardMats;
+}
+
+function hazardGeo(kind) {
+  return ({
+    gumdrop:    new THREE.ConeGeometry(0.9, 1.8, 14),
+    lolly:      new THREE.SphereGeometry(0.42, 14, 12),
+    gumball:    new THREE.SphereGeometry(0.6, 16, 14),
+    jawbreaker: new THREE.IcosahedronGeometry(0.9, 0),
+    dice:       new THREE.BoxGeometry(1.5, 1.5, 1.5),
+    bean:       new THREE.CapsuleGeometry(0.55, 1.0, 6, 12),
+  })[kind] ?? new THREE.SphereGeometry(0.7, 14, 12); // fresh each build: group dispose handles it
+}
+
+function scatterHazardMeshes(parent) {
+  const m = ensureHazardMats();
+  for (const o of obstacleList) {
+    const body = new THREE.Group();
+    body.position.set(o.x, 0, o.z);
+    body.rotation.y = o.rot;
+
+    const geo = hazardGeo(o.kind);
+    const mesh = new THREE.Mesh(geo, m.body[o.kind]);
+    const s = o.r / (o.kind === 'gumdrop' ? 0.9 : o.kind === 'dice' ? 0.75 : 0.62);
+    mesh.scale.setScalar(s);
+    if (o.kind === 'gumdrop') mesh.position.y = o.r * 0.9;             // tip up, base on the table
+    else if (o.kind === 'lolly') mesh.position.y = o.r * 1.6;         // candy head (stick below)
+    else if (o.kind === 'bean') { mesh.rotation.z = Math.PI / 2; mesh.position.y = o.r * 0.6; }
+    else mesh.position.y = o.r * 0.9;
+    mesh.castShadow = mesh.receiveShadow = true;
+    body.add(mesh);
+    if (o.kind === 'lolly') {
+      const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, o.r * 1.6, 8), m.base);
+      stick.position.y = o.r * 0.8; stick.castShadow = true;
+      body.add(stick);
+    }
+    // a dark base disc + a glowing ring telegraph the hazard (reads as "careful")
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(o.r + 0.35, 0.08, 8, 28), m.ring);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.02; ring.receiveShadow = true;
+    body.add(ring);
+    const baseM = new THREE.Mesh(new THREE.CylinderGeometry(o.r * 0.55, o.r * 0.7, 0.12, 16), m.base);
+    baseM.position.y = 0.06; baseM.receiveShadow = true;
+    body.add(baseM);
+
+    parent.add(body);
+  }
+}
+
+export function buildTrack(def, index = 0) {
   const pts = def.points.map(([x, z]) => new THREE.Vector3(x, 0, z));
   curve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.5);
 
@@ -189,6 +255,8 @@ export function buildTrack(def) {
   group.add(line);
 
   scatterProps(group);
+  buildObstacles(index);          // deterministic hazard field for sim + AI (per track)
+  if (getObstaclesOn()) scatterHazardMeshes(group);   // visuals only when hazards are on
 
   // dispose the previous build's per-track materials (shared prop mats persist)
   for (const m of prevMats) m.dispose();
@@ -213,8 +281,8 @@ export function buildTrack(def) {
 // eager build of the first track so imported data (samples etc.) is valid
 // the moment track.js loads (browser AND ai-sim); main.js re-builds the
 // user's persisted choice at boot.
-buildTrack(TRACKS[0]);
+buildTrack(TRACKS[0], 0);
 export function selectTrack(idx) {
   const def = TRACKS[((idx % TRACKS.length) + TRACKS.length) % TRACKS.length];
-  return buildTrack(def);
+  return buildTrack(def, idx);
 }

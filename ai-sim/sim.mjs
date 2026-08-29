@@ -12,6 +12,7 @@ import { samples, selectTrack } from '../src/track.js';
 import { TRACKS } from '../src/tracks.js';
 import { N_SAMPLES, AI_SKILL } from '../src/config.js';
 import { Kart, aiControl } from '../src/kart.js';
+import { setObstaclesOn, buildObstacles, collideObstacles, obstacleList } from '../src/obstacles.js';
 
 const n = N_SAMPLES;
 function posAt(t) {
@@ -166,6 +167,66 @@ for (let ti = 0; ti < TRACKS.length; ti++) {
       const r = k.nearestTrack();
       console.log(`   ${k.name}: lat=${r.lat.toFixed(2)} off=${k.offRoad}`);
     }
+  }
+
+  console.log('\n== sugar hazards ON (candy on track, drivers must swerve) ==');
+  {
+    // build the deterministic field for this track (visuals off, sim only)
+    setObstaclesOn(true);
+    buildObstacles(ti);
+    console.log(`   ${obstacleList.length} hazards on track`);
+
+    // solo runs: each AI on the race line, must finish while swerving candy
+    for (const skill of AI_SKILL) {
+      const k = newKart(skill, 0.99, 0);
+      let t = 0, offTime = 0, stillTime = 0, hits = 0;
+      while (t < SECONDS && !k.raceDone) {
+        const c = aiControl(k, karts);
+        k.step(DT, c.throttle, c.steer, t * 1000);
+        collideObstacles([k], () => { hits++; });
+        if (k.offRoad) offTime += DT;
+        if (Math.abs(k.speed) < 0.03) stillTime += DT;
+        t += DT;
+      }
+      const off = 100 * offTime / t, stalled = 100 * stillTime / t;
+      console.log(`skill=${skill}: laps=${k.lapDone} ${k.raceDone ? 'DONE' : 'INCON'} offRoad=${off.toFixed(1)}% clips=${hits}`);
+      mark(k.raceDone, `${info.name} hazard skill=${skill} did not finish (${k.lapDone} laps)`);
+      mark(off < 15, `${info.name} hazard skill=${skill} offRoad=${off.toFixed(1)}% (too much clipping)`);
+      mark(stalled < 5, `${info.name} hazard skill=${skill} stalled=${stalled.toFixed(1)}%`);
+    }
+
+    // full 4-kart pack with hazards: collisions AND candy at once
+    {
+      const skills = AI_SKILL;
+      const grid = [{ u: 0.9925, o: -1.75 }, { u: 0.9925, o: 1.75 }, { u: 0.985, o: -1.75 }, { u: 0.985, o: 1.75 }];
+      const pk = [0, 99, 1, 2].map((si, i) => {
+        const k = new Kart({ isPlayer: si === 99, name: si === 99 ? 'YOU' : `AI${si}`, skill: si === 99 ? 0.95 : skills[si] });
+        const { P, T, Nn } = posAt(grid[i].u);
+        k.pos.copy(P).addScaledVector(Nn, grid[i].o);
+        k.heading = Math.atan2(T.x, T.z);
+        k.trackIdx = Math.floor(grid[i].u * n) % n;
+        k.prevU = grid[i].u;
+        k.lane = grid[i].o * 0.9;
+        return k;
+      });
+      let t = 0, clips = 0;
+      while (t < 300 && !pk[1].raceDone) {
+        for (const k of pk) { const c = aiControl(k, pk); k.step(DT, c.throttle, c.steer, t * 1000); }
+        collide(pk);
+        collideObstacles(pk, () => { clips++; });
+        t += DT;
+      }
+      for (const k of pk) {
+        const last = k.lapTimes.length ? k.lapTimes[k.lapTimes.length - 1].toFixed(1) : '-';
+        console.log(`${k.name} (skill ${k.skill}): ${k.raceDone ? 'FINISHED' : 'stuck'} laps=${k.lapDone} lastLap=${last}`);
+      }
+      console.log(`   hazard clips in pack: ${clips}`);
+      mark(pk[1].raceDone, `${info.name} hazard pack: player never finished`);
+    }
+
+    // restore the off state so the next track starts clean
+    setObstaclesOn(false);
+    buildObstacles(ti);
   }
 }
 

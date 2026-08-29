@@ -66,6 +66,7 @@ export function setMode(m) {
   }
   netPanel.classList.toggle('hidden', m === 'solo');
   trackWrapEl().style.display = m === 'join' ? 'none' : '';
+  hazardWrapEl().style.display = m === 'join' ? 'none' : ''; // join mirrors the host's pick
   for (const c of modeRow.children) c.classList.toggle('sel', c.dataset.mode === m);
   setStatus(m === 'solo' ? '' : 'standby');
 }
@@ -77,6 +78,7 @@ export function setStatus(s) {
 }
 
 function trackWrapEl() { return el('trackWrap'); }
+function hazardWrapEl() { return el('hazardWrap'); }
 
 let hostRoster = '2ai'; // '2ai' | '1v1' — host-owned, broadcast on start
 export function setHostRoster(r) {
@@ -167,4 +169,35 @@ function loadPersisted() {
   trackSel.idx = i;
   trackChips.forEach((c, j) => c.classList.toggle('sel', j === i));
   el('trackName').textContent = TRACKS[i].name;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Sugar-hazard toggle — chips on the menu; persisted in localStorage
+ * ------------------------------------------------------------------ */
+const hazardChips = [];
+let hazardOnChange = null;
+
+export function initHazardPicker(onChange, initialOn) {
+  hazardOnChange = onChange;
+  const row = el('hazardRow');
+  for (const c of row.children) {
+    c.addEventListener('click', e => { setHazard(c.dataset.hazard === 'on'); e.target.blur(); });
+    hazardChips.push(c);
+  }
+  setHazard(initialOn, /*fire*/ false);
+}
+
+export function setHazard(on, fire = true) {
+  const v = !!on;
+  for (const c of hazardChips) c.classList.toggle('sel', c.dataset.hazard === (v ? 'on' : 'off'));
+  try { localStorage.setItem('mkr-hazard', v ? '1' : '0'); } catch { /* private mode */ }
+  if (fire && hazardOnChange) hazardOnChange(v);
+}
+
+export function getHazardOn() {
+  return hazardChips.some(c => c.dataset.hazard === 'on' && c.classList.contains('sel'));
+}
+
+export function loadHazardPref() {
+  try { return localStorage.getItem('mkr-hazard') === '1'; } catch { return false; }
 }

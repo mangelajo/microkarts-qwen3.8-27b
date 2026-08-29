@@ -71,7 +71,7 @@ take in the catalogue. All track shapes are validated headlessly.
 - Procedural dusk scene: canvas-painted sky dome with stars + mountains + sun glow,
   wood-textured table, scattered tabletop props (donuts, lollipops, pencil, …)
 - Fully synthesized audio (`src/audio.js`): engine, tire skids, crashes, lap &
-  countdown SFX, chiptune background music at 126 BPM
+  countdown SFX, one chiptune per track (108–152 BPM depending on track)
 - **2-player LAN** over WebRTC DataChannel (no server): host or join from the
   menu, pair by pasting codes (`MKR-…`), then race 2 humans + 2 AI (or 1 v 1).
   The host runs the authoritative fixed-step sim and streams state frames at

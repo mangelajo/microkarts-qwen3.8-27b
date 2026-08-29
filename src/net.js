@@ -7,7 +7,7 @@
  *  input and renders snapshots (main.js + interp).
  *
  *  Wire protocol — first byte = type, rest is a DataView payload:
- *    0x02 track   host→  u8 trackIdx                              picker sync
+ *    0x02 track   host→  u8 trackIdx, u8 hazards (0/1)                 picker sync
  *    0x05 prep    host→  u8 trackIdx, u32 cdMs                    "countdown in 3..2..1"
  *    0x03 start   host→  u8 karts, u8 laps, u8 rosterN, i8 steerFlip,
  *                                   f32 simDt, f32[karts*2] grid (u,o pairs)
@@ -42,8 +42,8 @@ const b64u = {
  * dec*() take a DataView over the FULL frame (type byte at 0).
  * Headless-safe: no RTCPeerConnection needed. ------------------------- */
 function toView(d) { return d instanceof ArrayBuffer ? d : d.buffer; }
-export function encTrack(idx) {
-  const v = new DataView(new ArrayBuffer(2)); v.setUint8(0, T_TRACK); v.setUint8(1, idx); return v.buffer;
+export function encTrack(idx, hazards = 0) {
+  const v = new DataView(new ArrayBuffer(3)); v.setUint8(0, T_TRACK); v.setUint8(1, idx); v.setUint8(2, hazards ? 1 : 0); return v.buffer;
 }
 export function encPrep(trackIdx, cdMs) {
   const v = new DataView(new ArrayBuffer(6)); v.setUint8(0, T_PREP); v.setUint8(1, trackIdx); v.setUint32(2, cdMs); return v.buffer;
@@ -164,7 +164,7 @@ export class NetSession {
   _route(buf) {
     const view = this._view(buf), d = new DataView(view, 0, view.byteLength);
     switch (d.getUint8(0)) {
-      case T_TRACK: this.cbs.onTrack && this.cbs.onTrack(d.getUint8(1)); break;
+      case T_TRACK: this.cbs.onTrack && this.cbs.onTrack(d.getUint8(1), view.byteLength > 2 ? d.getUint8(2) : undefined); break;
       case T_PREP: this.cbs.onPrep && this.cbs.onPrep({ trackIdx: d.getUint8(1), cdMs: d.getUint32(2) }); break;
       case T_START: this.cbs.onStart && this.cbs.onStart(decStart(d)); break;
       case T_STATE: this.cbs.onState && this.cbs.onState(decodeState(d, this.kartN)); break;
@@ -212,7 +212,7 @@ export class NetSession {
   inputNow(throttle, steer) {
     if (this.open) this.ch.send(encInput(throttle, steer, (Date.now() / 1000 | 0) & 0xffff));
   }
-  sendTrack(idx) { if (this.open) this.ch.send(encTrack(idx)); }
+  sendTrack(idx, hazards = 0) { if (this.open) this.ch.send(encTrack(idx, hazards)); }
   sendPrep(trackIdx, cdMs) { if (this.open) this.ch.send(encPrep(trackIdx, cdMs)); }
   sendStart(info) { if (this.open) this.ch.send(encStart(info)); }
   sendState(buf) { if (this.open) this.ch.send(buf); }

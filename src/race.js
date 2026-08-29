@@ -1,4 +1,5 @@
 import { clamp, MAX_SPEED, MAX_REV } from './config.js';
+import { collideObstacles } from './obstacles.js';
 
 /* ------------------------------------------------------------------ *
  *  Race core — pure, headless-safe (no DOM / WebGL). Shared by the
@@ -72,11 +73,12 @@ export function collideKarts(karts, crashFor) {
 // same as before this refactor); the net host passes racing=true once
 // the flag drops. `now` is ms (performance.now() for solo, host
 // sim-clock for net) and drives lap timing.
-export function simulateTick(karts, inputFor, dt, now, { racing, positions = true, crashFor } = {}) {
+export function simulateTick(karts, inputFor, dt, now, { racing, positions = true, crashFor, obFor } = {}) {
   for (const k of karts) {
     const c = inputFor(k, racing);
     k.step(dt, c.throttle, c.steer, now);
   }
   collideKarts(karts, crashFor);
+  collideObstacles(karts, obFor);   // sugar hazards — no-op when the field is empty
   if (positions && racing) refreshPositions(karts);
 }

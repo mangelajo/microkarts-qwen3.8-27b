@@ -15,6 +15,7 @@ import { TRACKS } from '../src/tracks.js';
 import { N_SAMPLES, SIM_DT, LAPS, AI_SKILL, clamp } from '../src/config.js';
 import { Kart, aiControl } from '../src/kart.js';
 import { GRID, simulateTick, raceOrder, progress, collideKarts } from '../src/race.js';
+import { setObstaclesOn, buildObstacles, obstacleList } from '../src/obstacles.js';
 import { FrameRing, sampleState, sampleRat } from '../src/interp.js';
 import {
   encTrack, encPrep, encStart, decStart,
@@ -161,14 +162,59 @@ console.log('\n== interpolation ==');
   const r = sampleRat({ x: 0, z: 0, heading: -2.967, speed: 0, steerVel: 0 }, { x: 0, z: 0, heading: 2.967, speed: 0, steerVel: 0 }, 0.5);
   mark(Math.abs(Math.abs(r.heading) - Math.PI) < 0.01, `heading wrap lerp (got ${r.heading})`);
 }
-console.log(failures === 0 ? '  interp OK' : '  interp failures above');
+console.log(failures === 0 ? '  interp OK' : '  interp failures above');/* ------------------------------------------------------------------ *
+ *  Sugar-hazard multiplayer determinism: the whole reason the hazard
+ *  layout is seeded (trackIdx) alone is that the HOST and every LAN
+ *  CLIENT build the identical candy layout with NOTHING streamed over
+ *  the wire. Verify that holds, and that a host-authoritative race with
+ *  hazards on still stays in sync (all karts finish, positions set).
+ * ------------------------------------------------------------------ */
+console.log('\n== sugar hazards: LAN determinism + host race ==');
+{
+  // 1) identical seeded layout for the same track on every (re)build —
+  //    this is what guarantees host == client frame-for-frame.
+  for (let ti = 0; ti < TRACKS.length; ti++) {
+    selectTrack(ti);
+    setObstaclesOn(true);  buildObstacles(ti);
+    const a = obstacleList.map(o => [o.x, o.z, o.kind, o.r]);
+    buildObstacles(ti);    // as a "freshly-joined client" would
+    const b = obstacleList.map(o => [o.x, o.z, o.kind, o.r]);
+    mark(a.length === b.length && a.length > 0 && a.every((q, i) => q[0]===b[i][0] && q[1]===b[i][1] && q[2]===b[i][2] && Math.abs(q[3]-b[i][3])<1e-9),
+      `hazard layout identical on rebuild (track ${ti}, ${a.length} candy)`);
+  }
+  // 2) host-authoritative race WITH hazards on: every kart still finishes
+  const ti = 1;   // Candy Tangle — densest (11 hazards)
+  selectTrack(ti);  setObstaclesOn(true);  buildObstacles(ti);
+  const list = [0, 1, 2, 3].map((who, i) => {
+    const k = new Kart({ isPlayer: who === 3, net: who === 2, name: who === 3 ? 'YOU' : `AI${who}`, skill: who === 3 ? 0.95 : AI_SKILL[who] });
+    k.laps = LAPS;
+    const { P, T, Nn } = posAt(GRID[i].u);
+    k.pos.copy(P).addScaledVector(Nn, GRID[i].o);
+    k.heading = Math.atan2(T.x, T.z);
+    k.trackIdx = Math.floor(GRID[i].u * n) % n;
+    k.prevU = GRID[i].u;
+    return k;
+  });
+  let t = 0, clips = 0;
+  const GO = 3000;
+  while (t < 480 * 1000 && !list.every(k => k.raceDone)) {
+    const r = t >= GO;
+    simulateTick(list, (k, rac) => rac ? aiControl(k, list) : { throttle: 0, steer: 0 },
+      SIM_DT, t, { racing: r, crashFor: null, obFor: () => { clips++; } });
+    t += SIM_DT * 1000;
+  }
+  const fin = list.filter(k => k.raceDone).length;
+  mark(fin === list.length, `hazard host race: ${fin}/${list.length} finished (Candy Tangle)`);
+  console.log(`  Candy Tangle host race w/ ${obstacleList.length} candy: ${fin}/${list.length} finished, ${clips} hazard clips, ${(t/1000).toFixed(0)}s`);
+  setObstaclesOn(false);   // back off: the plain 2P races below drive with no candy
+}
 
 /* ------------------------------------------------------------------ *
  *  Host-authoritative 2P race: 2 human input streams + 2 AI, 60 Hz
  * ------------------------------------------------------------------ */
 for (let ti = 0; ti < TRACKS.length; ti++) {
   const info = selectTrack(ti);
-  console.log(`\n== ${info.name} — 2P host race (${info.points} pts) ==`);
+  console.log(`\n== ${info.name} - 2P host race (${info.points} pts) ==`);
 
   // mirrors main.js resetKarts for 2P: humans front row, AI behind
   const list = [0, 1, 'P2', 'YOU'].map((who, i) => {
@@ -188,12 +234,9 @@ for (let ti = 0; ti < TRACKS.length; ti++) {
   });
   const p1 = list[2], p2 = list[3];
 
-  // host fixed-step loop — exactly what src/main.js does
-  let t = 0; // host sim clock, ms
-  const GO = 3000;
-  let racing = false;
+  let t = 0; const GO = 3000; let racing = false;
   while (t < 300 * 1000 && !(p1.raceDone && p2.raceDone)) {
-    racing = t >= GO;
+    racing = (t >= GO);
     simulateTick(list, (k, r) => r ? (k.net ? humanPilot(k, list) : aiControl(k, list)) : { throttle: 0, steer: 0 },
       SIM_DT, t, { racing, crashFor: null });
     t += SIM_DT * 1000;
@@ -206,7 +249,6 @@ for (let ti = 0; ti < TRACKS.length; ti++) {
   mark(progress(p2) >= LAPS && p2.raceDone, `${info.name}: P2 (human) did not finish (${p2.lapDone} laps)`);
   mark(p1.lapTimes.length === LAPS, `${info.name}: P1 lapTimes ${p1.lapTimes.length}/${LAPS}`);
   mark(p2.lapTimes.length === LAPS, `${info.name}: P2 lapTimes ${p2.lapTimes.length}/${LAPS}`);
-  // humans drove the human pilot — they should not have stalled out on the line
   for (const k of [p1, p2]) {
     const last = k.lapTimes[k.lapTimes.length - 1];
     mark(last > 10 && last < 240, `${info.name}: ${k.name} final lap ${last ? last.toFixed(1) : 'n/a'}s out of range`);
@@ -217,7 +259,6 @@ for (let ti = 0; ti < TRACKS.length; ti++) {
   }
   console.log(`  race time ${secs.toFixed(1)}s`);
 
-  /* 1v1 roster: 2 humans only (kartN=2 wire) */
   {
     const two = [2, 3].map((src, i) => {
       const k = new Kart({ isPlayer: src === 3, net: src === 2, name: src === 3 ? 'YOU' : 'P2', skill: 1 });
