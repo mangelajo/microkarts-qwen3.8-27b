@@ -52,7 +52,7 @@ Check items off as they land.
 - [ ] **Split monoliths** — `kart.js` (301 lines) → `physics.js` (step/off-road); `aiControl` → `ai.js`; `main.js` (now ~700 with the 2P contexts) → `game.js` (state machine) + `net2p.js` (host/join orchestration)
 - [ ] **`ai-sim/` as tuning playground** — `--watch` mode or a browser port (pure data in, telemetry out): tune physics/drift against a live canvas instead of guessing
 - [ ] **localStorage best laps + ghost** — record best lap as a position timeline; render a semi-transparent ghost kart. "Beat your ghost" hook (~80 lines)
-- [ ] **Mobile / touch** — on-screen pull controls, measure the diff from the initial touch point to the drag point to calculate the drive vector;
+- [x] **Mobile / touch** — `src/touch.js`, a floating "pull" joystick: the **first finger down anywhere on the canvas seeds a virtual stick at that point** and the live **drag delta = the drive vector** (`pull up → throttle, down → brake/reverse, sideways → steer`), each axis clamped to [-1,1] on a 74 px spring with a 12 px dead-zone. It feeds the *same* `{throttle, steer}` channel as the keyboard via `readDrive()` (a live drag wins so the two never fight), so solo + host + client are all covered; the client streams it over the LAN. The `i8` input fields now carry the ±1 range ×127, so an analog drag survives the wire while keyboard's ±1/0 stay exact (`decInput(encInput(-1,1)) === {-1,1}`). Headless-safe (`initTouch` is a no-op without a DOM; `ai-sim` never imports it), so `make netsim` still passes (wire + all 3 races). A "PULL FROM ANYWHERE TO DRIVE" cue flashes at GO on touch devices. Steer sign is `INVERT_STEER` one-liner if a phone test flips it.
 
 ## Phase 4 — *Polish* (endless, pick by mood)
 

@@ -19,6 +19,7 @@ import {
   initHazardPicker, setHazard, getHazardOn, loadHazardPref,
 } from './hud.js';
 import * as audio from './audio.js';
+import { getDrive, initTouch, setActive as touchSetActive, pulseHint } from './touch.js';
 
 /* ------------------------------------------------------------------ *
  *  Karts — the roster has 3 AI bodies (solo uses 3, 2P uses 2) + the
@@ -80,6 +81,20 @@ const KEYMAP = {
   KeyD: 'right', ArrowRight: 'right',
 };
 function inText() { return (keys.left ? 1 : 0) - (keys.right ? 1 : 0); }
+// The car's single local drive source: a live finger drag (touch.js) wins over
+// the keyboard so the two never fight; fall back to the classic discrete WASD.
+// readDrive is called per frame for the player's kart, for the audio pitch, and
+// (on the client) for what gets streamed over the wire.
+const drive = { throttle: 0, steer: 0 };
+function readDrive(racing) {
+  const t = getDrive();
+  if (t.active && racing) { drive.throttle = t.throttle; drive.steer = t.steer; }
+  else {
+    drive.throttle = (keys.up ? 1 : 0) - (keys.down ? 1 : 0);
+    drive.steer = inText();
+   }
+  return drive;
+}
 addEventListener('keydown', e => {
   audio.ensureAudio();
   const k = KEYMAP[e.code];
@@ -109,9 +124,13 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
+// mobile: the floating "pull" joystick lives on the render canvas; it drives
+// via the same {throttle, steer} channel as the keyboard (see readDrive).
+initTouch(renderer.domElement);
+
 function keyInput(k, racing) {
   if (!k.isPlayer || !racing) return { throttle: 0, steer: 0 };
-  return { throttle: (keys.up ? 1 : 0) - (keys.down ? 1 : 0), steer: inText() };
+  return readDrive(racing);
 }
 
 /* ------------------------------------------------------------------ *
@@ -315,6 +334,7 @@ function clientStart(info) {
   camLook.copy(p.pos);
   camera.position.copy(camPos);
   camera.lookAt(camLook);
+  pulseHint();               // client sees the same cue when the host's race begins
 }
 
 // client mirrors host lap/finish events from the snapshot deltas
@@ -452,6 +472,7 @@ function startRace() {
   camera.position.copy(camPos);
   camera.lookAt(camLook);
   updateHud(0, 0, racers());
+  pulseHint();               // show the "PULL TO DRIVE" cue (no-op on non-touch)
 }
 
 // grid slot per kart — must match resetKarts()' placement order
@@ -661,6 +682,8 @@ function animate() {
   const now = performance.now();
   const list = racers();
   const role = netRole();
+  // the pull-joystick only drives while the car may move; it parks on menu/results
+  touchSetActive(game.state === 'countdown' || game.state === 'racing');
 
   if (game.state === 'menu') {
     const a = now * 0.00009;
@@ -699,10 +722,12 @@ function animate() {
     }
   } else if (role === 'join') {      // ---- client: no sim, render snapshots + stream our input ----
     if (game.state === 'racing') {
-      net.inputNow((keys.up ? 1 : 0) - (keys.down ? 1 : 0), inText());
+      // live touch drag drives over the wire; otherwise the keyboard. steer pitch
+      const d = readDrive(true);
+      net.inputNow(d.throttle, d.steer);
       applyClientState(dt);
       const sk = selfKart();
-      audio.updateEngine(sk.speed, inText(), !sk.offRoad); // local engine sound from interpolated speed
+      audio.updateEngine(sk.speed, d.steer, !sk.offRoad); // local engine sound from interpolated speed
     }
   } else {
     // ---- solo + host sim ----
@@ -724,7 +749,7 @@ function animate() {
       }
       if (steps === 8) hostAcc = 0; // tab stall — stop the sim rather than spiral
 
-      audio.updateEngine(player.speed, inText(), !player.offRoad);
+      audio.updateEngine(player.speed, readDrive(hostRacing).steer, !player.offRoad);
       if (player.lapDone !== game.lastLapBeep) {
         game.lastLapBeep = player.lapDone;
         if (player.lapDone > 0 && !player.raceDone) audio.lap();
@@ -750,8 +775,7 @@ function animate() {
         crashFor: crashJuice,
         obFor: obJuice,
       });
-      const pSteer = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
-      audio.updateEngine(player.speed, pSteer, !player.offRoad);
+      audio.updateEngine(player.speed, readDrive(racing).steer, !player.offRoad);
       if (player.lapDone !== game.lastLapBeep) {
         game.lastLapBeep = player.lapDone;
         if (player.lapDone > 0 && !player.raceDone) audio.lap();

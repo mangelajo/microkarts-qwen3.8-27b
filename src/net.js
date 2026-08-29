@@ -11,7 +11,9 @@
  *    0x05 prep    host→  u8 trackIdx, u32 cdMs                    "countdown in 3..2..1"
  *    0x03 start   host→  u8 karts, u8 laps, u8 rosterN, i8 steerFlip,
  *                                   f32 simDt, f32[karts*2] grid (u,o pairs)
- *    0x10 input   both   i8 throttle, i8 steer, u16 ping          client→host
+ *    0x10 input   both   i8 throttle*127, i8 steer*127, u16 ping
+ *                                   client→host (x127 so a touch drag's -1..1
+ *                                   survives the wire; keyboard's ±1/0 stay exact)
  *    0x20 state   host→  u32 hostMs, u16 echoPing, then per kart:
  *                                   f32 x,z,heading,speed,steerVel,
  *                                   u8 offRoad, lapDone, posIdx, raceDone
@@ -66,11 +68,13 @@ export function decStart(d) {
 }
 export function encInput(throttle, steer, ping) {
   const v = new DataView(new ArrayBuffer(5)); v.setUint8(0, T_INPUT);
-  v.setInt8(1, throttle); v.setInt8(2, steer); v.setUint16(3, ping & 0xffff); return v.buffer;
+  v.setInt8(1, Math.round(throttle * 127)); // scale -1..1 into the 8-bit field
+  v.setInt8(2, Math.round(steer * 127));
+  v.setUint16(3, ping & 0xffff); return v.buffer;
 }
 export function decInput(d) {
   const v = new DataView(toView(d), 0);
-  return { throttle: v.getInt8(1), steer: v.getInt8(2), ping: v.getUint16(3) };
+  return { throttle: v.getInt8(1) / 127, steer: v.getInt8(2) / 127, ping: v.getUint16(3) };
 }
 export function makeStateEncoder(kartN) {
   const buf = new ArrayBuffer(1 + 4 + 2 + kartN * KART_BYTES);
