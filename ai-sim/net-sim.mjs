@@ -22,7 +22,7 @@ import {
   encInput, decInput,
   makeStateEncoder, decodeState,
   encFinish, decFinish,
-  encBye, T_TRACK, T_PREP, T_START, T_INPUT, T_STATE, T_FINISH, T_BYE,
+  encBye, T_TRACK, T_PREP, T_BYE,
   codeFromSdp, sdpFromCode,
 } from '../src/net.js';
 
@@ -44,7 +44,7 @@ function posAt(t) {
  *  controller — the sim is about the host-authoritative plumbing, not
  *  how fast a human drives.
  * ------------------------------------------------------------------ */
-function humanPilot(k, list) {
+function humanPilot(k) {
   const { u, lat } = k.nearestTrack();
   const look = 3.5; // u of foresight, scaled down at speed
   const target = posAt(u + (look / trackLen) * clamp(k.speed / 12, 0.35, 1));
@@ -157,7 +157,19 @@ console.log('\n== interpolation ==');
   mark(Math.abs(s.karts[0].x - 0.8) < 1e-9, `interp past-newest (got ${s.karts[0].x})`);
   mark(sampleState(new FrameRing(), 10) === null, 'empty ring → null');
   s = sampleState(ring, 25);
-  mark(s.hostMs === 3000, `sampleState carries hostMs (got ${s.hostMs})`);
+  mark(s.hostMs === 3025, `sampleState hostMs interpolates between frames (got ${s.hostMs}, want 3025)`);
+  // past the newest frame: hostMs extrapolates with the same dt as the karts
+  s = sampleState(ring, 70);
+  mark(Math.abs(s.hostMs - 3070) < 1e-6, `sampleState hostMs extrapolates (got ${s.hostMs}, want 3070)`);
+  // the old bug: hostMs came from the ring's OLDEST frame — with a 3-frame
+  // ring sampled between frames 2 and 3, that lagged by a full 50 ms
+  const ring3 = new FrameRing();
+  ring3.push({ hostMs: 1000, karts: [kart(0, 0, 0, 0)] }, 0);
+  ring3.push({ hostMs: 1050, karts: [kart(0, 0, 0, 0)] }, 50);
+  ring3.push({ hostMs: 1100, karts: [kart(0, 0, 0, 0)] }, 100);
+  s = sampleState(ring3, 75);
+  mark(Math.abs(s.hostMs - 1075) < 1e-6, `hostMs is the bracketing frame, not the oldest (got ${s.hostMs}, want 1075)`);
+  mark(sampleState(new FrameRing(), 10) === null, 'empty ring → null');
   // heading wrap: -170°→+170° should cross ±180, not go the long way round
   const r = sampleRat({ x: 0, z: 0, heading: -2.967, speed: 0, steerVel: 0 }, { x: 0, z: 0, heading: 2.967, speed: 0, steerVel: 0 }, 0.5);
   mark(Math.abs(Math.abs(r.heading) - Math.PI) < 0.01, `heading wrap lerp (got ${r.heading})`);
@@ -237,7 +249,7 @@ for (let ti = 0; ti < TRACKS.length; ti++) {
   let t = 0; const GO = 3000; let racing = false;
   while (t < 300 * 1000 && !(p1.raceDone && p2.raceDone)) {
     racing = (t >= GO);
-    simulateTick(list, (k, r) => r ? (k.net ? humanPilot(k, list) : aiControl(k, list)) : { throttle: 0, steer: 0 },
+    simulateTick(list, (k, r) => r ? (k.net ? humanPilot(k) : aiControl(k, list)) : { throttle: 0, steer: 0 },
       SIM_DT, t, { racing, crashFor: null });
     t += SIM_DT * 1000;
   }
@@ -272,7 +284,7 @@ for (let ti = 0; ti < TRACKS.length; ti++) {
     });
     let t2 = 0;
     while (t2 < 300 * 1000 && !(two[0].raceDone && two[1].raceDone)) {
-      simulateTick(two, (k, r) => r ? humanPilot(k, two) : { throttle: 0, steer: 0 }, SIM_DT, t2, { racing: t2 >= GO, crashFor: null });
+      simulateTick(two, (k, r) => r ? humanPilot(k) : { throttle: 0, steer: 0 }, SIM_DT, t2, { racing: t2 >= GO, crashFor: null });
       t2 += SIM_DT * 1000;
     }
     mark(two[0].raceDone && two[1].raceDone, `${info.name}: 1v1 humans did not finish (${two.map(k => k.lapDone).join('/')})`);

@@ -64,9 +64,6 @@ export function sampleState(ring, targetRecvT) {
   const frames = ring.frames;
   if (!frames.length) return null;
 
-  // host sim-clock at the bracketing frame (client HUD + lap timing)
-  const hostMs = frames[0].frame.hostMs || 0;
-
   // find the two frames that bracket the target
   let before = null, after = null;
   for (let i = frames.length - 1; i >= 0; i--) {
@@ -77,9 +74,14 @@ export function sampleState(ring, targetRecvT) {
   if (!before) before = { frame: frames[0].frame, recvT: frames[0].recvT };
 
   const out = before.frame.karts.map(k => ({ ...k }));
+  // host sim-clock of the sampled moment: interpolate between the bracketing
+  // frames (NOT the ring's oldest frame — that made the client HUD/lap clock
+  // lag by up to a full ring), or extend past the newest while extrapolating
+  let hostMs;
   if (after) {
     const span = Math.max(after.recvT - before.recvT, 1);
     const f = Math.min(1, (targetRecvT - before.recvT) / span);
+    hostMs = lerp(before.frame.hostMs, after.frame.hostMs, f);
     for (let i = 0; i < out.length; i++) {
       const a = before.frame.karts[i], b = after.frame.karts[i];
       const s = sampleRat(a, b, f);
@@ -89,6 +91,7 @@ export function sampleState(ring, targetRecvT) {
     // target is past the newest frame: extrapolate (bounded — karts top
     // out at ~30 u/s, so 200 ms of guessing is ~6 u; snap next real frame)
     const dt = Math.min(0.2, (targetRecvT - before.recvT) / 1000);
+    hostMs = (before.frame.hostMs || 0) + dt * 1000;
     if (dt > 0) for (const k of out) extrapolate(k, dt);
   }
   return { hostMs, karts: out };

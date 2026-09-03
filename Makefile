@@ -6,7 +6,7 @@ install:
 	npm install
 
 lint: install
-	npx eslint src/
+	npx eslint src/ ai-sim/
 
 serve:
 	python3 ai-sim/serve.py $(PORT)

@@ -146,7 +146,7 @@ export function collideObstacles(karts, onHit) {
  *  instead of weaving. Each kart keeps its OWN state (not on the obstacle!)
  *  so one driver's committed side never bleeds into another's.
  * ------------------------------------------------------------------ */
-export function obstacleAvoid(k, dist, skill, laneLo, laneHi) {
+export function obstacleAvoid(k, dist, skill) {
   // Return a small signed nudge (added to the pursuit lane) that pulls the
   // driver away from the candy in their path. All in the kart's heading frame
   // (fwd/side). Scales with urgency (how close) and skill (strong drivers

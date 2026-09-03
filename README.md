@@ -75,7 +75,7 @@ take in the catalogue. All track shapes are validated headlessly.
 - **2-player LAN** over WebRTC DataChannel (no server): host or join from the
   menu, pair by pasting codes (`MKR-…`), then race 2 humans + 2 AI (or 1 v 1).
   The host runs the authoritative fixed-step sim and streams state frames at
-  60 Hz; the joiner renders with 80 ms interpolation and sends input at 60 Hz.
+  60 Hz; the joiner renders with 50 ms interpolation and sends input at 60 Hz.
   Protocol + simulation are verified headlessly (`make netsim`)
 
 ## Code layout
@@ -90,7 +90,7 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/kart.js`     | Kart mesh, physics `step()`, AI driver |
 | `src/race.js`     | Headless race core: grid, progress, positions, collisions, `simulateTick()` |
 | `src/net.js`      | 2P wire protocol (enc/dec) + `NetSession` (pairing, DataChannel routing) |
-| `src/interp.js`   | Client-side interpolation ring + sampler (80 ms delay, angular wrap) |
+| `src/interp.js`   | Client-side interpolation ring + sampler (50 ms delay, angular wrap) |
 | `src/main.js`     | Game loop, input, race lifecycle, camera, 2P host/join orchestration |
 | `src/hud.js`      | DOM HUD + overlays, 2P mode/roster pickers + net panels |
 | `src/audio.js`    | WebAudio SFX + music sequencer |

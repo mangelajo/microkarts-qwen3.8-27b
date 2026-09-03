@@ -497,7 +497,7 @@ export function aiControl(k, karts) {
   // path. A strong driver commits hard and goes around clean; a weak one
   // barely adjusts and clips it (jolt + speed loss) — that's the point.
   const laneLo = -(ROAD_HW - 1.6), laneHi = ROAD_HW - 1.6;
-  lane = clamp(lane + obstacleAvoid(k, dist, k.skill ?? 0.9, laneLo, laneHi), laneLo, laneHi);
+  lane = clamp(lane + obstacleAvoid(k, dist, k.skill ?? 0.9), laneLo, laneHi);
 let vNeed = Infinity;
   const du = trackLen > 0 ? dist / trackLen : 0.05;
   for (let s = 1; s <= 40; s++) {
