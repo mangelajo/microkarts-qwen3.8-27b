@@ -1,0 +1,23 @@
+name: CI
+
+# Everything the project guarantees is headless: lint, the AI bench on
+# every track, and the wire + 2P host sims. If these pass, the game works.
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Lint (src + ai-sim)
+        run: make lint
+      - name: AI bench — every track, every scenario
+        run: make sim
+      - name: Wire + host-authoritative 2P sims
+        run: make netsim
