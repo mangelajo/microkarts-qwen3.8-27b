@@ -35,7 +35,14 @@
     color:#ffd07a; text-shadow:0 4px 18px rgba(0,0,0,.8); opacity:0; transition:opacity .15s, transform .1s; z-index:6; }
   #countdown.on { opacity:1; }
   #countdown.go { color:#9fe08a; font-size:84px; letter-spacing:8px; }
-  #mutes { bottom:18px; left:20px; display:flex; gap:14px; pointer-events:none; }
+
+  #minimap { bottom:18px; left:20px; display:flex; flex-direction:column; align-items:center; gap:5px;
+    background:rgba(12,8,5,.45); padding:8px; border-radius:10px; border:1px solid rgba(255,210,150,.14);
+    backdrop-filter:blur(4px); }
+  #minimap canvas { display:block; border-radius:6px; background:rgba(10,7,4,.35); }
+  #minimap .mm-label { font-size:9px; letter-spacing:3px; color:#d8b07f; }
+  #minimap.hidden { display:none; }
+  #mutes { bottom:18px; left:176px; display:flex; gap:14px; pointer-events:none; }
   #muteMusic, #muteSfx { font-size:12px; letter-spacing:2px; color:#d8b07f; cursor:pointer; pointer-events:auto; opacity:.75; }
   #muteMusic.on, #muteSfx.on { color:#ff9d6b; opacity:1; }
 
@@ -120,6 +127,7 @@
   <div class="unit">KM/H</div>
 </div>
 <div class="hud" id="warn">OFF TRACK</div>
+<div class="hud" id="minimap"><canvas id="minimapCanvas" width="132" height="132"></canvas><div class="mm-label">MAP</div></div>
 <div id="netStatus"></div>
 <div class="hud" id="mutes"><span id="muteMusic" title="Music on/off (M)">MUSIC</span><span id="muteSfx" title="SFX on/off (N)">SFX</span></div>
 <div class="hud" id="countdown"></div>

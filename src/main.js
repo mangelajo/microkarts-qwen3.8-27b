@@ -5,6 +5,7 @@ import {
   game,
 } from './config.js';
 import { renderer, scene, camera, updateDust, dustForKart } from './scene.js';
+import { initMinimap, setMinimapVisible, updateMinimap, resizeMinimap } from './minimap.js';
 import { Kart, aiControl } from './kart.js';
 import { selectTrack } from './track.js';
 import { GRID, simulateTick, raceOrder } from './race.js';
@@ -103,6 +104,7 @@ addEventListener('keydown', e => {
   if (e.code === 'Enter' || e.code === 'KeyR') primaryAction();
   if (e.code === 'KeyM') updateMusicMute();
   if (e.code === 'KeyN') updateSfxMute();
+  if (e.code === 'KeyK') toggleMap();
   // on the menu, arrows double as track switching (race steering unaffected —
   // the game isn't racing, so no conflict)
   if ((game.state === 'menu' || game.state === 'finished') && !e.repeat) {
@@ -122,6 +124,7 @@ addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  resizeMinimap();
 });
 
 // mobile: the floating "pull" joystick lives on the render canvas; it drives
@@ -572,6 +575,19 @@ el('muteMusic').addEventListener('click', e => { audio.ensureAudio(); updateMusi
 el('muteSfx').addEventListener('click', e => { audio.ensureAudio(); updateSfxMute(); e.target.blur(); });
 
 /* ------------------------------------------------------------------ *
+ *  Minimap — a top-down track map (bottom-left HUD). Shown on the grid and
+ *  during the race; hidden on the menu / results. 'K' toggles it (persisted).
+ * ------------------------------------------------------------------ */
+let mmOn = true;
+try { if (localStorage.getItem('mkr-map') === '0') mmOn = false; } catch { /* private mode */ }
+initMinimap();
+function toggleMap() {
+  mmOn = !mmOn;
+  try { localStorage.setItem('mkr-map', mmOn ? '1' : '0'); } catch { /* private mode */ }
+  setMinimapVisible(false);              // re-evaluated next frame from the game state
+}
+
+/* ------------------------------------------------------------------ *
  *  Mode / 2P wiring
  * ------------------------------------------------------------------ */
 hostCode.addEventListener('click', () => {
@@ -801,6 +817,13 @@ function animate() {
     for (const k of list) dustForKart(k, dt);
     updateDust(dt);
   }
+   // minimap: on the grid + during the race (hidden on menu / results)
+  if (mmOn && (game.state === 'countdown' || game.state === 'racing')) {
+    setMinimapVisible(true);
+    updateMinimap(list, selfKart());
+   } else {
+    setMinimapVisible(false);
+   }
   renderer.render(scene, camera);
 }
 

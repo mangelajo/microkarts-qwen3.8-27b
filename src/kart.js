@@ -213,6 +213,7 @@ export class Kart {
     this.name = opts.name || (this.isPlayer ? 'YOU' : 'RIVALE');
     this.skill = opts.skill ?? 0.9;
     const color = opts.color || 0xe0392b;
+    this.color = color;                          // body paint — also the minimap dot colour
     const accent = opts.accent ?? (((color >> 8) & 255) | 0x808080);
     this.mesh = makeKart(color, accent);
     this.pos = new THREE.Vector3();

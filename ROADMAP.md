@@ -30,7 +30,7 @@ Check items off as they land.
   - `M` key / HUD button toggles mute (persisted in localStorage) ✅
 - [x] **Speed feel** — FOV widens 55 → 70 with speed (smoothed); collision camera shake + per-kart jolt kick (damped roll/pitch in `sync()`) ✅
 - [x] **Particle dust** — `THREE.Points` pool (90 puffs) puffs behind karts off-road at speed (`dustForKart` in `scene.js`) ✅
-- [ ] **Minimap** — 2D canvas HUD overlay; track outline once at boot + kart dots (~50 lines, track data is already flat 2D)
+- [x] **Minimap** — 2D canvas HUD overlay; whole track outline (rebuilt per track) + a coloured dot per racer + the local kart's heading arrow; fits the current loop each track, `K` toggles it (`src/minimap.js`)
 - [x] **Collision juice** — collisions live in the shared `race.js` (host + solo + net-sim); **fixed the reverse-collision bug** (constant position shove + 0.58 restitution pinned/shoved the driver forward; now speed-weighted soft separation + restitution 0.3 — "the driver wins"). Regression test in `make netsim` (old code: 72/180 oscillating contact; fixed: 180/180 smooth) ✅
 
 ## Phase 2 — *Depth* ("why do I want to play again")

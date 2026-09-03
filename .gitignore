@@ -4,3 +4,4 @@ node_modules/
 # editor cruft
 .*.swp
 .swp
+Modelfile
