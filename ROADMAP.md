@@ -14,9 +14,8 @@ Check items off as they land.
 
 ## What's missing
 
-- **No rubber-banding / items** — races are 100% deterministic
-- **No drift / items** — no skid-to-drift, no boost pads
-- Everything else: minimap ✅ touch ✅ best laps + ghost ✅ — they survive refresh
+- **No item boxes / rubber-banding** — boost pads ✅ but no pickups; races stay 100% deterministic
+- Everything else: drift ✅ minimap ✅ touch ✅ best laps + ghost ✅ — they survive refresh
 
 ---
 
@@ -42,7 +41,20 @@ Check items off as they land.
   - AI stays track-agnostic: it only reads `samples`/`curvatureAt`. Adding a track = add an entry to `TRACKS` and run `make sim`
 - [x] **Sugar-hazard road obstacles** (`src/obstacles.js`, pure + headless) — candy (gumdrop / dice / gumball / jawbreaker / lolly / bean) scattered on the asphalt on a **seed-per-track RNG**, so the **host and every LAN client build the identical layout from the track index alone** — nothing is streamed over the wire, and the 100%-deterministic-race property the net-sim relies on holds. Start-menu toggle (chip + `Z`, persisted in `localStorage mkr-hazard`), client mirrors the host's pick in join mode. `collideObstacles` (karts pop clear + decel + `obJuice` jolt / camera shake / crash sfx) lives in `race.js` simulateTick (solo + host + net-sim all run the same code).
   - **AI dodges like a human, not a physics bug**: `obstacleAvoid` (primary defense) steers the pursuit lane around the nearest in-lane hazard — strength scales with skill (strong drivers clear it clean; weak ones under-steer and clip it, which is the point) + per-driver hysteresis so they hold a side instead of weaving. If a driver *does* end up wedged against a candy at crawl speed (turnFactor → ~0, can't steer out), they **reverse ~8u to make room** then the avoidance re-approaches it — with a **per-hazard 6s cooldown** that kills the endless clip→reverse→re-clip loop. `make sim` checks all 3 tracks × 3 skill levels (off-road <1%, 0 stalls); `make netsim` checks the seeded-layout determinism + a 4-kart hazard host race (4/4 finish)
-- [ ] **Items / boost pads** — boost pads on straights (track data); a simple item box (turbo / rubber band / wall); AI skips smart use, player with `Space`
+- [x] **Boost pads** (`src/pads.js`, pure + headless) — chevron strips auto-placed on
+  each track's straights: the field is DERIVED (scan sample headings for straight runs,
+  place a 3-cell strip by a track-index-seeded PRNG, keep grid/finish clear, never pave
+  over candy) so host + every client build it identically with zero wire traffic — the
+  same trick as the hazard field. Crossing cells back-to-back chains the boost
+  (0.4 → 0.7 → 1.05, 0.9 s window; writes `kart.boost`/`boostEdge` — the drift-boost
+  vocabulary, so exhaust flare + whoosh + headroom all reuse it; drift-into-the-pads
+  combo falls out free). Hits fire from `race.js` `simulateTick` → solo + host +
+  `make netsim` share it; chevrons drawn by `track.js`. 7 new `make netsim` assertions
+  (strip layout / determinism / on-asphalt / chain up / debounce / window expiry /
+  re-arm). The AI rides the pads passively — best laps already ~1 s faster.
+- [ ] **Item boxes** — a box lane granting a random power-up (turbo / rubber band /
+  wall) used with a dedicated key (`E` — `Space` is drift now); needs a per-player item
+  slot in the HUD + an item field on the state/input wire
 - [x] **Skid-to-drift** ✅ (`src/kart.js` + config block) — hold `Space` (touch: stick to full lock)
     above `DRIFT_MIN_KMH` on asphalt: heading steers in ×`DRIFT_STEER` while the motion direction
     follows at `DRIFT_GRIP` with a hard `DRIFT_MAX_SLIP` cap → a real, controllable slide; slides

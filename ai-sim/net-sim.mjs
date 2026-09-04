@@ -14,7 +14,8 @@ import { samples, selectTrack, angDiff, curvatureAt, trackLen } from '../src/tra
 import { TRACKS } from '../src/tracks.js';
 import { N_SAMPLES, SIM_DT, LAPS, AI_SKILL, clamp } from '../src/config.js';
 import { Kart } from '../src/kart.js';
-import { DRIFT_MAX_SLIP, DRIFT_CHARGE_MAX } from '../src/config.js';
+import { DRIFT_MAX_SLIP, DRIFT_CHARGE_MAX, ROAD_HW } from '../src/config.js';
+import { buildPads, hitPads, padList, PAD_STRENGTH } from '../src/pads.js';
 import { aiControl } from '../src/ai.js';
 import { GRID, simulateTick, raceOrder, progress, collideKarts } from '../src/race.js';
 import { setObstaclesOn, buildObstacles, obstacleList } from '../src/obstacles.js';
@@ -171,6 +172,41 @@ console.log('\n== drift: slide model + boost ==');
   K.offRoad = true;
   K.step(1 / 60, 1, 0, 0, true);
   mark(K.drifting === false, 'off-road never drifts');
+}
+/* ------------------------------------------------------------------ *
+ *  Boost pads (pads.js): seeded layout (wire-free, like hazards) and
+ *  the chain-hit model. Full 2P races below already run hitPads every
+ *  tick through simulateTick, so the integration is exercised too.
+ * ------------------------------------------------------------------ */
+console.log('\n== boost pads: layout + chain model ==');
+{
+  selectTrack(0);
+  mark(padList.length >= 3 && padList.length % 3 === 0, 'pad strips built (3 cells each)');
+  const snap = padList.map(c => c.x.toFixed(4) + ',' + c.z.toFixed(4)).join('|');
+  buildPads(0);
+  mark(padList.map(c => c.x.toFixed(4) + ',' + c.z.toFixed(4)).join('|') === snap,
+    'pad layout seeded-deterministic (host+clients agree with zero wire traffic)');
+  mark(padList.every(c => Math.abs(c.o) <= ROAD_HW - 1.8 + 1e-9), 'every pad cell sits inside the asphalt');
+  // chain model: three consecutive cells escalate; standing still debounces
+  const K = new Kart({ isPlayer: true });
+  K.placeAt(0.5, 0);
+  const cells = padList.filter(c => c.strip === padList[0].strip);
+  const onCell = c => { K.pos.x = c.x; K.pos.z = c.z; };
+  onCell(cells[0]); hitPads([K], 1 / 60);
+  mark(K.padChain === 1 && Math.abs(K.boost - PAD_STRENGTH[0]) < 1e-9 && K.boostEdge,
+    'first cell fires a small boost');
+  onCell(cells[1]); hitPads([K], 1 / 60);
+  mark(K.padChain === 2 && Math.abs(K.boost - PAD_STRENGTH[1]) < 1e-9, 'consecutive cell chains UP');
+  onCell(cells[2]); hitPads([K], 1 / 60);
+  mark(K.padChain === 3 && Math.abs(K.boost - PAD_STRENGTH[2]) < 1e-9, 'full-strip chain is the big one');
+  hitPads([K], 1 / 60);
+  mark(K.padChain === 3 && Math.abs(K.boost - PAD_STRENGTH[2]) < 1e-9, 'one firing per cell (debounced)');
+  // missing the window kills the chain, and strips re-arm for the next lap
+  K.pos.set(9999, 0, 9999);
+  hitPads([K], 1.0);
+  mark(K.padChain === 0, 'chain window expires when the next cell is missed');
+  onCell(cells[0]); hitPads([K], 1 / 60);
+  mark(K.padChain === 1, 'strips re-arm for the next pass');
 }
 {
   const fake = [{ pos: new THREE.Vector3(1.5, 0, -2.25), heading: 0.75, speed: 12.5, steerVel: 0.3, offRoad: false, lapDone: 1, posIdx: 2, raceDone: false }];

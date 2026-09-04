@@ -85,6 +85,13 @@ take in the catalogue. All track shapes are validated headlessly.
   builds, releasing fires a mini-boost scaled by the slide. Touch: drag to full lock.
   Wire-compatible (flag byte in the input frame); the AI never drifts, so `make sim`
   is a true no-regression gate. 13 headless assertions in `make netsim`
+- **Boost pads** — glowing chevron strips auto-placed on each track's straights;
+  crossing the three cells back-to-back chains a bigger and bigger kick, and the
+  chain stacks with a drift release (drift-into-the-pads = go). The layout is
+  derived from the track shape + a seeded PRNG (`src/pads.js`, pure + headless,
+  exactly like the hazard field) so host and clients agree with zero wire traffic;
+  hits fire inside `simulateTick`, so solo / host / `make netsim` share the model —
+  and the AI reuses the pads too (skill-0.96 best lap already dropped ~1 s)
 - **Beat your ghost** — best lap per track + a ~10 Hz position timeline persist in
   `localStorage`; a translucent ghost plays it back aligned to your current lap
   (solo + host — join clients mirror, never record)
@@ -102,6 +109,7 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/ai.js`       | AI driver: pure-pursuit line following, curvature-aware braking, recovery |
 | `src/blastfx.js`  | Exhaust flame/smoke particle pools above the speed threshold |
 | `src/race.js`     | Headless race core: grid, progress, positions, collisions, `simulateTick()` |
+| `src/pads.js`     | Boost-pad field: seeded straight-aware layout + chain-hit model (pure) |
 | `src/net.js`      | 2P wire protocol (enc/dec) + `NetSession` (pairing, DataChannel routing) |
 | `src/interp.js`   | Client-side interpolation ring + sampler (50 ms delay, angular wrap) |
 | `src/main.js`     | Game loop, input, race lifecycle, camera, 2P host/join orchestration |

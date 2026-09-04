@@ -21,7 +21,7 @@ export const getObstaclesOn = () => obstaclesOn;
 export const setObstaclesOn = v => { obstaclesOn = !!v; };
 
 // mulberry32 — tiny deterministic PRNG (seed drives the whole field)
-function mulberry32(seed) {
+export function mulberry32(seed) {
   let a = seed >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) | 0;

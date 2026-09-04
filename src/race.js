@@ -1,5 +1,6 @@
 import { clamp, MAX_SPEED, MAX_REV } from './config.js';
 import { collideObstacles } from './obstacles.js';
+import { hitPads } from './pads.js';
 
 /* ------------------------------------------------------------------ *
  *  Race core — pure, headless-safe (no DOM / WebGL). Shared by the
@@ -80,5 +81,6 @@ export function simulateTick(karts, inputFor, dt, now, { racing, positions = tru
   }
   collideKarts(karts, crashFor);
   collideObstacles(karts, obFor);   // sugar hazards — no-op when the field is empty
+  hitPads(karts, dt);               // boost-pad strips — no-op before tracks build them
   if (positions && racing) refreshPositions(karts);
 }

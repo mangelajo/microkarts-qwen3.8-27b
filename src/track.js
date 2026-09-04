@@ -5,6 +5,7 @@ import { woodTexture, checkerTexture, curbTexture } from './textures.js';
 import { TRACKS, trackTheme } from './tracks.js';
 import { retintSky } from './sky.js';
 import { buildObstacles, obstacleList, getObstaclesOn, HAZ_COLOR } from './obstacles.js';
+import { buildPads, padList, CELL_LEN, CELL_W, GAP, CELLS } from './pads.js';
 
 /* ------------------------------------------------------------------ *
  *  Track data — filled IN PLACE by buildTrack().
@@ -205,6 +206,50 @@ function scatterHazardMeshes(parent) {
   }
 }
 
+/* ------------------------------------------------------------------ *
+ *  Boost pads — glowing chevron strips on the straights. The field
+ *  (cells + chain hits) lives in pads.js; this only draws it. One plane
+ *  per strip, canvas chevrons pointing along the direction of travel.
+ * ------------------------------------------------------------------ */
+let padMat = null;   // persistent across rebuilds, like hazardMats
+function ensurePadMat() {
+  if (padMat) return padMat;
+  if (typeof document === 'undefined') return null;   // headless (ai-sim)
+  const c = document.createElement('canvas'); c.width = 64; c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(255, 200, 60, 0.14)';           // soft underlay
+  g.fillRect(9, 10, 46, 236);
+  g.strokeStyle = 'rgba(255, 216, 80, 0.95)';
+  g.lineWidth = 7; g.lineJoin = 'round'; g.lineCap = 'round';
+  g.shadowColor = 'rgba(255, 170, 40, 0.9)'; g.shadowBlur = 10;
+  for (let i = 0; i < CELLS; i++) {                   // chevrons point "up" = forward
+    const yc = 46 + i * 82;
+    g.beginPath(); g.moveTo(14, yc + 24); g.lineTo(32, yc); g.lineTo(50, yc + 24); g.stroke();
+  }
+  padMat = new THREE.MeshBasicMaterial({
+    map: new THREE.CanvasTexture(c),
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  });
+  return padMat;
+}
+
+function scatterPads(parent) {
+  const mat = ensurePadMat();
+  if (!mat || !padList.length) return;
+  const stripLen = CELLS * CELL_LEN + (CELLS - 1) * GAP;
+  for (const p of padList) {
+    if (p.cell !== 1) continue;      // middle cell of each strip = its centre
+    const gNode = new THREE.Group();
+    gNode.position.set(p.x, 0.018, p.z);
+    gNode.rotation.y = p.h;
+    const pl = new THREE.Mesh(new THREE.PlaneGeometry(CELL_W + 0.4, stripLen), mat);
+    pl.rotation.x = Math.PI / 2;     // canvas "up" -> local +z = travel direction
+    pl.renderOrder = 1;
+    gNode.add(pl);
+    parent.add(gNode);
+  }
+}
+
 export function buildTrack(def, index = 0) {
   const pts = def.points.map(([x, z]) => new THREE.Vector3(x, 0, z));
   curve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.5);
@@ -257,6 +302,8 @@ export function buildTrack(def, index = 0) {
   scatterProps(group);
   buildObstacles(index);          // deterministic hazard field for sim + AI (per track)
   if (getObstaclesOn()) scatterHazardMeshes(group);   // visuals only when hazards are on
+  buildPads(index);               // boost-pad strips (deterministic; pads.js holds the hits)
+  scatterPads(group);
 
   // dispose the previous build's per-track materials (shared prop mats persist)
   for (const m of prevMats) m.dispose();

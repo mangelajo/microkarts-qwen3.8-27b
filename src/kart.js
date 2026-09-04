@@ -202,8 +202,10 @@ export class Kart {
     this.slip = 0;        // heading - velDir while sliding (rad, signed) — visuals + audio
     this.drifting = false;
     this.charge = 0;      // 0..DRIFT_CHARGE_MAX seconds of held slide
-    this.boost = 0;       // 0..1 decaying mini-boost, set on drift release
+    this.boost = 0;       // 0..1 decaying mini-boost — drift release OR boost pads (pads.js)
     this.boostEdge = false; // true for one frame after a boost fires (main.js sfx)
+    // boost-pad chain bookkeeping (pads.js hitPads)
+    this.padT = 0; this.padChain = 0; this.padStrip = -1; this.padPrevCell = -1; this.padLast = -1;
   }
 
   placeAt(t, offset) {
@@ -234,6 +236,7 @@ export class Kart {
     this.charge = 0;
     this.boost = 0;
     this.boostEdge = false;
+    this.padT = 0; this.padChain = 0; this.padStrip = -1; this.padPrevCell = -1; this.padLast = -1;
     this.mesh.root.position.copy(this.pos);
     this.mesh.root.rotation.y = this.heading;
   }
