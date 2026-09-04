@@ -21,6 +21,9 @@ import {
   initHazardPicker, setHazard, getHazardOn, loadHazardPref,
 } from './hud.js';
 import * as audio from './audio.js';
+import {
+  initGhost, ghostSetTrack, ghostLapStart, ghostFrame, ghostLapDone, ghostStop,
+} from './ghost.js';
 import { getDrive, initTouch, setActive as touchSetActive, pulseHint } from './touch.js';
 
 /* ------------------------------------------------------------------ *
@@ -241,6 +244,7 @@ function onPeerLost() {
   const wasRacing = wasNet && (game.state === 'racing' || game.state === 'countdown');
   game.netMode = 0;
   startBtn.textContent = 'START RACE';
+  ghostStop();
   if (clientRing) clientRing.clear();
   const s = net; net = null;
   if (s && !s.closed) s.close(); // fires onClose → re-enters onPeerLost, guarded by s.closed
@@ -443,6 +447,7 @@ function startRace() {
   audio.startMusic(getTrackIdx());
   game.laps = LAPS;
   resetKarts();
+  ghostStop();          // fresh race: the ghost restarts at GO
   game.raceTime = 0;
   game.raceOverAt = 0;
   const now = performance.now();
@@ -489,6 +494,7 @@ function gridSlot(k) {
 function finishRace() {
   game.state = 'finished';
   hideCountdown();
+  ghostStop();
   const best = player.lapDone > 0 ? Math.min(...player.lapTimes) : null;
   el('best').innerHTML = 'BEST <span class="val">' + fmt(best) + '</span>';
   const list = racers();
@@ -545,6 +551,7 @@ startBtn.addEventListener('click', () => {
 initTrackPicker(
   idx => {
     selectTrack(idx);
+    ghostSetTrack(idx);   // best laps + ghost timeline are per-track
     if (netRole() === 'host') net.sendTrack(getTrackIdx(), getObstaclesOn()); // client previews the host's track
   },
 );
@@ -582,6 +589,7 @@ el('muteSfx').addEventListener('click', e => { audio.ensureAudio(); updateSfxMut
 let mmOn = true;
 try { if (localStorage.getItem('mkr-map') === '0') mmOn = false; } catch { /* private mode */ }
 initMinimap();
+initGhost(getTrackIdx());
 function toggleMap() {
   mmOn = !mmOn;
   try { localStorage.setItem('mkr-map', mmOn ? '1' : '0'); } catch { /* private mode */ }
@@ -736,6 +744,8 @@ function animate() {
       game.state = 'racing';
       hideCountdown();
       if (role === 'host') { hostAcc = 0; p2.netOn = true; }
+      // GO — the ghost laps with us from here (join clients mirror, never record)
+      if (role !== 'join') ghostLapStart();
     }
   } else if (role === 'join') {      // ---- client: no sim, render snapshots + stream our input ----
     if (game.state === 'racing') {
@@ -781,7 +791,18 @@ function animate() {
     if (player.lapDone !== game.lastLapBeep) {
       game.lastLapBeep = player.lapDone;
       if (player.lapDone > 0 && !player.raceDone) audio.lap();
+      if (player.lapDone > 0 && role !== 'join') {
+        // completed lap: bank it if it's the track best, then start the next
+        // ghost lap (finisher's partial final lap never gets recorded)
+        const prev = player.lapDone - 1;
+        if (!player.raceDone || prev <= player.laps) {
+          const lapMs = player.lapTimes.length ? player.lapTimes[player.lapTimes.length - 1] * 1000 : 0;
+          if (ghostLapDone(lapMs)) audio.beep(990);   // new track record chime
+          if (!player.raceDone) ghostLapStart();
+        }
+      }
     }
+    if (racing) ghostFrame(dt, player);
     if (racing) {
       let finished = 0;
       for (const k of list) if (k.raceDone) finished++;

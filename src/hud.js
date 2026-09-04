@@ -1,5 +1,6 @@
 import { LAPS, game, KMH_PER_U, BLAST_KMH } from './config.js';
 import { TRACKS } from './tracks.js';
+import { getBestMs } from './ghost.js';
 
 /* ------------------------------------------------------------------ *
  *  HUD
@@ -116,7 +117,9 @@ export function updateHud(r, l, karts) {
   el('speed').textContent = Math.round(kmh);
      // glow the readout when the exhaust is on full (above BLAST_KMH)
   el('speed').style.color = kmh > BLAST_KMH ? '#ff6a3d' : '';
-  const best = p.lapDone ? Math.min(...p.lapTimes) : null;
+  // session best, else the stored track record (survives refresh, ROADMAP 3.3)
+  const best = p.lapDone && p.lapTimes.length ? Math.min(...p.lapTimes)
+    : (getBestMs() != null ? getBestMs() / 1000 : null);
   el('best').innerHTML = 'BEST <span class="val">' + (best == null ? '--' : fmt(best)) + '</span>';
   el('pos').textContent = String(p.posIdx || 1);
   el('pos').parentElement.classList.toggle('lead', p.posIdx === 1);

@@ -18,6 +18,7 @@ import { aiControl } from '../src/ai.js';
 import { GRID, simulateTick, raceOrder, progress, collideKarts } from '../src/race.js';
 import { setObstaclesOn, buildObstacles, obstacleList } from '../src/obstacles.js';
 import { FrameRing, sampleState, sampleRat } from '../src/interp.js';
+import { initGhost, ghostSetTrack, ghostLapStart, ghostFrame, ghostLapDone, ghostStop, getBestMs } from '../src/ghost.js';
 import {
   encTrack, encPrep, encStart, decStart,
   encInput, decInput,
@@ -175,7 +176,52 @@ console.log('\n== interpolation ==');
   const r = sampleRat({ x: 0, z: 0, heading: -2.967, speed: 0, steerVel: 0 }, { x: 0, z: 0, heading: 2.967, speed: 0, steerVel: 0 }, 0.5);
   mark(Math.abs(Math.abs(r.heading) - Math.PI) < 0.01, `heading wrap lerp (got ${r.heading})`);
 }
-console.log(failures === 0 ? '  interp OK' : '  interp failures above');/* ------------------------------------------------------------------ *
+console.log(failures === 0 ? '  interp OK' : '  interp failures above');
+
+/* ------------------------------------------------------------------ *
+ *  Ghost (ghost.js): best-lap recording + per-track store — the pure
+ *  record/save half (mesh playback is visual-only). localStorage is
+ *  faked; the ghost must also survive WITHOUT it (private mode).
+ * ------------------------------------------------------------------ */
+console.log('\n== ghost: best-lap record + store ==');
+{
+  const mem = {};
+  globalThis.localStorage = {
+    getItem: k => (k in mem ? mem[k] : null),
+    setItem: (k, v) => { mem[k] = String(v); },
+  };
+  selectTrack(0);
+  initGhost(0);
+  mark(getBestMs() === null, 'no stored best initially');
+  const fake = { pos: { x: 0, z: 0 }, heading: 0 };
+  ghostLapStart();
+  for (let i = 0; i < 60 * 30; i++) { fake.pos.x += 0.1; ghostFrame(1 / 60, fake); }
+  mark(ghostLapDone(30000) === true, 'first timed lap is stored as best');
+  mark(getBestMs() === 30000, 'best readable');
+  ghostLapStart();
+  for (let i = 0; i < 60 * 35; i++) ghostFrame(1 / 60, fake);
+  mark(ghostLapDone(35000) === false, 'slower lap does NOT overwrite the best');
+  mark(getBestMs() === 30000, 'best unchanged after a slower lap');
+  ghostLapStart();
+  for (let i = 0; i < 60 * 25; i++) ghostFrame(1 / 60, fake);
+  mark(ghostLapDone(25000) === true, 'faster lap becomes the new best');
+  mark(getBestMs() === 25000, 'best updated');
+  // per-track: another track has its own record
+  ghostSetTrack(1);
+  mark(getBestMs() === null, 'best laps are per-track');
+  // the store survives an init reload (simulates a refresh)
+  initGhost(0);
+  mark(getBestMs() === 25000, 'store reloads from localStorage');
+  // ~10 Hz sampling: a 30 s take must be ~300 triples, not 1800
+  ghostLapStart();
+  for (let i = 0; i < 60 * 30; i++) ghostFrame(1 / 60, fake);
+  ghostLapDone(1000);
+  const saved = JSON.parse(mem['mkr-ghost']);
+  const flat = saved[0].samples;
+  mark(flat.length % 3 === 0 && flat.length / 3 >= 290 && flat.length / 3 <= 310,
+    `timeline sampled ~10Hz (got ${flat.length / 3} samples, want ~300)`);
+  ghostStop();
+}/* ------------------------------------------------------------------ *
  *  Sugar-hazard multiplayer determinism: the whole reason the hazard
  *  layout is seeded (trackIdx) alone is that the HOST and every LAN
  *  CLIENT build the identical candy layout with NOTHING streamed over

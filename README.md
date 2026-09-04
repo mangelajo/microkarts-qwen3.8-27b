@@ -39,7 +39,8 @@ non-zero if a driver can't hold the road or recover.
 | `N`            | SFX on/off        |
 | `Enter` / `R`  | Start / restart   |
 
-3 laps to finish. Best lap time is tracked in the HUD.
+3 laps to finish. Best lap per track is stored locally — a translucent ghost kart
+races it alongside you, so you're always chasing your own best lap.
 
 ## Tracks
 
@@ -77,6 +78,9 @@ take in the catalogue. All track shapes are validated headlessly.
   The host runs the authoritative fixed-step sim and streams state frames at
   60 Hz; the joiner renders with 50 ms interpolation and sends input at 60 Hz.
   Protocol + simulation are verified headlessly (`make netsim`)
+- **Beat your ghost** — best lap per track + a ~10 Hz position timeline persist in
+  `localStorage`; a translucent ghost plays it back aligned to your current lap
+  (solo + host — join clients mirror, never record)
 
 ## Code layout
 
@@ -95,6 +99,8 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/interp.js`   | Client-side interpolation ring + sampler (50 ms delay, angular wrap) |
 | `src/main.js`     | Game loop, input, race lifecycle, camera, 2P host/join orchestration |
 | `src/hud.js`      | DOM HUD + overlays, 2P mode/roster pickers + net panels |
+| `src/minimap.js`  | HUD minimap: track outline + racer dots + heading arrow |
+| `src/ghost.js`    | Best-lap `localStorage` store + ghost-kart playback |
 | `src/audio.js`    | WebAudio SFX + music sequencer |
 | `ai-sim/`         | Node harnesses: `make sim` (AI) · `make netsim` (wire + 2P race sim) |
 

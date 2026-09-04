@@ -7,7 +7,7 @@ Check items off as they land.
 
 - Arcade physics with off-road handling; lap/checkpoint counting with midpoint gate
 - **2-player LAN over WebRTC** — serverless code-paste pairing, host-authoritative fixed-step sim,
-  60 Hz state stream + 80 ms client interpolation, 2 humans + 2 AI or 1 v 1 (`plans/2_player_lan.md`)
+  60 Hz state stream + 50 ms client interpolation, 2 humans + 2 AI or 1 v 1 (`plans/2_player_lan.md`)
 - 3 distinct AI drivers + headless test bench (`make sim` AI · `make netsim` wire + 2P race, `ai-sim/`)
 - Fully procedural scene: wood table, tabletop props, dusk sky + mountains — no assets
 - Shadows, chase camera, HUD, countdown/results flow
@@ -15,9 +15,8 @@ Check items off as they land.
 ## What's missing
 
 - **No rubber-banding / items** — races are 100% deterministic
-- **Sparse player feedback** — no speed-FOV, no drift, no minimap
-- **No mobile/touch**
-- **No best-lap persistence** — track pick + mutes survive refresh; laps don't
+- **No drift / items** — no skid-to-drift, no boost pads
+- Everything else: minimap ✅ touch ✅ best laps + ghost ✅ — they survive refresh
 
 ---
 
@@ -51,7 +50,14 @@ Check items off as they land.
 
 - [ ] **Split monoliths** — partial ✅: `aiControl` → `src/ai.js`, exhaust FX → `src/blastfx.js` (`kart.js` 551 → 301 lines); the duplicated solo/host sim bodies in `animate()` merged into one shared loop (only the time base differs — also fixed the host re-running `finishRace()` + re-sending finish frames every frame after the flag dropped). Remaining if ever needed: `main.js` → `game.js` (state machine) + `net2p.js` (host/join orchestration)
 - [ ] **`ai-sim/` as tuning playground** — `--watch` mode or a browser port (pure data in, telemetry out): tune physics/drift against a live canvas instead of guessing
-- [ ] **localStorage best laps + ghost** — record best lap as a position timeline; render a semi-transparent ghost kart. "Beat your ghost" hook (~80 lines)
+- [x] **localStorage best laps + ghost** ✅ (`src/ghost.js`) — best lap per track + a ~10 Hz
+  position timeline (flat rounded JSON, ~1.7 KB / 30 s lap) in `localStorage mkr-ghost`;
+  a translucent ghost kart plays it back aligned to YOUR current lap (starts when you
+  start; you always race the best that existed before this lap). Solo + host only — the
+  join client's lap events are host-clock-mirrored, recording there would store garbage.
+  HUD BEST shows the stored record from lap 1; new records chime. Headless coverage in
+  `make netsim` (store / overwrite / per-track / reload / sample-rate). Remaining from
+  this phase: rankings
 - [x] **Mobile / touch** — `src/touch.js`, a floating "pull" joystick: the **first finger down anywhere on the canvas seeds a virtual stick at that point** and the live **drag delta = the drive vector** (`pull up → throttle, down → brake/reverse, sideways → steer`), each axis clamped to [-1,1] on a 74 px spring with a 12 px dead-zone. It feeds the *same* `{throttle, steer}` channel as the keyboard via `readDrive()` (a live drag wins so the two never fight), so solo + host + client are all covered; the client streams it over the LAN. The `i8` input fields now carry the ±1 range ×127, so an analog drag survives the wire while keyboard's ±1/0 stay exact (`decInput(encInput(-1,1)) === {-1,1}`). Headless-safe (`initTouch` is a no-op without a DOM; `ai-sim` never imports it), so `make netsim` still passes (wire + all 3 races). A "PULL FROM ANYWHERE TO DRIVE" cue flashes at GO on touch devices. Steer sign is `INVERT_STEER` one-liner if a phone test flips it.
 
 ## Phase 4 — *Polish* (endless, pick by mood)
