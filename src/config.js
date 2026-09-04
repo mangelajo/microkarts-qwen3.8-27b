@@ -20,6 +20,19 @@ export const CAM_DIST   = 7.5;
 export const CAM_HEIGHT = 3.3;
 export const N_SAMPLES  = 1000;    // track sampling resolution
 
+// Skid-to-drift: hold the drift input (Space / full-lock touch drag) above
+// DRIFT_MIN_KMH on asphalt — the nose steers in faster than the motion follows
+// (a real slide), charge builds, and releasing fires a mini-boost scaled by it.
+export const DRIFT_MIN_KMH    = 95;    // below this speed the drift button does nothing
+export const DRIFT_STEER      = 1.5;   // steering-rate multiplier while sliding
+export const DRIFT_GRIP       = 2.6;   // how fast the motion snaps behind the nose (1/s)
+export const DRIFT_MAX_SLIP   = 0.7;   // max nose-vs-motion angle while sliding (rad)
+export const DRIFT_DRAG       = 0.35;  // drag while sliding (lower than grip = faster lines)
+export const DRIFT_CHARGE_MAX = 1.5;   // seconds of slide for a full-charge boost
+export const DRIFT_CHARGE_MIN = 0.4;   // shorter slides release nothing
+export const BOOST_ACCEL      = 26;    // boost kick acceleration (u/s^2)
+export const BOOST_HEADROOM   = 0.28;  // top-speed extension at full boost
+
 // AI opponents: N_AI total, skill in [0..1] drives their pace/cornering.
 // Deliberate spread: one front-runner, one mid-packer, one back-marker.
 export const N_AI         = 3;

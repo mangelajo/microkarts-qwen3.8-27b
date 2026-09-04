@@ -14,6 +14,7 @@ import { samples, selectTrack, angDiff, curvatureAt, trackLen } from '../src/tra
 import { TRACKS } from '../src/tracks.js';
 import { N_SAMPLES, SIM_DT, LAPS, AI_SKILL, clamp } from '../src/config.js';
 import { Kart } from '../src/kart.js';
+import { DRIFT_MAX_SLIP, DRIFT_CHARGE_MAX } from '../src/config.js';
 import { aiControl } from '../src/ai.js';
 import { GRID, simulateTick, raceOrder, progress, collideKarts } from '../src/race.js';
 import { setObstaclesOn, buildObstacles, obstacleList } from '../src/obstacles.js';
@@ -118,8 +119,58 @@ mark(new DataView(encTrack(2)).getUint8(1) === 2, 'track idx');
   for (let i = 0; i < grid.length; i++) mark(Math.abs(d.grid[i] - grid[i]) < 1e-5, `start grid[${i}]`);
 }
 {
-  const d = decInput(encInput(-1, 1, 12345));
-  mark(d.throttle === -1 && d.steer === 1 && d.ping === 12345, 'input frame');
+  const d = decInput(encInput(-1, 1, 12345, true));
+  mark(d.throttle === -1 && d.steer === 1 && d.ping === 12345 && d.drift === true, 'input frame + drift flag');
+  mark(decInput(encInput(0.5, -0.5, 7)).drift === false, 'drift defaults to off');
+}
+/* Drift physics (kart.step): engage gate, slide, charge -> boost, headroom.
+ * The kart is rail-ed back onto the centre line each frame — a 90-frame
+ * full-lock slide would otherwise throw it off-road, and off-road cuts the
+ * drift (which would make these assertions about the gate, not the model). */
+console.log('\n== drift: slide model + boost ==');
+{
+  selectTrack(0);
+  const K = new Kart({ isPlayer: true });
+  // gate: below DRIFT_MIN_KMH the button does nothing
+  K.placeAt(0.25, 0);
+  K.speed = 8; K.velDir = K.heading;
+  K.step(1 / 60, 1, 0, 0, true);
+  mark(K.drifting === false, 'no drift below the speed gate');
+  mark(K.slip === 0, 'no slip without a slide');
+  // engage + slide: nose outruns the motion direction, capped at DRIFT_MAX_SLIP
+  K.placeAt(0.25, 0);
+  K.speed = 22; K.velDir = K.heading;
+  const P0 = K.pos.clone();
+  const rail = () => { K.pos.copy(P0); K.offRoad = false; K.speed = Math.max(K.speed, 20); };
+  K.step(1 / 60, 1, 0, 0, true);
+  mark(K.drifting === true, 'drift engages at speed on asphalt');
+  mark(K.charge > 0 && K.boost === 0, 'charge builds while sliding, boost stays armed off');
+  for (let i = 0; i < 20; i++) { K.step(1 / 60, 1, 1, i * 17, true); rail(); }
+  mark(Math.abs(K.slip) > 0.15, 'nose outruns motion direction (the slide)');
+  mark(Math.abs(K.slip) <= DRIFT_MAX_SLIP + 1e-6, 'slip angle is capped');
+  for (let i = 20; i < 90; i++) { K.step(1 / 60, 1, 1, i * 17, true); rail(); }
+  mark(K.charge >= DRIFT_CHARGE_MAX - 1e-6, 'charge tops out at DRIFT_CHARGE_MAX');
+  // release -> charge converts to boost, motion snaps back behind the nose
+  K.step(1 / 60, 1, 0, 99999, false); rail();
+  mark(K.drifting === false && K.boost > 0.95, 'full-charge release fires a full boost (decaying)');
+  mark(K.boostEdge === true && K.slip === 0, 'boost edge flagged for sfx; slide is over');
+  mark(K.charge === 0, 'charge consumed on release');
+  const s0 = K.speed;
+  for (let i = 0; i < 45; i++) { K.step(1 / 60, 1, 0, 1000 + i * 17, false); rail(); }
+  mark(K.speed > 30, `boost headroom exceeds top speed (got ${K.speed.toFixed(1)} > 30)`);
+  mark(K.speed > s0 || K.boost >= 0, 'boost decays but never reverses');
+  // a too-short slide releases nothing
+  K.placeAt(0.25, 0);
+  K.speed = 22; K.velDir = K.heading; K.boost = 0; K.boostEdge = false;
+  K.step(1 / 60, 1, 0, 0, true);
+  K.step(1 / 60, 1, 0, 16, false);
+  mark(K.boost === 0, 'a tap below DRIFT_CHARGE_MIN releases no boost');
+  // braking / off-road still cut the drift (safety first)
+  K.placeAt(0.25, 0);
+  K.speed = 22; K.velDir = K.heading;
+  K.offRoad = true;
+  K.step(1 / 60, 1, 0, 0, true);
+  mark(K.drifting === false, 'off-road never drifts');
 }
 {
   const fake = [{ pos: new THREE.Vector3(1.5, 0, -2.25), heading: 0.75, speed: 12.5, steerVel: 0.3, offRoad: false, lapDone: 1, posIdx: 2, raceDone: false }];

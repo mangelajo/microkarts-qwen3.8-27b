@@ -66,15 +66,18 @@ export function decStart(d) {
     steerFlip: v.getInt8(4) !== 0, simDt: v.getFloat32(5), grid,
   };
 }
-export function encInput(throttle, steer, ping) {
-  const v = new DataView(new ArrayBuffer(5)); v.setUint8(0, T_INPUT);
+export function encInput(throttle, steer, ping, drift = false) {
+  const v = new DataView(new ArrayBuffer(6)); v.setUint8(0, T_INPUT);
   v.setInt8(1, Math.round(throttle * 127)); // scale -1..1 into the 8-bit field
   v.setInt8(2, Math.round(steer * 127));
-  v.setUint16(3, ping & 0xffff); return v.buffer;
+  v.setUint16(3, ping & 0xffff);
+  v.setUint8(5, drift ? 1 : 0);             // flags: bit0 = drift button
+  return v.buffer;
 }
 export function decInput(d) {
   const v = new DataView(toView(d), 0);
-  return { throttle: v.getInt8(1) / 127, steer: v.getInt8(2) / 127, ping: v.getUint16(3) };
+  return { throttle: v.getInt8(1) / 127, steer: v.getInt8(2) / 127, ping: v.getUint16(3),
+    drift: v.byteLength > 5 && (v.getUint8(5) & 1) !== 0 };
 }
 export function makeStateEncoder(kartN) {
   const buf = new ArrayBuffer(1 + 4 + 2 + kartN * KART_BYTES);
@@ -213,8 +216,8 @@ export class NetSession {
     this._status('awaiting-host');
     return codeFromSdp(await this._gatheredSdp());
   }
-  inputNow(throttle, steer) {
-    if (this.open) this.ch.send(encInput(throttle, steer, (Date.now() / 1000 | 0) & 0xffff));
+  inputNow(throttle, steer, drift = false) {
+    if (this.open) this.ch.send(encInput(throttle, steer, (Date.now() / 1000 | 0) & 0xffff, drift));
   }
   sendTrack(idx, hazards = 0) { if (this.open) this.ch.send(encTrack(idx, hazards)); }
   sendPrep(trackIdx, cdMs) { if (this.open) this.ch.send(encPrep(trackIdx, cdMs)); }

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {
   N_AI, AI_SKILL,
-  CAM_DIST, CAM_HEIGHT, SIM_DT, INTERP_DELAY, P2_COLOR, LAPS,
+  CAM_DIST, CAM_HEIGHT, SIM_DT, INTERP_DELAY, P2_COLOR, LAPS, KMH_PER_U, DRIFT_MIN_KMH,
   game,
 } from './config.js';
 import { renderer, scene, camera, updateDust, dustForKart } from './scene.js';
@@ -78,7 +78,7 @@ function resetKarts() {
 /* ------------------------------------------------------------------ *
  *  Input (each device drives its own WASD+arrows — no remapping)
  * ------------------------------------------------------------------ */
-const keys = { up: false, down: false, left: false, right: false };
+const keys = { up: false, down: false, left: false, right: false, drift: false };
 const KEYMAP = {
   KeyW: 'up', ArrowUp: 'up',
   KeyS: 'down', ArrowDown: 'down',
@@ -90,13 +90,18 @@ function inText() { return (keys.left ? 1 : 0) - (keys.right ? 1 : 0); }
 // the keyboard so the two never fight; fall back to the classic discrete WASD.
 // readDrive is called per frame for the player's kart, for the audio pitch, and
 // (on the client) for what gets streamed over the wire.
-const drive = { throttle: 0, steer: 0 };
+const drive = { throttle: 0, steer: 0, drift: false };
 function readDrive(racing) {
   const t = getDrive();
-  if (t.active && racing) { drive.throttle = t.throttle; drive.steer = t.steer; }
+  if (t.active && racing) {
+    drive.throttle = t.throttle; drive.steer = t.steer;
+    // touch has no drift button: drag the stick to FULL lock to commit to a slide
+    drive.drift = keys.drift || (Math.abs(t.steer) > 0.95 && t.throttle > 0.5);
+  }
   else {
     drive.throttle = (keys.up ? 1 : 0) - (keys.down ? 1 : 0);
     drive.steer = inText();
+    drive.drift = keys.drift;
    }
   return drive;
 }
@@ -118,11 +123,12 @@ addEventListener('keydown', e => {
       audio.ensureAudio(); toggleHazard(); audio.beep(getObstaclesOn() ? 440 : 330);
     }
   }
-  if (e.code === 'Space') e.preventDefault();
+  if (e.code === 'Space') { keys.drift = true; e.preventDefault(); }   // hold to drift
 });
 addEventListener('keyup', e => {
   const k = KEYMAP[e.code];
   if (k) { keys[k] = false; e.preventDefault(); }
+  if (e.code === 'Space') keys.drift = false;
 });
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
@@ -147,7 +153,7 @@ game.netMode = 0; // 0 solo · 2 two-player
 let net = null;
 let hostSimT = 0;          // host sim clock (ms)
 let hostAcc = 0;           // fixed-step accumulator
-let lastNetInput = { throttle: 0, steer: 0, ping: -1, at: 0 };
+let lastNetInput = { throttle: 0, steer: 0, drift: false, ping: -1, at: 0 };
 let stateEncoder = null;
 let clientRing = null;
 let clientLapSeen = [];
@@ -233,7 +239,7 @@ function sessionCbs() {
       clientFinish(order, lapsMs);
     },
     onInput: inp => { // client → host: drives the peer's kart on the sim
-      lastNetInput = { throttle: inp.throttle, steer: inp.steer, ping: inp.ping, at: performance.now() };
+      lastNetInput = { throttle: inp.throttle, steer: inp.steer, drift: inp.drift, ping: inp.ping, at: performance.now() };
     },
     onClose: () => onPeerLost(),
   };
@@ -270,7 +276,7 @@ const LAN_HINT = (location.hostname === 'localhost' || location.hostname === '12
 function beginHostSession() {
   if (net) net.close();
   hostSimT = 0; hostAcc = 0;
-  lastNetInput = { throttle: 0, steer: 0, ping: -1, at: 0 };
+  lastNetInput = { throttle: 0, steer: 0, drift: false, ping: -1, at: 0 };
   ensureP2().netOn = false; // peer's kart is AI-free until the channel opens
   net = new NetSession('host', sessionCbs());
   net.kartN = racers().length;
@@ -650,7 +656,7 @@ function hostInputFor(k, racing) {
     // the peer's kart: driven from the wire (or still before the channel / GO)
     if (!racing || !net || !net.open || p2.netOn === false) return { throttle: 0, steer: 0 };
     if (lastNetInput.at && performance.now() - lastNetInput.at < 250) {
-      return { throttle: lastNetInput.throttle, steer: lastNetInput.steer };
+      return { throttle: lastNetInput.throttle, steer: lastNetInput.steer, drift: lastNetInput.drift };
     }
     return { throttle: 0, steer: 0 }; // peer frozen — no phantom throttle
   }
@@ -751,10 +757,10 @@ function animate() {
     if (game.state === 'racing') {
       // live touch drag drives over the wire; otherwise the keyboard. steer pitch
       const d = readDrive(true);
-      net.inputNow(d.throttle, d.steer);
+      net.inputNow(d.throttle, d.steer, d.drift);
       applyClientState(dt);
       const sk = selfKart();
-      audio.updateEngine(sk.speed, d.steer, !sk.offRoad); // local engine sound from interpolated speed
+      audio.updateEngine(sk.speed, d.steer, !sk.offRoad, d.drift && sk.speed * KMH_PER_U > DRIFT_MIN_KMH); // engine sound from interpolated speed
     }
   } else {
     // ---- solo + net host sim: ONE shared body, only the time base differs.
@@ -787,7 +793,11 @@ function animate() {
       });
       clockMs = now;
     }
-    audio.updateEngine(player.speed, readDrive(racing).steer, !player.offRoad);
+    audio.updateEngine(player.speed, readDrive(racing).steer, !player.offRoad, player.drifting);
+    if (player.boostEdge) {   // drift released with charge — whoosh (louder = more charge)
+      player.boostEdge = false;
+      if (player.boost > 0.2) audio.beep(430 + 640 * player.boost);
+    }
     if (player.lapDone !== game.lastLapBeep) {
       game.lastLapBeep = player.lapDone;
       if (player.lapDone > 0 && !player.raceDone) audio.lap();

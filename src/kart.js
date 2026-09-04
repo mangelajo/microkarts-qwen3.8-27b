@@ -1,5 +1,10 @@
 import * as THREE from 'three';
-import { ACCEL, BRAKE, MAX_SPEED, MAX_REV, DRAG, OFF_DRAG, OFF_GRIP, STEER_RATE, MAX_VISUAL_STEER, ROAD_HW, WHEEL_R, N_SAMPLES, LAPS, clamp, turnFactor } from './config.js';
+import {
+  ACCEL, BRAKE, MAX_SPEED, MAX_REV, DRAG, OFF_DRAG, OFF_GRIP, STEER_RATE, MAX_VISUAL_STEER,
+  ROAD_HW, WHEEL_R, N_SAMPLES, LAPS, KMH_PER_U, clamp, turnFactor,
+  DRIFT_MIN_KMH, DRIFT_STEER, DRIFT_GRIP, DRIFT_MAX_SLIP, DRIFT_DRAG,
+  DRIFT_CHARGE_MAX, DRIFT_CHARGE_MIN, BOOST_ACCEL, BOOST_HEADROOM,
+} from './config.js';
 import { scene } from './scene.js';
 import { samples } from './track.js';
 import { makeBlastFx } from './blastfx.js';
@@ -191,6 +196,14 @@ export class Kart {
     this.posIdx = 0;
     this.jolt = 0;        // collision impact intensity 0..1 — decays, drives the body kick
     this.joltPhase = Math.random() * 6.28; // per-kart phase so paired karts kick differently
+    // drift state (see step()): velDir = direction the kart actually MOVES in;
+    // while sliding it lags behind heading, which is what a slide physically is
+    this.velDir = 0;
+    this.slip = 0;        // heading - velDir while sliding (rad, signed) — visuals + audio
+    this.drifting = false;
+    this.charge = 0;      // 0..DRIFT_CHARGE_MAX seconds of held slide
+    this.boost = 0;       // 0..1 decaying mini-boost, set on drift release
+    this.boostEdge = false; // true for one frame after a boost fires (main.js sfx)
   }
 
   placeAt(t, offset) {
@@ -215,6 +228,12 @@ export class Kart {
     this.steerVel = 0;
     this.posIdx = 0;
     this.lane = offset * 0.9;      // keep the grid side as a racing lane
+    this.velDir = this.heading;
+    this.slip = 0;
+    this.drifting = false;
+    this.charge = 0;
+    this.boost = 0;
+    this.boostEdge = false;
     this.mesh.root.position.copy(this.pos);
     this.mesh.root.rotation.y = this.heading;
   }
@@ -261,18 +280,57 @@ export class Kart {
     this.prevU = u;
   }
 
-  step(dt, throttle, steerIn, now) {
+  step(dt, throttle, steerIn, now, drift = false) {
     this.steerVel += (steerIn - this.steerVel) * Math.min(1, 12 * dt);
     const th = this.raceDone ? 0 : throttle;
+
+    // --- drift engage/release ------------------------------------------
+    // Asphalt only, forward, above speed. Releasing a charged slide fires the boost.
+    const wantDrift = !!drift && !this.offRoad && !this.raceDone
+      && this.speed > DRIFT_MIN_KMH / KMH_PER_U;
+    if (wantDrift) this.drifting = true;
+    else if (this.drifting) {
+      this.drifting = false;
+      if (this.charge >= DRIFT_CHARGE_MIN) {
+        this.boost = Math.min(this.charge / DRIFT_CHARGE_MAX, 1);
+        this.boostEdge = true;              // main.js plays the whoosh once
+      }
+      this.charge = 0;
+    }
+
     if (th > 0) this.speed += ACCEL * (this.offRoad ? OFF_GRIP : 1) * dt;
     else if (th < 0) this.speed -= (this.speed > 0 ? BRAKE : ACCEL * 0.7) * dt;
-    this.speed -= this.speed * DRAG * dt;
+    this.speed -= this.speed * (this.drifting ? DRIFT_DRAG : DRAG) * dt;   // slides keep momentum
     if (this.offRoad) this.speed -= Math.sign(this.speed) * Math.min(Math.abs(this.speed), OFF_DRAG * dt);
-    this.speed = clamp(this.speed, -MAX_REV, MAX_SPEED);
+    if (this.drifting) this.charge = Math.min(this.charge + dt * (0.55 + Math.abs(this.steerVel)), DRIFT_CHARGE_MAX);
+    if (this.boost > 0) {
+      this.speed += BOOST_ACCEL * this.boost * dt;
+      this.boost *= Math.exp(-2.2 * dt);
+      if (this.boost < 0.02) this.boost = 0;
+    }
+    this.speed = clamp(this.speed, -MAX_REV, MAX_SPEED * (1 + BOOST_HEADROOM * this.boost));
     if (th === 0 && Math.abs(this.speed) < 0.03) this.speed = 0;
-    this.heading += this.steerVel * STEER_RATE * turnFactor(this.speed) * (this.speed < 0 ? -1 : 1) * dt;
-    this.pos.x += Math.sin(this.heading) * this.speed * dt;
-    this.pos.z += Math.cos(this.heading) * this.speed * dt;
+
+    // sliding buys steering authority — the classic kart trade
+    const steerMul = turnFactor(this.speed) * (this.drifting ? DRIFT_STEER : 1);
+    this.heading += this.steerVel * STEER_RATE * steerMul * (this.speed < 0 ? -1 : 1) * dt;
+
+    // motion direction: glued to the nose unless sliding, where it follows
+    // at DRIFT_GRIP with a hard slip cap (so slides stay controllable)
+    if (this.drifting) {
+      let d = this.heading - this.velDir;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      this.velDir += d * Math.min(1, DRIFT_GRIP * dt);
+      d = this.heading - this.velDir;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      if (Math.abs(d) > DRIFT_MAX_SLIP) this.velDir = this.heading - Math.sign(d) * DRIFT_MAX_SLIP;
+      this.slip = this.heading - this.velDir;
+    } else {
+      this.velDir = this.heading;
+      this.slip = 0;
+    }
+    this.pos.x += Math.sin(this.velDir) * this.speed * dt;
+    this.pos.z += Math.cos(this.velDir) * this.speed * dt;
     if (!this.raceDone) this.updateLapLogic(now);
   }
 
@@ -285,8 +343,9 @@ export class Kart {
     const sp = Math.min(Math.abs(this.speed) / MAX_SPEED, 1);
      // exhaust tips flare from an idle glow up to a hot orange as revs build
     const glow = this.mesh.exhaustGlow;
-    if (glow) glow.emissiveIntensity = 0.35 + sp * 1.7 + 0.18 * Math.abs(Math.sin(this.wheelSpin * 2.3 + this.joltPhase));
-    const rollT = this.steerVel * 0.22 * sp;
+    if (glow) glow.emissiveIntensity = 0.35 + sp * 1.7 + this.boost * 1.6 + 0.18 * Math.abs(Math.sin(this.wheelSpin * 2.3 + this.joltPhase));
+    let rollT = this.steerVel * 0.22 * sp;
+    if (this.drifting) rollT += this.slip * 0.3;   // leaning into the slide
     const pitchT = (Math.abs(this.speed) > 0.5 ? -0.03 : 0) * (sp + 0.3);
     // collision juice: a fast, damped roll/pitch kick on impact
     const j = this.jolt * Math.cos(this.joltPhase + 22 * dt) * 0.35;

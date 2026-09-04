@@ -34,9 +34,11 @@ non-zero if a driver can't hold the road or recover.
 | `W` / `↑`      | Accelerate        |
 | `S` / `↓`      | Brake / reverse   |
 | `A` `D` / `←` `→` | Steer          |
+| `SPACE` (hold)    | Drift — release for a mini-boost (touch: drag the stick to full lock) |
 | `←` `→` (menu)  | Pick track        |
 | `M`            | Music on/off      |
 | `N`            | SFX on/off        |
+| `K`            | Minimap on/off    |
 | `Enter` / `R`  | Start / restart   |
 
 3 laps to finish. Best lap per track is stored locally — a translucent ghost kart
@@ -78,6 +80,11 @@ take in the catalogue. All track shapes are validated headlessly.
   The host runs the authoritative fixed-step sim and streams state frames at
   60 Hz; the joiner renders with 50 ms interpolation and sends input at 60 Hz.
   Protocol + simulation are verified headlessly (`make netsim`)
+- **Skid-to-drift** — hold `Space` above ~95 km/h on asphalt: the nose steers in
+  faster than the motion follows (real slip angle, capped + controllable), charge
+  builds, releasing fires a mini-boost scaled by the slide. Touch: drag to full lock.
+  Wire-compatible (flag byte in the input frame); the AI never drifts, so `make sim`
+  is a true no-regression gate. 13 headless assertions in `make netsim`
 - **Beat your ghost** — best lap per track + a ~10 Hz position timeline persist in
   `localStorage`; a translucent ghost plays it back aligned to your current lap
   (solo + host — join clients mirror, never record)

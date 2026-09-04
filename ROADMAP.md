@@ -43,7 +43,16 @@ Check items off as they land.
 - [x] **Sugar-hazard road obstacles** (`src/obstacles.js`, pure + headless) — candy (gumdrop / dice / gumball / jawbreaker / lolly / bean) scattered on the asphalt on a **seed-per-track RNG**, so the **host and every LAN client build the identical layout from the track index alone** — nothing is streamed over the wire, and the 100%-deterministic-race property the net-sim relies on holds. Start-menu toggle (chip + `Z`, persisted in `localStorage mkr-hazard`), client mirrors the host's pick in join mode. `collideObstacles` (karts pop clear + decel + `obJuice` jolt / camera shake / crash sfx) lives in `race.js` simulateTick (solo + host + net-sim all run the same code).
   - **AI dodges like a human, not a physics bug**: `obstacleAvoid` (primary defense) steers the pursuit lane around the nearest in-lane hazard — strength scales with skill (strong drivers clear it clean; weak ones under-steer and clip it, which is the point) + per-driver hysteresis so they hold a side instead of weaving. If a driver *does* end up wedged against a candy at crawl speed (turnFactor → ~0, can't steer out), they **reverse ~8u to make room** then the avoidance re-approaches it — with a **per-hazard 6s cooldown** that kills the endless clip→reverse→re-clip loop. `make sim` checks all 3 tracks × 3 skill levels (off-road <1%, 0 stalls); `make netsim` checks the seeded-layout determinism + a 4-kart hazard host race (4/4 finish)
 - [ ] **Items / boost pads** — boost pads on straights (track data); a simple item box (turbo / rubber band / wall); AI skips smart use, player with `Space`
-- [ ] **Skid-to-drift** — hold `Space` at speed: reduced lateral grip + extra steering, builds charge released as mini-boost. Small `step()` physics tweak; sim harness makes tuning safe
+- [x] **Skid-to-drift** ✅ (`src/kart.js` + config block) — hold `Space` (touch: stick to full lock)
+    above `DRIFT_MIN_KMH` on asphalt: heading steers in ×`DRIFT_STEER` while the motion direction
+    follows at `DRIFT_GRIP` with a hard `DRIFT_MAX_SLIP` cap → a real, controllable slide; slides
+    keep momentum (`DRIFT_DRAG` < `DRAG`), charge builds and release fires `BOOST_ACCEL` scaled by
+    charge with `BOOST_HEADROOM` over top speed. Off-road / slow / race-over never drift.
+    Body leans into the slide, exhaust flares on boost, skid audio howls, whoosh on release.
+    Wire: drift flag byte in the input frame (`encInput` v2, old frames decode drift=false);
+    state frames unchanged — remote karts already SHOW the slide because heading and motion are
+    both on the wire. AI doesn't drift → `make sim` stays a no-regression gate; 13 assertions
+    in `make netsim` (gate / engage / slip cap / charge / boost / headroom / wire)
 - [x] **2-player** (superseded the local plan — went LAN instead): WebRTC DataChannel P2P, manual code pairing (no server), host runs the authoritative fixed-step sim, client interpolates. Headless safety net: `make netsim` (wire round-trips, interp unit checks, full 2P races on every track). Remaining: QR pairing (v1.5), local-prediction polish if the peer's own kart feels laggy
 
 ## Phase 3 — *Structure* (keep the project sustainable)

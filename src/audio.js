@@ -215,7 +215,7 @@ function scheduleStep(s, t, chord) {
 }
 
 /* ---------------- engine + skid (continuous) ---------------- */
-export function updateEngine(speed, steering, onRoad) {
+export function updateEngine(speed, steering, onRoad, drifting = false) {
   if (!ctx) return;
   const sp = Math.min(Math.abs(speed) / 30, 1);
   const gear = Math.floor(sp * 2.7 + 0.4);
@@ -228,8 +228,9 @@ export function updateEngine(speed, steering, onRoad) {
   }
   engFilter.frequency.setTargetAtTime(320 + 2400 * sp, t, 0.05);
   engGain.gain.setTargetAtTime(speed === 0 ? 0.03 : 0.10 + 0.13 * sp, t, 0.06);
-  // skid: hard steering above speed
-  const skidT = (onRoad && sp > 0.35 ? (Math.abs(steering) - 0.55) * 1.0 : 0);
+  // skid: hard steering above speed — a held drift always howls, even straight
+  const skidT = Math.max(drifting && onRoad ? 0.85 : 0,
+    onRoad && sp > 0.35 ? (Math.abs(steering) - 0.55) * 1.0 : 0);
   skidGain.gain.setTargetAtTime(Math.max(0, Math.min(0.22, skidT)), t, 0.04);
 }
 

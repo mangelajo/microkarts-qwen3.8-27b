@@ -76,7 +76,7 @@ export function collideKarts(karts, crashFor) {
 export function simulateTick(karts, inputFor, dt, now, { racing, positions = true, crashFor, obFor } = {}) {
   for (const k of karts) {
     const c = inputFor(k, racing);
-    k.step(dt, c.throttle, c.steer, now);
+    k.step(dt, c.throttle, c.steer, now, c.drift);   // drift optional — AI/sims omit it
   }
   collideKarts(karts, crashFor);
   collideObstacles(karts, obFor);   // sugar hazards — no-op when the field is empty
