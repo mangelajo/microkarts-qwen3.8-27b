@@ -87,7 +87,9 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/track.js`    | `buildTrack()`: spline → samples → ribbon road, curbs, table, props |
 | `src/scene.js`    | Renderer, lights, fog, sky |
 | `src/sky.js`      | Procedural sky dome + sun (re-paintable gradient per theme) |
-| `src/kart.js`     | Kart mesh, physics `step()`, AI driver |
+| `src/kart.js`     | Kart mesh + physics `step()` |
+| `src/ai.js`       | AI driver: pure-pursuit line following, curvature-aware braking, recovery |
+| `src/blastfx.js`  | Exhaust flame/smoke particle pools above the speed threshold |
 | `src/race.js`     | Headless race core: grid, progress, positions, collisions, `simulateTick()` |
 | `src/net.js`      | 2P wire protocol (enc/dec) + `NetSession` (pairing, DataChannel routing) |
 | `src/interp.js`   | Client-side interpolation ring + sampler (50 ms delay, angular wrap) |

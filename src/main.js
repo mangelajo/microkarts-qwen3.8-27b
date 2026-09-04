@@ -6,7 +6,8 @@ import {
 } from './config.js';
 import { renderer, scene, camera, updateDust, dustForKart } from './scene.js';
 import { initMinimap, setMinimapVisible, updateMinimap, resizeMinimap } from './minimap.js';
-import { Kart, aiControl } from './kart.js';
+import { Kart } from './kart.js';
+import { aiControl } from './ai.js';
 import { selectTrack } from './track.js';
 import { GRID, simulateTick, raceOrder } from './race.js';
 import { setObstaclesOn, getObstaclesOn } from './obstacles.js';
@@ -746,72 +747,59 @@ function animate() {
       audio.updateEngine(sk.speed, d.steer, !sk.offRoad); // local engine sound from interpolated speed
     }
   } else {
-    // ---- solo + host sim ----
+    // ---- solo + net host sim: ONE shared body, only the time base differs.
+    // The host steps fixed SIM_DT ticks off its own sim clock (hostSimT) and
+    // streams every tick; solo steps a single variable dt off performance.now().
+    const racing = game.state === 'racing'; // false after finish: karts coast
+    let clockMs;
     if (role === 'host') {
-      const hostRacing = game.state === 'racing'; // false after finish: karts coast, no drive/positions
       hostAcc += Math.min(dt, 0.1);
       let steps = 0;
       while (hostAcc >= SIM_DT && steps < 8) {
         hostSimT += SIM_DT * 1000;
         p2.netOn = true;
         simulateTick(list, hostInputFor, SIM_DT, hostSimT, {
-          racing: hostRacing,
+          racing,
           crashFor: crashJuice,
           obFor: obJuice,
         });
-        if (net.open && hostRacing) broadcastState();
+        if (net.open && racing) broadcastState();
         hostAcc -= SIM_DT;
         steps++;
       }
       if (steps === 8) hostAcc = 0; // tab stall — stop the sim rather than spiral
-
-      audio.updateEngine(player.speed, readDrive(hostRacing).steer, !player.offRoad);
-      if (player.lapDone !== game.lastLapBeep) {
-        game.lastLapBeep = player.lapDone;
-        if (player.lapDone > 0 && !player.raceDone) audio.lap();
-      }
-      let finished = 0;
-      for (const k of list) if (k.raceDone) finished++;
-      if (player.raceDone === false && finished >= list.length - 1 && game.raceOverAt === 0) {
-        game.raceOverAt = hostSimT + 5000;
-      }
-      if (finished >= list.length && game.raceOverAt === 0) game.raceOverAt = hostSimT + 1200;
-      for (const k of list) k.sync(dt);
-      game.raceTime = Math.max(0, (hostSimT - game.raceStart) / 1000);
-      if (game.state !== 'finished') {
-        updateHud(game.raceTime, Math.max(0, (hostSimT - player.lapStart) / 1000), list);
-        snapChaseCam(dt);
-      }
-      if (player.raceDone || (game.raceOverAt && hostSimT >= game.raceOverAt)) finishRace();
+      clockMs = hostSimT;
     } else {
-      // ---- solo: variable step, unchanged from the original loop ----
-      const racing = game.state === 'racing';
       simulateTick(list, soloInputFor, dt, now, {
         racing,
         crashFor: crashJuice,
         obFor: obJuice,
       });
-      audio.updateEngine(player.speed, readDrive(racing).steer, !player.offRoad);
-      if (player.lapDone !== game.lastLapBeep) {
-        game.lastLapBeep = player.lapDone;
-        if (player.lapDone > 0 && !player.raceDone) audio.lap();
-      }
-      if (racing) {
-        let finished = 0;
-        for (const k of list) if (k.raceDone) finished++;
-        if (player.raceDone === false && finished >= list.length - 1 && game.raceOverAt === 0) {
-          game.raceOverAt = now + 5000; // player still racing, rivals done — give it a moment
-        }
-        if (finished >= list.length && game.raceOverAt === 0) game.raceOverAt = now + 1200;
-      }
-      for (const k of list) k.sync(dt);
-      game.raceTime = Math.max(0, (now - game.raceStart) / 1000);
-      if (game.state !== 'finished') {
-        updateHud(game.raceTime, Math.max(0, (now - player.lapStart) / 1000), list);
-        snapChaseCam(dt);
-      }
-      if (racing && (player.raceDone || (game.raceOverAt && now >= game.raceOverAt))) finishRace();
+      clockMs = now;
     }
+    audio.updateEngine(player.speed, readDrive(racing).steer, !player.offRoad);
+    if (player.lapDone !== game.lastLapBeep) {
+      game.lastLapBeep = player.lapDone;
+      if (player.lapDone > 0 && !player.raceDone) audio.lap();
+    }
+    if (racing) {
+      let finished = 0;
+      for (const k of list) if (k.raceDone) finished++;
+      if (player.raceDone === false && finished >= list.length - 1 && game.raceOverAt === 0) {
+        game.raceOverAt = clockMs + 5000; // player still racing, rivals done — give it a moment
+      }
+      if (finished >= list.length && game.raceOverAt === 0) game.raceOverAt = clockMs + 1200;
+    }
+    for (const k of list) k.sync(dt);
+    game.raceTime = Math.max(0, (clockMs - game.raceStart) / 1000);
+    if (game.state !== 'finished') {
+      updateHud(game.raceTime, Math.max(0, (clockMs - player.lapStart) / 1000), list);
+      snapChaseCam(dt);
+    }
+    // `racing &&` fires finishRace exactly once, on the frame the flag drops.
+    // (The old host path lacked this guard and re-ran finishRace — re-sending
+    // finish frames at 60 Hz — for every frame after the race ended.)
+    if (racing && (player.raceDone || (game.raceOverAt && clockMs >= game.raceOverAt))) finishRace();
   }
   if (game.state !== 'menu') {
     for (const k of list) dustForKart(k, dt);

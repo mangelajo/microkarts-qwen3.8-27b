@@ -1,7 +1,7 @@
 // calibrate per-skill look-ahead: look = a*speed + b, sweep a small grid
 import { samples, sampleHead, curvatureAt, trackLen } from '../src/track.js';
-import { N_SAMPLES, ROAD_HW, MAX_SPEED, STEER_RATE, clamp } from '../src/config.js';
-import { Kart, turnFactor } from '../src/kart.js';
+import { N_SAMPLES, ROAD_HW, MAX_SPEED, STEER_RATE, clamp, turnFactor } from '../src/config.js';
+import { Kart } from '../src/kart.js';
 const n = N_SAMPLES;
 
 function cornerCap(K) {

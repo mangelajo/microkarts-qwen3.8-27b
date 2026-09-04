@@ -11,7 +11,8 @@ import * as THREE from 'three';
 import { samples, selectTrack } from '../src/track.js';
 import { TRACKS } from '../src/tracks.js';
 import { N_SAMPLES, AI_SKILL } from '../src/config.js';
-import { Kart, aiControl } from '../src/kart.js';
+import { Kart } from '../src/kart.js';
+import { aiControl } from '../src/ai.js';
 import { setObstaclesOn, buildObstacles, collideObstacles, obstacleList } from '../src/obstacles.js';
 
 const n = N_SAMPLES;
