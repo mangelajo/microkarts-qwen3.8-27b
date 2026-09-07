@@ -68,18 +68,20 @@ take in the catalogue. All track shapes are validated headlessly.
 
 - Five data-driven tracks (Catmull-Rom control points in `src/tracks.js`) with
   per-track theme palettes; menu selection persisted in localStorage
-- **3D elevation** — the road itself has height (y up to ~13 u on the two 3D
-  tracks). Karts stick to the road surface while on it — no jumping — and the
-  slope drives speed: `speed += -slope * GRAVITY * dt`, so climbs bleed and
-  drops feed. Off the road a kart falls under real gravity to the table; if
-  it lands off an elevated track it is stunned for ~2.5 s ("FELL OFF" message)
-  and reset onto the racing line. A kart on the table under the track is never
-  lifted. The height is pure track data (like pads and hazards), so host and
-  clients compute it locally with zero wire traffic; the wire carries one extra
-  f32 per kart (y) and old peers decode it as y = 0. The AI brakes for climbs
-  off the same slope field, the camera and kart pitch follow the road, and the
-  ghost rides the track height. Flat tracks are untouched: zero slope, zero
-  elevation, identical physics and render
+- **3D elevation** — the road itself has height (y up to ~15 u on the two 3D
+  tracks). Karts stick to the road surface while on it, and the slope drives
+  speed: `speed += -slope * GRAVITY * dt`, so climbs bleed and drops feed.
+  Flat out over a crest, a kart launches when `v²·curvature > gravity` and
+  flies a short parabola until the road holds it again. Off the edge, the
+  kart rolls over in the fall direction and drops under real gravity to the
+  table; if it lands off an elevated track it is stunned for ~2.5 s ("FELL
+  OFF" message) and reset onto the racing line. A kart on the table under
+  the track is never lifted. The height is pure track data (like pads and
+  hazards), so host and clients compute it locally with zero wire traffic; the
+  wire carries one extra f32 per kart (y) and old peers decode it as y = 0.
+  The AI brakes for climbs off the same slope field, the camera and kart
+  pitch follow the road, and the ghost rides the track height. Flat tracks
+  are untouched: zero slope, zero elevation, identical physics and render
 - Closed Catmull-Rom spline track swept into a ribbon road with curbs + checkered start line
 - Low-poly cart with steering/rolling wheels, body pitch & roll, chase camera
 - Arcade physics (delta-time based): accel, brake, drag, speed-scaled steering

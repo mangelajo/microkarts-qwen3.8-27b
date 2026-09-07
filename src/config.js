@@ -26,6 +26,8 @@ export const GRAVITY          = 4;   // slope gravity (u/s^2 per unit of rise/ru
 export const FALL_G           = 20;  // u/s^2: real gravity when a kart drops off the road
 export const FELL_MIN_HEIGHT  = 1.5; // road this high (or more) = "fell off" when you land
 export const FELL_PENALTY     = 2.5; // s: stun on the table, then respawn on the track
+export const JUMP_MIN_SPEED   = 5;   // u/s: crest launch only above this speed
+export const TUMBLE_RATE      = 2.4;  // rad/s: the kart rolls in the fall direction
 export const SLOPE_BRAKE_FACTOR = 20; // AI target-speed cut per unit of uphill slope
 export const MAX_ELEVATION  = 20;   // soft cap: taller control points are scaled down
 
