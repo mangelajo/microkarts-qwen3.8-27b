@@ -72,13 +72,15 @@ take in the catalogue. All track shapes are validated headlessly.
   tracks). Karts stick to the road surface while on it, and the slope drives
   speed: `speed += -slope * GRAVITY * dt`, so climbs bleed and drops feed.
   Flat out over a crest, a kart launches when `v²·curvature > gravity` and
-  flies a short parabola until the road holds it again. Off the edge, the
-  kart rolls over in the fall direction and drops under real gravity to the
-  table; if it lands off an elevated track it is stunned for ~2.5 s ("FELL
-  OFF" message) and reset onto the racing line. A kart on the table under
-  the track is never lifted. The height is pure track data (like pads and
-  hazards), so host and clients compute it locally with zero wire traffic; the
-  wire carries one extra f32 per kart (y) and old peers decode it as y = 0.
+  flies a short parabola until the road holds it again. Off the edge, a
+  wheel-level torque model tips the kart in the direction of exit — nose into
+  the edge: nose down, tail: tail down, side: roll to the floating side, one
+  corner: diagonal flip — then it tumbles under real gravity to the table;
+  landing off an elevated track stuns it ~2.5 s ("FELL OFF" message) and
+  resets it onto the racing line. A kart on the table under the track is
+  never lifted. The height is pure track data (like pads and hazards), so
+  host and clients compute it locally with zero wire traffic; the wire carries
+  one extra f32 per kart (y) and old peers decode it as y = 0.
   The AI brakes for climbs off the same slope field, the camera and kart
   pitch follow the road, and the ghost rides the track height. Flat tracks
   are untouched: zero slope, zero elevation, identical physics and render

@@ -6,6 +6,7 @@ Check items off as they land.
 ## Current state (what's already solid)
 
 - Arcade physics with off-road handling; lap/checkpoint counting with midpoint gate
+- **3D track elevation** — two 3D tracks (roads up to ~15 u above the table): stick-to-road with slope-driven speed, crest-launch jump physics, wheel-level torque tipping (direction of exit = direction of tilt), real-gravity falls with FELL OFF penalty + respawn, no magic lift; flat tracks bit-identical (`efd2b03` + `a1829d0`)
 - **2-player LAN over WebRTC** — serverless code-paste pairing, host-authoritative fixed-step sim,
   60 Hz state stream + 50 ms client interpolation, 2 humans + 2 AI or 1 v 1 (`plans/2_player_lan.md`)
 - 3 distinct AI drivers + headless test bench (`make sim` AI · `make netsim` wire + 2P race, `ai-sim/`)
@@ -52,6 +53,7 @@ Check items off as they land.
   `make netsim` share it; chevrons drawn by `track.js`. 7 new `make netsim` assertions
   (strip layout / determinism / on-asphalt / chain up / debounce / window expiry /
   re-arm). The AI rides the pads passively — best laps already ~1 s faster.
+- [x] **3D track elevation** (`src/kart.js` + `src/tracks.js`, SUGAR CANYON + MIDNIGHT RIDGE) — the road itself has height (y up to ~15 u). Karts stick to the road surface while on it; the slope drives speed (`speed += -slope * GRAVITY * dt` — climbs bleed, drops feed). Crest-launch: flat out over a crest, a kart launches when `v²·curvature > gravity` and flies a short parabola until the road holds it again (speed-gated, off-by-one-frame crest check). Wheel-level torque tipping: the 4 wheel corners are projected against the ribbon each frame; per-corner support (lip deadzone + fade as the wheel clears the face) → per-corner gap weighted by corner position → pitch/roll torques; angular velocity ramps from the torques (capped) and persists as momentum, so the tilt matches the exit direction (nose in → nose down, side → roll, one corner → diagonal flip) and the spin starts slow then speeds up. Off the edge: real-gravity fall to the table; landing off an elevated track = ~2.5 s stun ("FELL OFF") + respawn onto the racing line; a kart on the table under the track is never lifted (no magic lift). Height is pure track data — host and clients compute it locally, wire carries one f32 per kart (y, old peers decode y = 0); the AI brakes climbs off the slope field, camera/pitch/ghost ride the road. Flat tracks bit-identical; verified by `make sim` / `make netsim` + headless tilt matrices
 - [ ] **Item boxes** — a box lane granting a random power-up (turbo / rubber band /
   wall) used with a dedicated key (`E` — `Space` is drift now); needs a per-player item
   slot in the HUD + an item field on the state/input wire
