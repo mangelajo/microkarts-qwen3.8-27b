@@ -373,13 +373,18 @@ function clientRaceBookkeeping(st) {
 
 // the client never runs the sim — derive the road slope at a kart's XZ so
 // remote karts sit on the elevated road and pitch with it (PLAN.md 3D)
-function slopeAtKart(x, z) {
+function nearestSampleIdx(x, z) {
   let best = 0, bd = Infinity;
   for (let i = 0; i < N_SAMPLES; i++) {
     const dx = samples[i].x - x, dz = samples[i].z - z;
     const d = dx * dx + dz * dz;
     if (d < bd) { bd = d; best = i; }
   }
+  return best;
+}
+
+function slopeAtKart(x, z) {
+  const best = nearestSampleIdx(x, z);
   return (samples[(best + 1) % N_SAMPLES].y - samples[(best + N_SAMPLES - 1) % N_SAMPLES].y)
     / Math.max(1e-6, 2 * trackLen / N_SAMPLES);
 }
@@ -400,6 +405,22 @@ function applyClientState(dt) {
     k.steerVel = m.steerVel;
     k.offRoad = m.offRoad;
     k.posIdx = m.posIdx;
+    // cosmetic tumble mirror: run the same corner-torque dynamics as the
+    // local sim so a falling remote kart tips the same way (host stays
+    // authoritative for position; the pose is derived, never sent)
+    const my = m.y ?? 0;
+    const bi = nearestSampleIdx(m.x, m.z);
+    k.trackIdx = bi;
+    const ry = samples[bi].y;
+    if (my > 0.3 && my < ry - 1) {
+      k.tumbling = true;
+      k.updateTumble(dt);
+    } else {
+      k.tumbling = false;
+      k.omegaP = 0;
+      k.omegaR = 0;
+      if (my >= ry - 1.5) k.roll += (0 - k.roll) * Math.min(1, 8 * dt);   // settle flat
+    }
     k.sync(dt); // cosmetic: wheels, roll, pitch (fed by interpolated speed)
   }
   // fell-off message: the host runs the penalty sim; the client just mirrors

@@ -199,6 +199,7 @@ export class Kart {
     this.slope = 0;          // road rise/run under us (PLAN.md 3D elevation)
     this.pitch = 0;          // smoothed mesh tilt (rad) to the road slope
     this.airborne = false;   // in flight: crest jump, or falling off the edge
+    this.tipped = false;    // tipped off the edge: no re-stick to the road
     this.tumbling = false;   // falling off the edge: rolling in the fall direction
     this.roll = 0;           // mesh roll about the forward axis (rad)
     this.offRoad = false;
@@ -212,6 +213,7 @@ export class Kart {
     this.finalLapTime = 0;
     this.trackIdx = 0;
     this.trackIdxPrev = 0;
+    this.lat = 0;               // distance to centreline (nearestTrack)
     this.steerVel = 0;
     this.wheelSpin = 0;
     this.posIdx = 0;
@@ -261,6 +263,7 @@ export class Kart {
     this.airborne = false;
     this.tumbling = false;
     this.roll = 0;
+    this.tipped = false;
     this.drifting = false;
     this.charge = 0;
     this.boost = 0;
@@ -277,6 +280,71 @@ export class Kart {
     _qR.setFromAxisAngle(_AZ, this.roll);
     _qY.setFromAxisAngle(_AY, this.heading);
     this.mesh.root.quaternion.copy(_qY.multiply(_qR).multiply(_qX));
+  }
+
+  /* 4-wheel support state: for each wheel corner, how far it floats above
+     the surface under it (the road, if the corner is still over the ribbon,
+     else the table at y=0). Returns the gravity torques about the lip:
+     tP about the lateral axis (front corners floating -> nose down),
+     tR about the forward axis (a side floating -> that side down),
+     m = total gap, maxG = largest single-corner gap. */
+  cornerTorques() {
+    const n = N_SAMPLES;
+    const i = this.trackIdx;
+    const S = samples[i];
+    const S1 = samples[(i + 1) % n];
+    let tx = S1.x - S.x, tz = S1.z - S.z;
+    const tl = Math.hypot(tx, tz) || 1; tx /= tl; tz /= tl;
+    const nx = -tz, nz = tx;
+    const ch = Math.cos(this.heading), sh = Math.sin(this.heading);
+    const cp = Math.cos(this.pitch),  sp = Math.sin(this.pitch);
+    const cr = Math.cos(this.roll),   sr = Math.sin(this.roll);
+    let tP = 0, tR = 0, m = 0, maxG = 0;
+    for (let c = 0; c < 4; c++) {
+      const cx = c === 0 || c === 2 ? 0.95 : -0.95;   // wheel lateral (local X)
+      const cz = c <= 1 ? 1.05 : -1.05;              // wheel fore/aft (local Z)
+      // local (cx, 0, cz) -> pitch (X) -> roll (Z) -> yaw (Y)
+      const y1 = -cz * sp;
+      const x2 = cx * cr + y1 * sr;
+      const y2 = cx * sr + y1 * cr;
+      const z2 = cz * cp;
+      const wx = this.pos.x + x2 * ch + z2 * sh;
+      const wz = this.pos.z - x2 * sh + z2 * ch;
+      const wy = this.pos.y + y2;
+      const lx = (wx - S.x) * nx + (wz - S.z) * nz;  // corner lateral offset
+      const dx = Math.abs(lx) - ROAD_HW;           // how far past the lip
+      let sup;
+      if (dx <= 0.2) sup = S.y;                 // lip deadzone: road face still holds the wheel
+      else if (dx <= 2.5) sup = S.y * (1 - (dx - 0.2) / 2.3);  // grip fades as the wheel clears the face
+      else sup = 0;                             // fully off the ribbon
+      const g = Math.max(0, wy - sup - 0.15);
+      tP += g * cz;    // front corner floats -> nose down (+X rotation)
+      tR -= g * cx;    // +X corner floats -> +X side down (−Z rotation)
+      m += g;
+      if (g > maxG) maxG = g;
+    }
+    return { tP, tR, m, maxG };
+  }
+
+  /* fall-off physics: the floating corners torque the kart about the lip it
+     hangs over. Angular velocity ramps up while a corner is floating (the
+     kart pivots on the edge and accelerates as the overhang grows), is
+     capped at TUMBLE_RATE, and persists as free-fall momentum once the kart
+     is fully past the edge. Exit off the left -> banks left; off the nose
+     -> pitches nose-down; off the tail -> tail-down; off a corner -> rolls
+     about the diagonal. A flat crest jump floats all four corners equally,
+     so the torques cancel and the kart just flies. */
+  updateTumble(dt) {
+    const t = this.cornerTorques();
+    this.gapMax = t.maxG;
+    if (t.m > 0.5) {
+      this.omegaP += (t.tP / t.m) * TUMBLE_RATE * dt;
+      this.omegaR += (t.tR / t.m) * TUMBLE_RATE * dt;
+      const om = Math.hypot(this.omegaP, this.omegaR);
+      if (om > TUMBLE_RATE) { const s = TUMBLE_RATE / om; this.omegaP *= s; this.omegaR *= s; }
+    }
+    this.pitch += this.omegaP * dt;
+    this.roll += this.omegaR * dt;
   }
 
   nearestTrack() {
@@ -298,8 +366,9 @@ export class Kart {
       }
     }
     this.trackIdx = best;
-    this.offRoad = Math.sqrt(bd) > ROAD_HW - 0.5;
-    return { u: best / N_SAMPLES, lat: Math.sqrt(bd) };
+    this.lat = Math.sqrt(bd);
+    this.offRoad = this.lat > ROAD_HW - 0.5;
+    return { u: best / N_SAMPLES, lat: this.lat };
   }
 
   updateLapLogic(now) {
@@ -336,6 +405,10 @@ export class Kart {
     this.airborne = false;
     this.tumbling = false;
     this.roll = 0;
+    this.omegaP = 0;
+    this.omegaR = 0;
+    this.gapMax = 0;
+    this.tipped = false;
     this.slope = (samples[(i + 1) % n].y - samples[(i + n - 1) % n].y) / Math.max(1e-6, 2 * trackLen / n);
     this.pitch = -Math.atan(this.slope);
     this.setOrientation();
@@ -407,27 +480,28 @@ export class Kart {
     {
       const n = N_SAMPLES, i = this.trackIdx;
       const roadY = samples[i].y;
-      const onRoad = !this.offRoad && Math.abs(this.pos.y - roadY) < 1.5;
+      // Physics stick band extends to the ribbon lip (the offRoad HUD flag
+      // fires earlier); a wheel just over the lip is still held by the face.
+      const onRoad = this.lat <= ROAD_HW + 0.5 && Math.abs(this.pos.y - roadY) < 1.5;
       if (this.airborne) {
         this.slope = 0;
         if (this.tumbling) {
-          // outward = nearest sample -> kart (XZ); if the fall is to the
-          // kart's right, the right side goes out first (negative roll).
-          const ox = this.pos.x - samples[i].x, oz = this.pos.z - samples[i].z;
-          const side = ox * Math.cos(this.heading) - oz * Math.sin(this.heading);
-          this.roll -= Math.sign(side || 1) * TUMBLE_RATE * dt;
+          this.updateTumble(dt);   // corner-torque physics (see updateTumble)
         } else {
           this.roll += (0 - this.roll) * Math.min(1, 8 * dt);   // settle flat
         }
         this.vy -= FALL_G * dt;
         this.pos.y += this.vy * dt;
         if (this.pos.y <= 0) {
-          // table: keep the crash pose (roll), the penalty below picks up
+          // table: keep the crash pose, the penalty below picks up
           this.pos.y = 0;
           this.vy = 0;
           this.airborne = false;
           this.tumbling = false;
-        } else if (!this.offRoad && this.pos.y <= roadY && this.pos.y >= roadY - 1) {
+          this.tipped = false;
+          this.omegaP = 0;
+          this.omegaR = 0;
+        } else if (this.lat <= ROAD_HW + 0.5 && !this.tipped && this.pos.y <= roadY && this.pos.y >= roadY - 1) {
           // back on the surface (roadY-1 floor: a kart 13 u BELOW the road
           // never snaps up — no magic lift)
           const impact = -this.vy;
@@ -435,6 +509,9 @@ export class Kart {
           this.vy = 0;
           this.airborne = false;
           this.tumbling = false;
+          this.tipped = false;
+          this.omegaP = 0;
+          this.omegaR = 0;
           this.fellOff = false;
           this.fellTimer = 0;
           this.fallY = roadY;
@@ -450,11 +527,22 @@ export class Kart {
         this.fellTimer = 0;
         this.fallY = roadY;   // remember the height we are on (for fall-off)
         this.roll += (0 - this.roll) * Math.min(1, 8 * dt);           // settle flat
-        // jump: over a crest (concave-down road) fast enough that
-        // v²·|y''| > gravity, the road can't hold us — launch with the
-        // tangent's vertical component; gravity takes over until we land
-        // back on the surface.
-        if (this.speed > JUMP_MIN_SPEED) {
+        this.omegaP = 0;                                             // settled
+        this.omegaR = 0;
+        this.tipped = false;                                         // re-stuck
+        // a wheel off the edge of a raised road: the kart tips even while
+        // its centre is still inside the arcade stick band (the outer
+        // wheels are already floating). Flat track: gaps ≈ 0, never trips.
+        if (this.cornerTorques().maxG > 1.0) {
+          this.airborne = true;
+          this.tumbling = true;
+          this.tipped = true;   // no re-stick: it has tipped off the edge
+          this.vy = 0;
+        } else if (this.speed > JUMP_MIN_SPEED) {
+          // jump: over a crest (concave-down road) fast enough that
+          // v²·|y''| > gravity, the road can't hold us — launch with the
+          // tangent's vertical component; gravity takes over until we land
+          // back on the surface.
           const j = this.trackIdxPrev;   // pre-move index: at top speed the kart
           const s1 = samples[(j + 1) % n].y, s0 = samples[j].y, sm = samples[(j + n - 1) % n].y;  // moves > 1 sample/frame,
           const d = trackLen / n;                                              // so the post-move one is past the crest
@@ -490,8 +578,10 @@ export class Kart {
   sync(dt) {
     this.mesh.root.position.copy(this.pos);
     // pitch to the road slope (tilt then yaw, smoothed so crest crossings
-    // don't jack the chassis)
-    this.pitch += (-Math.atan(this.slope) - this.pitch) * Math.min(1, 10 * dt);
+    // don't jack the chassis) — frozen during a tumble / table stun so
+    // the crash pose holds until respawn
+    if (!this.tumbling && !this.fellOff)
+      this.pitch += (-Math.atan(this.slope) - this.pitch) * Math.min(1, 10 * dt);
     this.setOrientation();
     this.wheelSpin += this.speed * dt / WHEEL_R;
     for (const w of this.mesh.wheels) w.rotation.x = this.wheelSpin;
