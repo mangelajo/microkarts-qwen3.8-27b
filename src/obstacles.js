@@ -80,6 +80,7 @@ export function buildObstacles(trackIdx) {
       kind: spec.kind, r,
       x: samples[idx].x + nx * o,
       z: samples[idx].z + nz * o,
+      y: samples[idx].y,   // sits on the (elevated) road
       u: ((u % 1) + 1) % 1,
       o,
       rot: rng() * Math.PI * 2,

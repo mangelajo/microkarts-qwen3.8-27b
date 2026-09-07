@@ -123,7 +123,8 @@ export function updateHud(r, l, karts) {
   el('best').innerHTML = 'BEST <span class="val">' + (best == null ? '--' : fmt(best)) + '</span>';
   el('pos').textContent = String(p.posIdx || 1);
   el('pos').parentElement.classList.toggle('lead', p.posIdx === 1);
-  el('warn').classList.toggle('on', p.offRoad && game.state === 'racing');
+  el('warn').textContent = p.fellOff ? 'FELL OFF — RESET' : 'OFF TRACK';
+  el('warn').classList.toggle('on', (p.offRoad || p.fellOff) && game.state === 'racing');
 }
 
 /* ------------------------------------------------------------------ *

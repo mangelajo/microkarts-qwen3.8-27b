@@ -1,13 +1,22 @@
 import * as THREE from 'three';
 import {
   ACCEL, BRAKE, MAX_SPEED, MAX_REV, DRAG, OFF_DRAG, OFF_GRIP, STEER_RATE, MAX_VISUAL_STEER,
-  ROAD_HW, WHEEL_R, N_SAMPLES, LAPS, KMH_PER_U, clamp, turnFactor,
+  ROAD_HW, WHEEL_R, N_SAMPLES, LAPS, KMH_PER_U, clamp, turnFactor, GRAVITY,
+  FALL_G, FELL_MIN_HEIGHT, FELL_PENALTY,
   DRIFT_MIN_KMH, DRIFT_STEER, DRIFT_GRIP, DRIFT_MAX_SLIP, DRIFT_DRAG,
   DRIFT_CHARGE_MAX, DRIFT_CHARGE_MIN, BOOST_ACCEL, BOOST_HEADROOM,
 } from './config.js';
 import { scene } from './scene.js';
-import { samples } from './track.js';
+import { samples, trackLen, sampleHead } from './track.js';
 import { makeBlastFx } from './blastfx.js';
+
+// orientation: tilt around the kart's OWN left-right axis, then yaw. Euler
+// x+y would yaw first and pitch around WORLD X, so the wheels dug into
+// sloped sections whenever the heading wasn't aligned with the Z axis.
+const _qY = new THREE.Quaternion();
+const _qX = new THREE.Quaternion();
+const _AX = new THREE.Vector3(1, 0, 0);
+const _AY = new THREE.Vector3(0, 1, 0);
 
 export function makeKart(bodyColor, accentColor) {
   const root = new THREE.Group();
@@ -181,6 +190,12 @@ export class Kart {
     this.pos = new THREE.Vector3();
     this.heading = 0;
     this.speed = 0;
+    this.vy = 0;             // vertical velocity while falling off the road
+    this.fellOff = false;    // fell off an elevated track: stunned, respawn pending
+    this.fellTimer = 0;
+    this.fallY = 0;          // road height while on the road ("fell from" marker)
+    this.slope = 0;          // road rise/run under us (PLAN.md 3D elevation)
+    this.pitch = 0;          // smoothed mesh tilt (rad) to the road slope
     this.offRoad = false;
     this.lapDone = 0;
     this.laps = LAPS;          // per-race lap count (net host sets it from the start frame)
@@ -220,10 +235,15 @@ export class Kart {
     this.pos.copy(P).addScaledVector(Nn, offset);
     this.heading = Math.atan2(T.x, T.z);
     this.speed = 0;
+    this.vy = 0;
+    this.fellOff = false;
+    this.fellTimer = 0;
+    this.fallY = P.y;
     this.lapDone = 0;              // grid sits behind the line
     this.hasMid = false;
     this.prevU = tt;
     this.trackIdx = Math.floor(tt * n) % n;
+    this.slope = (samples[(i1) % n].y - samples[(i + n - 1) % n].y) / Math.max(1e-6, 2 * trackLen / n);
     this.lapTimes = [];
     this.raceDone = false;
     this.netOn = false;      // host-side: peer's kart drives from the wire after GO
@@ -238,7 +258,15 @@ export class Kart {
     this.boostEdge = false;
     this.padT = 0; this.padChain = 0; this.padStrip = -1; this.padPrevCell = -1; this.padLast = -1;
     this.mesh.root.position.copy(this.pos);
-    this.mesh.root.rotation.y = this.heading;
+    this.pitch = -Math.atan(this.slope);
+    this.setOrientation();
+  }
+
+  /* tilt to the slope, then yaw (quaternion — see note at top) */
+  setOrientation() {
+    _qX.setFromAxisAngle(_AX, this.pitch);
+    _qY.setFromAxisAngle(_AY, this.heading);
+    this.mesh.root.quaternion.copy(_qY.multiply(_qX));
   }
 
   nearestTrack() {
@@ -281,6 +309,19 @@ export class Kart {
       this.hasMid = false; // crossed backwards
     }
     this.prevU = u;
+  }
+
+  /* fell off an elevated track: back on the racing line after the penalty */
+  respawnToTrack() {
+    const i = this.trackIdx; // nearest sample, maintained by nearestTrack()
+    this.pos.set(samples[i].x, samples[i].y, samples[i].z);
+    this.heading = sampleHead[i];
+    this.velDir = this.heading;
+    this.speed = 0;
+    this.vy = 0;
+    this.fellOff = false;
+    this.fellTimer = 0;
+    this.fallY = samples[i].y;
   }
 
   step(dt, throttle, steerIn, now, drift = false) {
@@ -335,11 +376,45 @@ export class Kart {
     this.pos.x += Math.sin(this.velDir) * this.speed * dt;
     this.pos.z += Math.cos(this.velDir) * this.speed * dt;
     if (!this.raceDone) this.updateLapLogic(now);
+    // 3D elevation, real physics: STICK to the road only when you are on it
+    // AND at its height — a kart on the table UNDER the track is never lifted
+    // (no magic). Off the road the kart falls under gravity to the table.
+    // Falling off an elevated track = FELL_PENALTY s stunned, then respawn
+    // on the nearest track point. Flat tracks: roadY ≈ 0, nothing changes.
+    {
+      const n = N_SAMPLES, i = this.trackIdx;
+      const roadY = samples[i].y;
+      if (!this.offRoad && Math.abs(this.pos.y - roadY) < 1.5) {
+        // on the road: stuck to the surface, slope drives speed
+        this.slope = (samples[(i + 1) % n].y - samples[(i + n - 1) % n].y) / Math.max(1e-6, 2 * trackLen / n);
+        this.speed += -this.slope * GRAVITY * dt;
+        this.pos.y = roadY;
+        this.vy = 0;
+        this.fellOff = false;
+        this.fellTimer = 0;
+        this.fallY = roadY;   // remember the height we are on (for fall-off)
+      } else {
+        this.slope = 0;
+        if (this.pos.y > 0.01) {                 // falling to the table
+          this.vy -= FALL_G * dt;
+          this.pos.y += this.vy * dt;
+          if (this.pos.y <= 0) { this.pos.y = 0; this.vy = 0; }
+        } else if (Math.max(this.fallY, roadY) > FELL_MIN_HEIGHT) { // fell off, or driving on the table under an elevated track
+          if (!this.fellOff) { this.fellOff = true; this.fellTimer = FELL_PENALTY; }
+          this.speed = 0;                        // stunned
+          this.fellTimer -= dt;
+          if (this.fellTimer <= 0) this.respawnToTrack();
+        }
+      }
+    }
   }
 
   sync(dt) {
     this.mesh.root.position.copy(this.pos);
-    this.mesh.root.rotation.y = this.heading;
+    // pitch to the road slope (tilt then yaw, smoothed so crest crossings
+    // don't jack the chassis)
+    this.pitch += (-Math.atan(this.slope) - this.pitch) * Math.min(1, 10 * dt);
+    this.setOrientation();
     this.wheelSpin += this.speed * dt / WHEEL_R;
     for (const w of this.mesh.wheels) w.rotation.x = this.wheelSpin;
     for (const p of this.mesh.frontPivots) p.rotation.y = this.steerVel * MAX_VISUAL_STEER;

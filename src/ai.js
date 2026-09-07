@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { MAX_SPEED, STEER_RATE, ROAD_HW, N_SAMPLES, clamp, turnFactor } from './config.js';
-import { samples, sampleHead, angDiff, curvatureAt, trackLen } from './track.js';
+import { MAX_SPEED, STEER_RATE, ROAD_HW, N_SAMPLES, clamp, turnFactor, SLOPE_BRAKE_FACTOR } from './config.js';
+import { samples, sampleHead, angDiff, curvatureAt, slopeAt, trackLen } from './track.js';
 import { obstacleAvoid, blockingHazard } from './obstacles.js';
 
 /* ------------------------------------------------------------------ *
@@ -105,15 +105,25 @@ export function aiControl(k, karts) {
 let vNeed = Infinity;
   const du = trackLen > 0 ? dist / trackLen : 0.05;
   for (let s = 1; s <= 40; s++) {
-    const K = Math.abs(curvatureAt(k.prevU + du * s / 40));
+    const u = k.prevU + du * s / 40;
+    const K = Math.abs(curvatureAt(u));
     if (K > 0.0004) {
       let v = Math.sqrt((P.grip * P.gripScale * 2.2) / K) * P.margin;  // 2.2: steady yaw inside off-road threshold
       v = Math.min(v, cornerCap(K) * P.cornerK);  // hesitation: weak drivers under-use their steering in the hairpins
       vNeed = Math.min(vNeed, v);
       if (vNeed < maxSp * 0.3) break;
     }
+    // slope (PLAN.md): climbs bleed speed (GRAVITY * slope), so cap the
+    // target lower the steeper the road ahead is. Downhills: hold maxSp —
+    // the kart's own speed clamp keeps it under MAX_SPEED.
+    const sl = slopeAt(u);
+    if (sl > 0.03) {
+      vNeed = Math.min(vNeed, maxSp - sl * SLOPE_BRAKE_FACTOR);
+      if (vNeed < maxSp * 0.25) break;
+    }
   }
   vNeed = Math.min(vNeed, maxSp);
+  if (vNeed < 3) vNeed = 3;   // never dead-stop at the crest of a climb
   const th0 = k.speed > vNeed + 0.9 ? -1 : k.speed < vNeed - 0.4 ? 1 : 0;
   // hysteresis so throttle doesn't chatter at the boundary
   let throttle = th0;

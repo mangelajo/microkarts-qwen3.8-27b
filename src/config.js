@@ -20,6 +20,15 @@ export const CAM_DIST   = 7.5;
 export const CAM_HEIGHT = 3.3;
 export const N_SAMPLES  = 1000;    // track sampling resolution
 
+// 3D elevation (PLAN.md): karts stick to the road, slope drives speed.
+// GRAVITY is arcade-tuned (not 9.8): speed += -slope * GRAVITY * dt
+export const GRAVITY          = 4;   // slope gravity (u/s^2 per unit of rise/run)
+export const FALL_G           = 20;  // u/s^2: real gravity when a kart drops off the road
+export const FELL_MIN_HEIGHT  = 1.5; // road this high (or more) = "fell off" when you land
+export const FELL_PENALTY     = 2.5; // s: stun on the table, then respawn on the track
+export const SLOPE_BRAKE_FACTOR = 20; // AI target-speed cut per unit of uphill slope
+export const MAX_ELEVATION  = 20;   // soft cap: taller control points are scaled down
+
 // Skid-to-drift: hold the drift input (Space / full-lock touch drag) above
 // DRIFT_MIN_KMH on asphalt — the nose steers in faster than the motion follows
 // (a real slide), charge builds, and releasing fires a mini-boost scaled by it.

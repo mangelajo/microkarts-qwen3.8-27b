@@ -24,7 +24,8 @@ All game constants live in `src/config.js`: `ACCEL`, `BRAKE`, `MAX_SPEED`,
 
 To add a track, append an entry to `TRACKS` in `src/tracks.js` — a `name`,
 a `theme` (reuses one of the palettes or define a new one), and a closed list
-of `[x, z]` control points that stays within the 420u table. Then run
+of `[x, y, z]` control points that stays within the 420u table (y = elevation
+above the table, 0 for flat tracks). Then run
 `make sim`: the AI harness drives all three skills on the new loop and exits
 non-zero if a driver can't hold the road or recover.
 ## Controls
@@ -46,14 +47,17 @@ races it alongside you, so you're always chasing your own best lap.
 
 ## Tracks
 
-Three circuits on the same dinner table, each with its own theme palette
-(sky, fog, lighting, table wood, road colour):
+Five circuits on the same dinner table, each with its own theme palette
+(sky, fog, lighting, table wood, road colour) — three flat loops and two
+whose roads rise off the table (up to ~13 u):
 
 | # | Track | Style |
 |---|-------|-------|
 | 1 | BUTTERFINGO LOOP | the original dusk circuit |
 | 2 | CANDY TANGLE | S-chicane + hairpin, candy-lit |
 | 3 | MIDNIGHT TEARDROP | one long flowing bank, night |
+| 4 | SUGAR CANYON | the old loop over a ridge, sunset — climbs to the far crest, fast run back down |
+| 5 | MIDNIGHT RIDGE | teardrop over a ridge, night — climb the bank, drop the long bend |
 
 Pick with the chips on the menu (or `←`/`→`); the choice is remembered.
 Adding a track = a new entry in `src/tracks.js` (points + theme) and a
@@ -62,8 +66,20 @@ take in the catalogue. All track shapes are validated headlessly.
 
 ## Features
 
-- Three data-driven tracks (Catmull-Rom control points in `src/tracks.js`) with
+- Five data-driven tracks (Catmull-Rom control points in `src/tracks.js`) with
   per-track theme palettes; menu selection persisted in localStorage
+- **3D elevation** — the road itself has height (y up to ~13 u on the two 3D
+  tracks). Karts stick to the road surface while on it — no jumping — and the
+  slope drives speed: `speed += -slope * GRAVITY * dt`, so climbs bleed and
+  drops feed. Off the road a kart falls under real gravity to the table; if
+  it lands off an elevated track it is stunned for ~2.5 s ("FELL OFF" message)
+  and reset onto the racing line. A kart on the table under the track is never
+  lifted. The height is pure track data (like pads and hazards), so host and
+  clients compute it locally with zero wire traffic; the wire carries one extra
+  f32 per kart (y) and old peers decode it as y = 0. The AI brakes for climbs
+  off the same slope field, the camera and kart pitch follow the road, and the
+  ghost rides the track height. Flat tracks are untouched: zero slope, zero
+  elevation, identical physics and render
 - Closed Catmull-Rom spline track swept into a ribbon road with curbs + checkered start line
 - Low-poly cart with steering/rolling wheels, body pitch & roll, chase camera
 - Arcade physics (delta-time based): accel, brake, drag, speed-scaled steering

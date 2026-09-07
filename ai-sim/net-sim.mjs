@@ -209,14 +209,39 @@ console.log('\n== boost pads: layout + chain model ==');
   mark(K.padChain === 1, 'strips re-arm for the next pass');
 }
 {
-  const fake = [{ pos: new THREE.Vector3(1.5, 0, -2.25), heading: 0.75, speed: 12.5, steerVel: 0.3, offRoad: false, lapDone: 1, posIdx: 2, raceDone: false }];
+  const fake = [{ pos: new THREE.Vector3(1.5, 2.5, -2.25), heading: 0.75, speed: 12.5, steerVel: 0.3, offRoad: false, lapDone: 1, posIdx: 2, raceDone: false }];
   const enc = makeStateEncoder(1);
   const d = decodeState(enc(987654, 17, fake), 1);
   mark(d.hostMs === 987654 && d.echoPing === 17, 'state header');
   const k = d.karts[0];
   mark(Math.abs(k.x - 1.5) < 1e-5 && Math.abs(k.z + 2.25) < 1e-5, 'state pos');
+  mark(Math.abs(k.y - 2.5) < 1e-5, 'state pos y (elevation round-trips)');
   mark(Math.abs(k.heading - 0.75) < 1e-5 && Math.abs(k.speed - 12.5) < 1e-5, 'state speed');
   mark(k.lapDone === 1 && k.posIdx === 2 && !k.raceDone && !k.offRoad, 'state flags');
+}
+{   // backward compat: a pre-3D peer sends 24-byte karts (no y) — the
+    // decoder must read y = 0 and still parse z/heading/speed correctly
+  const v = new DataView(new ArrayBuffer(7 + 24));
+  v.setUint8(0, 0x20); v.setUint32(1, 42); v.setUint16(5, 9);
+  v.setFloat32(7, 1.5); v.setFloat32(11, -2.25); v.setFloat32(15, 0.75);
+  v.setFloat32(19, 12.5); v.setFloat32(23, 0.3);
+  v.setUint8(27, 0); v.setUint8(28, 1); v.setUint8(29, 2); v.setUint8(30, 0);
+  const k = decodeState(v.buffer, 1).karts[0];
+  mark(k.y === 0, 'legacy state frame decodes as y = 0');
+  mark(Math.abs(k.z + 2.25) < 1e-5 && Math.abs(k.speed - 12.5) < 1e-5, 'legacy state frame still parses z/speed');
+}
+{   // the catalogue has 3D tracks and they are deterministic per index:
+    // same track index → identical samples (x, y, z), like the pad/hazard
+    // fields. This is what keeps host == client frame-for-frame.
+  const ti3d = TRACKS.findIndex(t => t.points.some(p => p.length === 3 && p[1] > 0));
+  mark(ti3d >= 0, 'catalogue contains 3D (elevated) tracks');
+  for (const ti of [ti3d, ti3d + 1 >= TRACKS.length ? ti3d : ti3d + 1]) {
+    selectTrack(ti);
+    const a = [0, 137, 500, 999].map(i => samples[i].x.toFixed(4) + ',' + samples[i].y.toFixed(4) + ',' + samples[i].z.toFixed(4));
+    selectTrack(ti); // as a "freshly-joined client" would
+    const b = [0, 137, 500, 999].map(i => samples[i].x.toFixed(4) + ',' + samples[i].y.toFixed(4) + ',' + samples[i].z.toFixed(4));
+    mark(a.join('|') === b.join('|'), `track layout (incl. elevation) deterministic for index ${ti}`);
+  }
 }
 {
   const d = decFinish(encFinish([3, 0, 1, 2], [31.2, 33.0, 35.5, 36.1]));

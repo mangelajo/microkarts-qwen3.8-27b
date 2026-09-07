@@ -38,7 +38,7 @@ const angLerp = (a, b, f) => {
 
 export function sampleRat(a, b, f) {
   return {
-    x: lerp(a.x, b.x, f), z: lerp(a.z, b.z, f),
+    x: lerp(a.x, b.x, f), y: lerp(a.y ?? 0, b.y ?? 0, f), z: lerp(a.z, b.z, f),
     heading: angLerp(a.heading, b.heading, f),
     speed: lerp(a.speed, b.speed, f),
     steerVel: lerp(a.steerVel, b.steerVel, f),

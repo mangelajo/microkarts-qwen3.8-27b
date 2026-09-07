@@ -1,4 +1,13 @@
+import * as THREE from 'three';
 import { Kart } from './kart.js';
+import { samples, trackLen } from './track.js';
+
+// same tilt-then-yaw orientation as the kart (Euler x/y would yaw first
+// and pitch around world X — wheels dig into sloped sections)
+const _gqY = new THREE.Quaternion();
+const _gqX = new THREE.Quaternion();
+const _gAX = new THREE.Vector3(1, 0, 0);
+const _gAY = new THREE.Vector3(0, 1, 0);
 
 /* ------------------------------------------------------------------ *
  *  Best-lap persistence + ghost kart ("beat your ghost", ROADMAP 3.3).
@@ -103,14 +112,25 @@ function poseGhost() {
   if (i < 0) { g.visible = false; return; }
   const fr = Math.min(1, f - i);
   const j = Math.min(i + 1, play.samples.length / 3 - 1);
+  const x = play.samples[i * 3] + (play.samples[j * 3] - play.samples[i * 3]) * fr;
+  const z = play.samples[i * 3 + 1] + (play.samples[j * 3 + 1] - play.samples[i * 3 + 1]) * fr;
+  // stick to the road (3D tracks): nearest sample's height + slope pitch.
+  // The timeline stores [x, z, h] only, so Y comes from the track itself.
+  let best = 0, bd = Infinity;
+  for (let s = 0; s < samples.length; s++) {
+    const dx = samples[s].x - x, dz = samples[s].z - z;
+    const d = dx * dx + dz * dz;
+    if (d < bd) { bd = d; best = s; }
+  }
+  const slope = (samples[(best + 1) % samples.length].y - samples[(best + samples.length - 1) % samples.length].y)
+    / Math.max(1e-6, 2 * trackLen / samples.length);
   g.visible = true;
-  g.position.set(
-    play.samples[i * 3] + (play.samples[j * 3] - play.samples[i * 3]) * fr,
-    0,
-    play.samples[i * 3 + 1] + (play.samples[j * 3 + 1] - play.samples[i * 3 + 1]) * fr,
-  );
+  g.position.set(x, samples[best].y, z);
   const ha = play.samples[i * 3 + 2], hb = play.samples[j * 3 + 2];
-  g.rotation.y = ha + Math.atan2(Math.sin(hb - ha), Math.cos(hb - ha)) * fr; // wrapped lerp
+  const yaw = ha + Math.atan2(Math.sin(hb - ha), Math.cos(hb - ha)) * fr; // wrapped lerp
+  _gqX.setFromAxisAngle(_gAX, -Math.atan(slope));
+  _gqY.setFromAxisAngle(_gAY, yaw);
+  g.quaternion.copy(_gqY.multiply(_gqX));
 }
 
 /** The player completed a lap of `lapMs`: keep it if it's the best for this

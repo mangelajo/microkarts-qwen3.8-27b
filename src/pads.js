@@ -44,7 +44,10 @@ export function buildPads(trackIdx) {
     const a = sampleHead[(i - W + N_S) % N_S], b = sampleHead[(i + W) % N_S];
     let d = b - a;
     d = Math.atan2(Math.sin(d), Math.cos(d));
-    straight[i] = Math.abs(d) < 0.35 ? 1 : 0;
+    // 3D: a pad strip also needs a GENTLE surface — heading straight but
+    // climbing 30° is not a straight (dy over the ±W window < 1.5u).
+    const dy = Math.abs(samples[(i + W) % N_S].y - samples[(i - W + N_S) % N_S].y);
+    straight[i] = Math.abs(d) < 0.35 && dy < 1.5 ? 1 : 0;
   }
   // straight runs long enough to hold a 9.3u strip + margins (seam-wrapped)
   const runs = [];
@@ -79,6 +82,8 @@ export function buildPads(trackIdx) {
         const idx = Math.floor(u * N_S) % N_S;
         const h = sampleHead[idx];
         cells.push({ x: samples[idx].x - Math.cos(h) * o, z: samples[idx].z + Math.sin(h) * o,
+          y: samples[idx].y,   // sit on the (elevated) road
+          sl: (samples[(idx + 6) % N_S].y - samples[(idx + 6 + N_S) % N_S].y) / 12, // for the mesh pitch
           h, o, u, strip: si, cell: c, id: 0 });
       }
       // never pave over candy — a jawbreaker on a boost pad is a cheap shot

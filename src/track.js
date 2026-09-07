@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { N_SAMPLES, ROAD_HW, CURB_W } from './config.js';
+import { N_SAMPLES, ROAD_HW, CURB_W, MAX_ELEVATION } from './config.js';
 import { scene, sun, hemi, fill } from './scene.js';
 import { woodTexture, checkerTexture, curbTexture } from './textures.js';
 import { TRACKS, trackTheme } from './tracks.js';
@@ -22,6 +22,20 @@ export const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 export function curvatureAt(t) { // signed 1/u: rate of heading change per unit arc-length
   const w = 8 / trackLen; // half-window: ±8 u of arc
   return angDiff(headingAt(t + w), headingAt(t - w)) / 16;
+}
+
+/* Elevation (PLAN.md): the track's Y is pure track data — karts and AI
+ * read it locally, so no wire traffic and full determinism (like pads/
+ * obstacles). Flat tracks have y=0 everywhere, so these are no-ops there. */
+export function heightAt(t) { // interpolated road height at arc fraction t
+  const f = ((((t % 1) + 1) % 1) * N_SAMPLES);
+  const i = Math.floor(f) % N_SAMPLES, i1 = (i + 1) % N_SAMPLES;
+  const fr = f - Math.floor(f);
+  return samples[i].y * (1 - fr) + samples[i1].y * fr;
+}
+export function slopeAt(t) { // rise per unit arc-length (±8 u window, like curvatureAt)
+  const w = 8 / trackLen;
+  return (heightAt(t + w) - heightAt(t - w)) / 16;
 }
 
 /* ------------------------------------------------------------------ *
@@ -70,8 +84,11 @@ function buildRibbon(parent, c, inner, outer, y, material) {
     const tan = c.getTangentAt(t);
     const nx = -tan.z, nz = tan.x; // perpendicular in XZ
     const il = (i % N_SAMPLES) / N_SAMPLES, iu = i / N_SAMPLES;
-    pos.push(p.x + nx * inner, y, p.z + nz * inner);
-    pos.push(p.x + nx * outer, y, p.z + nz * outer);
+    // y is an OFFSET above the (possibly elevated) road surface; the clamp
+    // must mirror the sample clamp in buildTrack so visuals and physics
+    // agree, and the road never dips under the table (spline overshoot).
+    pos.push(p.x + nx * inner, Math.max(p.y, 0.02) + y, p.z + nz * inner);
+    pos.push(p.x + nx * outer, Math.max(p.y, 0.02) + y, p.z + nz * outer);
     uv.push(il, 0);
     uv.push(iu, 1);
   }
@@ -175,7 +192,7 @@ function scatterHazardMeshes(parent) {
   const m = ensureHazardMats();
   for (const o of obstacleList) {
     const body = new THREE.Group();
-    body.position.set(o.x, 0, o.z);
+    body.position.set(o.x, o.y || 0, o.z);   // sits ON the (elevated) road
     body.rotation.y = o.rot;
 
     const geo = hazardGeo(o.kind);
@@ -240,7 +257,8 @@ function scatterPads(parent) {
   for (const p of padList) {
     if (p.cell !== 1) continue;      // middle cell of each strip = its centre
     const gNode = new THREE.Group();
-    gNode.position.set(p.x, 0.018, p.z);
+    gNode.position.set(p.x, (p.y || 0) + 0.018, p.z);
+    gNode.rotation.x = -Math.atan(p.sl || 0);  // pitch to the road (X then Y order)
     gNode.rotation.y = p.h;
     const pl = new THREE.Mesh(new THREE.PlaneGeometry(CELL_W + 0.4, stripLen), mat);
     pl.rotation.x = Math.PI / 2;     // canvas "up" -> local +z = travel direction
@@ -251,12 +269,27 @@ function scatterPads(parent) {
 }
 
 export function buildTrack(def, index = 0) {
-  const pts = def.points.map(([x, z]) => new THREE.Vector3(x, 0, z));
+  // [x, y, z] (or legacy [x, z] → y = 0); cap elevation at MAX_ELEVATION
+  let maxAbsY = 0;
+  for (const p of def.points) maxAbsY = Math.max(maxAbsY, Math.abs(p.length > 2 ? p[1] : 0));
+  const yScale = maxAbsY > MAX_ELEVATION ? MAX_ELEVATION / maxAbsY : 1;
+  const pts = def.points.map(p => {
+    // [x, y, z], or legacy [x, z] (read as y = 0)
+    const y = p[2] !== undefined ? p[1] : 0;
+    const z = p[2] !== undefined ? p[2] : p[1];
+    return new THREE.Vector3(p[0], y * yScale, z);
+  });
   curve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.5);
 
   // --- data: refill in place so live bindings stay valid ---
+  // the spline can overshoot below the table between control points
+  // (measured dips of ~0.2 u); the table plane is opaque at y = -0.05,
+  // so clamp the road (visuals AND physics) to stay just above it.
   trackLen = 0;
-  for (let i = 0; i < N_SAMPLES; i++) samples[i].copy(curve.getPointAt(i / N_SAMPLES));
+  for (let i = 0; i < N_SAMPLES; i++) {
+    samples[i].copy(curve.getPointAt(i / N_SAMPLES));
+    samples[i].y = Math.max(samples[i].y, 0.02);
+  }
   for (let i = 1; i < N_SAMPLES; i++) trackLen += samples[i].distanceTo(samples[i - 1]);
   for (let i = 0; i < N_SAMPLES; i++) {
     const A = samples[(i + N_SAMPLES - 1) % N_SAMPLES], B = samples[(i + 1) % N_SAMPLES];
@@ -285,17 +318,18 @@ export function buildTrack(def, index = 0) {
   buildRibbon(group, curve, ROAD_HW, ROAD_HW + CURB_W, 0.005, curbMat);
   buildRibbon(group, curve, -ROAD_HW, -(ROAD_HW + CURB_W), 0.005, curbMat);
 
-  // start / finish line
+  // start / finish line — laid on the road, aligned to the 3D tangent
+  // (flat tracks: p.y = 0, zero pitch — identical to before)
   const startP = samples[0];
   const startT = samples[1].clone().sub(samples[0]).normalize();
-  const startHeading = Math.atan2(startT.x, startT.z);
+  const startSide = new THREE.Vector3(-startT.z, 0, startT.x).normalize();
   const line = new THREE.Mesh(
     new THREE.PlaneGeometry(ROAD_HW * 2, 2.4),
     trackMat(new THREE.MeshStandardMaterial({ map: checkerTexture(), roughness: 0.9 }))
   );
-  line.rotation.x = -Math.PI / 2;
-  line.rotation.z = startHeading;
-  line.position.set(startP.x, 0.02, startP.z);
+  line.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
+    startSide, startT, startSide.clone().cross(startT).normalize()));
+  line.position.set(startP.x, startP.y + 0.02, startP.z);
   line.receiveShadow = true;
   group.add(line);
 

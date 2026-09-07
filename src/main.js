@@ -1,14 +1,15 @@
 import * as THREE from 'three';
 import {
   N_AI, AI_SKILL,
-  CAM_DIST, CAM_HEIGHT, SIM_DT, INTERP_DELAY, P2_COLOR, LAPS, KMH_PER_U, DRIFT_MIN_KMH,
+  CAM_DIST, CAM_HEIGHT, SIM_DT, INTERP_DELAY, P2_COLOR, LAPS, KMH_PER_U, DRIFT_MIN_KMH, N_SAMPLES,
+  FELL_MIN_HEIGHT, FELL_PENALTY,
   game,
 } from './config.js';
 import { renderer, scene, camera, updateDust, dustForKart } from './scene.js';
 import { initMinimap, setMinimapVisible, updateMinimap, resizeMinimap } from './minimap.js';
 import { Kart } from './kart.js';
 import { aiControl } from './ai.js';
-import { selectTrack } from './track.js';
+import { selectTrack, samples, trackLen } from './track.js';
 import { GRID, simulateTick, raceOrder } from './race.js';
 import { setObstaclesOn, getObstaclesOn } from './obstacles.js';
 import { NetSession, makeStateEncoder, encFinish } from './net.js';
@@ -344,7 +345,7 @@ function clientStart(info) {
   const p = selfKart();
   const f = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
   camPos.copy(p.pos).addScaledVector(f, -CAM_DIST);
-  camPos.y = CAM_HEIGHT;
+  camPos.y = p.pos.y + CAM_HEIGHT;
   camLook.copy(p.pos);
   camera.position.copy(camPos);
   camera.lookAt(camLook);
@@ -370,7 +371,21 @@ function clientRaceBookkeeping(st) {
   }
 }
 
+// the client never runs the sim — derive the road slope at a kart's XZ so
+// remote karts sit on the elevated road and pitch with it (PLAN.md 3D)
+function slopeAtKart(x, z) {
+  let best = 0, bd = Infinity;
+  for (let i = 0; i < N_SAMPLES; i++) {
+    const dx = samples[i].x - x, dz = samples[i].z - z;
+    const d = dx * dx + dz * dz;
+    if (d < bd) { bd = d; best = i; }
+  }
+  return (samples[(best + 1) % N_SAMPLES].y - samples[(best + N_SAMPLES - 1) % N_SAMPLES].y)
+    / Math.max(1e-6, 2 * trackLen / N_SAMPLES);
+}
+
 let lastClientSp = 0; // own-kart speed from the last applied frame (impact estimate)
+let lastClientY = 0; // own-kart height — detects a fall for the HUD message
 function applyClientState(dt) {
   if (!clientRing || clientRing.size < 1) return;
   const st = sampleState(clientRing, performance.now() - INTERP_DELAY);
@@ -378,7 +393,8 @@ function applyClientState(dt) {
   const list = racers();
   for (let i = 0; i < list.length && i < st.karts.length; i++) {
     const k = list[i], m = st.karts[i];
-    k.pos.set(m.x, 0, m.z);
+    k.pos.set(m.x, m.y ?? 0, m.z);
+    k.slope = slopeAtKart(m.x, m.z);
     k.heading = m.heading;
     k.speed = m.speed;
     k.steerVel = m.steerVel;
@@ -386,6 +402,18 @@ function applyClientState(dt) {
     k.posIdx = m.posIdx;
     k.sync(dt); // cosmetic: wheels, roll, pitch (fed by interpolated speed)
   }
+  // fell-off message: the host runs the penalty sim; the client just mirrors
+  // its own kart's fellOff so the HUD reads the same (y drops from the
+  // track to the table, then clears when it respawns back up)
+  if (lastClientY > FELL_MIN_HEIGHT && player.pos.y < 0.3) {
+    player.fellOff = true;
+    player.fellTimer = FELL_PENALTY;
+  }
+  if (player.fellOff) {
+    player.fellTimer -= dt;
+    if (player.fellTimer <= 0 || player.pos.y > 1) player.fellOff = false;
+  }
+  lastClientY = player.pos.y;
   // collision juice on the client: we don't run the sim, so estimate our own
   // impact from how hard our kart's speed dropped since the last frame
   const sk = selfKart();
@@ -482,7 +510,7 @@ function startRace() {
   // snap camera behind the player kart
   const p = player, f = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
   camPos.copy(p.pos).addScaledVector(f, -CAM_DIST);
-  camPos.y = CAM_HEIGHT;
+  camPos.y = p.pos.y + CAM_HEIGHT;
   camLook.copy(p.pos);
   camera.position.copy(camPos);
   camera.lookAt(camLook);
@@ -673,10 +701,11 @@ function addShake(v) { camShake = Math.min(1, camShake + v); }
 function snapChaseCam(dt) {
   const p = selfKart();
   const fx = Math.sin(p.heading), fz = Math.cos(p.heading);
-  const target = _cdVec.set(p.pos.x - fx * CAM_DIST, CAM_HEIGHT, p.pos.z - fz * CAM_DIST);
+  // the camera rides with the kart's elevation (3D tracks: p.pos.y > 0)
+  const target = _cdVec.set(p.pos.x - fx * CAM_DIST, p.pos.y + CAM_HEIGHT, p.pos.z - fz * CAM_DIST);
   camPos.lerp(target, 1 - Math.exp(-7 * dt));
   camera.position.copy(camPos);
-  camLook.lerp(_cdVec.set(p.pos.x + fx * 3.5, 0.9, p.pos.z + fz * 3.5), 1 - Math.exp(-7 * dt));
+  camLook.lerp(_cdVec.set(p.pos.x + fx * 3.5, p.pos.y + 0.9, p.pos.z + fz * 3.5), 1 - Math.exp(-7 * dt));
   camera.lookAt(camLook);
   // speed-FOV: widens with speed for a sense of pace (55 -> ~70 at top speed)
   const fovT = 55 + 15 * Math.min(Math.abs(p.speed) / 30, 1);

@@ -15,8 +15,10 @@
  *                                   client→host (x127 so a touch drag's -1..1
  *                                   survives the wire; keyboard's ±1/0 stay exact)
  *    0x20 state   host→  u32 hostMs, u16 echoPing, then per kart:
- *                                   f32 x,z,heading,speed,steerVel,
+ *                                   f32 x,y,z,heading,speed,steerVel,
  *                                   u8 offRoad, lapDone, posIdx, raceDone
+ *                                   (pre-3D peers without the y field are
+ *                                   decoded as y = 0 — see decodeState)
  *    0x30 finish  host→  u8 n, then per kart u8 idx, f32 finalLapMs
  *    0x40 bye     both   (empty)
  *
@@ -26,7 +28,7 @@
  * ------------------------------------------------------------------ */
 
 export const T_TRACK = 0x02, T_PREP = 0x05, T_START = 0x03, T_INPUT = 0x10, T_STATE = 0x20, T_FINISH = 0x30, T_BYE = 0x40;
-const KART_BYTES = 4 * 5 + 4; // five f32 + four u8
+const KART_BYTES = 4 * 6 + 4; // six f32 + four u8
 
 const b64u = {
   enc: buf => btoa(String.fromCharCode(...new Uint8Array(buf)))
@@ -88,6 +90,7 @@ export function makeStateEncoder(kartN) {
     for (let i = 0; i < karts.length; i++) {
       const k = karts[i];
       v.setFloat32(o, k.pos.x); o += 4;
+      v.setFloat32(o, k.pos.y); o += 4;
       v.setFloat32(o, k.pos.z); o += 4;
       v.setFloat32(o, k.heading); o += 4;
       v.setFloat32(o, k.speed); o += 4;
@@ -102,17 +105,25 @@ export function makeStateEncoder(kartN) {
 }
 export function decodeState(d, kartN) {
   const v = new DataView(toView(d), 0);
+  // pre-3D peers send 24-byte karts (no y) — decode them as y = 0 so an
+  // old client and a new host can still race (flat-track behaviour).
+  const stride = v.byteLength - 7 >= kartN * KART_BYTES ? KART_BYTES : KART_BYTES - 4; // legacy peer: no y
   const karts = new Array(kartN); let o = 7;
   for (let i = 0; i < kartN; i++) {
+    const f = stride === KART_BYTES ? 4 : 0; // y shifts everything after x
     karts[i] = {
-      x: v.getFloat32(o), z: v.getFloat32(o + 4), heading: v.getFloat32(o + 8),
-      speed: v.getFloat32(o + 12), steerVel: v.getFloat32(o + 16),
+      x: v.getFloat32(o),
+      y: f ? v.getFloat32(o + 4) : 0,
+      z: v.getFloat32(o + 4 + f),
+      heading: v.getFloat32(o + 8 + f),
+      speed: v.getFloat32(o + 12 + f),
+      steerVel: v.getFloat32(o + 16 + f),
     };
-    o += 20;
-    karts[i].offRoad = v.getUint8(o) !== 0; o += 1;
-    karts[i].lapDone = v.getUint8(o); o += 1;
-    karts[i].posIdx = v.getUint8(o); o += 1;
-    karts[i].raceDone = v.getUint8(o) !== 0; o += 1;
+    karts[i].offRoad = v.getUint8(o + 20 + f) !== 0;
+    karts[i].lapDone = v.getUint8(o + 21 + f);
+    karts[i].posIdx = v.getUint8(o + 22 + f);
+    karts[i].raceDone = v.getUint8(o + 23 + f) !== 0;
+    o += stride;
   }
   return { hostMs: v.getUint32(1), echoPing: v.getUint16(5), karts };
 }
