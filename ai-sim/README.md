@@ -15,6 +15,10 @@ node --import ./ai-sim/stub.js ai-sim/sim.mjs
 * `sim.mjs` drives real `Kart` instances through `aiControl()` at 60 Hz and
   reports: laps completed, % of time off-road, stalling, recovery time after a
   knock-out, best lap.
+* `imports.mjs` (`make imports`) statically verifies that every relative import
+  in `src/` + `ai-sim/` names an export the target declares — the one bug class
+  the sims can't see, because browser-only modules (`main.js`, `hud.js`, …) are
+  never imported headlessly.
 
 ## Scenarios (run against **every** track in `src/tracks.js`)
 1. **clean start** — on the racing line from the grid.

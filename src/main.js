@@ -3,6 +3,7 @@ import {
   N_AI, AI_SKILL,
   CAM_DIST, CAM_HEIGHT, SIM_DT, INTERP_DELAY, P2_COLOR, LAPS, KMH_PER_U, DRIFT_MIN_KMH, N_SAMPLES,
   FELL_MIN_HEIGHT, FELL_PENALTY,
+  ITEM_TURBO, ITEM_WALL, ITEM_RESPAWN,
   game,
 } from './config.js';
 import { renderer, scene, camera, updateDust, dustForKart } from './scene.js';
@@ -12,7 +13,7 @@ import { aiControl } from './ai.js';
 import { selectTrack, samples, trackLen, updateItemBoxes, syncWallMeshes } from './track.js';
 import { GRID, simulateTick, raceOrder } from './race.js';
 import { setObstaclesOn, getObstaclesOn } from './obstacles.js';
-import { setItemsOn, getItemsOn, itemBoxList, ITEM_TURBO, ITEM_WALL, ITEM_RESPAWN } from './items.js';
+import { setItemsOn, getItemsOn, itemBoxList } from './items.js';
 import { NetSession, makeStateEncoder, encFinish } from './net.js';
 import { FrameRing, sampleState } from './interp.js';
 import {

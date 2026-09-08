@@ -6,6 +6,8 @@ Every time a new feature (or a coherent set of related changes) is finished:
 
 1. **Run the gates — all must pass before anything else:**
    - `make lint`
+   - `make imports` (static import-graph check — catches browser-only
+     modules like `main.js` that the headless sims never import)
    - `make sim` (AI harness on every track)
    - `make netsim` (wire round-trip + 2P race sims on every track)
 

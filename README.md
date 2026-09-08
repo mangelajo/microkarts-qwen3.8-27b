@@ -16,6 +16,7 @@ Headless AI test bench (runs the full suite on **every** track; fails the build 
 broken shape):
 
 ```bash
+make imports # static import-graph check (browser-only modules included)
 make sim     # AI drivers on every track
 make netsim  # wire round-trips + 2P race sims on every track
 ```
