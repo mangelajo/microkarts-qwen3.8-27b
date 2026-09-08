@@ -14,6 +14,8 @@ import { N_SAMPLES, AI_SKILL } from '../src/config.js';
 import { Kart } from '../src/kart.js';
 import { aiControl } from '../src/ai.js';
 import { setObstaclesOn, buildObstacles, collideObstacles, obstacleList } from '../src/obstacles.js';
+import { setItemsOn } from '../src/items.js';
+import { simulateTick } from '../src/race.js';
 
 const n = N_SAMPLES;
 function posAt(t) {
@@ -228,6 +230,43 @@ for (let ti = 0; ti < TRACKS.length; ti++) {
     // restore the off state so the next track starts clean
     setObstaclesOn(false);
     buildObstacles(ti);
+  }
+
+  console.log('\n== item boxes ON (pickups + AI fires + walls) ==');
+  {
+    setItemsOn(true);
+    selectTrack(ti);   // rebuild with the seeded boxes (buildTrack calls buildItems)
+    const skills = AI_SKILL;
+    const grid = [{ u: 0.9925, o: -1.75 }, { u: 0.9925, o: 1.75 }, { u: 0.985, o: -1.75 }, { u: 0.985, o: 1.75 }];
+    const pk = [0, 99, 1, 2].map((si, i) => {
+      const k = new Kart({ isPlayer: si === 99, name: si === 99 ? 'YOU' : `AI${si}`, skill: si === 99 ? 0.95 : skills[si] });
+      const { P, T, Nn } = posAt(grid[i].u);
+      k.pos.copy(P).addScaledVector(Nn, grid[i].o);
+      k.heading = Math.atan2(T.x, T.z);
+      k.trackIdx = Math.floor(grid[i].u * n) % n;
+      k.prevU = grid[i].u;
+      k.lane = grid[i].o * 0.9;
+      return k;
+    });
+    let t = 0, pickups = 0, wallHits = 0;
+    const seen = new Map();
+    while (t < 300 && !pk[1].raceDone) {
+      simulateTick(pk, (k, r) => r ? aiControl(k, pk) : { throttle: 0, steer: 0 },
+        DT, t * 1000, { racing: true, crashFor: null, wallFor: () => { wallHits++; } });
+      for (const k of pk) {
+        const was = seen.get(k) ?? 0;
+        if (k.item && !was) pickups++;
+        seen.set(k, k.item);
+      }
+      t += DT;
+    }
+    console.log(`   ${pk.map(k => `${k.name}:${k.raceDone ? 'FIN' : k.lapDone + 'laps'}`).join('  ')} pickups=${pickups} wallHits=${wallHits}`);
+    mark(pk[1].raceDone, `${info.name} items ON: player (skill .95) never finished`);
+    mark(pickups >= 1, `${info.name} items ON: no kart ever picked a box`);
+    mark(pk.every(k => Number.isFinite(k.pos.x) && Number.isFinite(k.pos.z)), `${info.name} items ON: NaN position`);
+    // restore the off state: items are opt-in, the other gates stay pure
+    setItemsOn(false);
+    selectTrack(ti);
   }
 }
 

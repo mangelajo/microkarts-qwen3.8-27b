@@ -7,18 +7,19 @@
  *  input and renders snapshots (main.js + interp).
  *
  *  Wire protocol — first byte = type, rest is a DataView payload:
- *    0x02 track   host→  u8 trackIdx, u8 hazards (0/1)                 picker sync
+ *    0x02 track   host→  u8 trackIdx, u8 hazards (0/1), u8 items (0/1)
+ *                                   picker sync (old 3-byte frames: items = keep local)
  *    0x05 prep    host→  u8 trackIdx, u32 cdMs                    "countdown in 3..2..1"
  *    0x03 start   host→  u8 karts, u8 laps, u8 rosterN, i8 steerFlip,
  *                                   f32 simDt, f32[karts*2] grid (u,o pairs)
- *    0x10 input   both   i8 throttle*127, i8 steer*127, u16 ping
- *                                   client→host (x127 so a touch drag's -1..1
- *                                   survives the wire; keyboard's ±1/0 stay exact)
+ *    0x10 input   both   i8 throttle*127, i8 steer*127, u16 ping, u8 flags
+ *                                   (flags bit0 = drift, bit1 = use-item; old 5-byte
+ *                                   flagless frames decode drift=false, use=false)
  *    0x20 state   host→  u32 hostMs, u16 echoPing, then per kart:
  *                                   f32 x,y,z,heading,speed,steerVel,
- *                                   u8 offRoad, lapDone, posIdx, raceDone
- *                                   (pre-3D peers without the y field are
- *                                   decoded as y = 0 — see decodeState)
+ *                                   u8 offRoad, lapDone, posIdx, raceDone, item
+ *                                   (pre-item peers decode item = 0; pre-3D peers
+ *                                   without the y field decode y = 0 — decodeState)
  *    0x30 finish  host→  u8 n, then per kart u8 idx, f32 finalLapMs
  *    0x40 bye     both   (empty)
  *
@@ -28,7 +29,7 @@
  * ------------------------------------------------------------------ */
 
 export const T_TRACK = 0x02, T_PREP = 0x05, T_START = 0x03, T_INPUT = 0x10, T_STATE = 0x20, T_FINISH = 0x30, T_BYE = 0x40;
-const KART_BYTES = 4 * 6 + 4; // six f32 + four u8
+const KART_BYTES = 4 * 6 + 5; // six f32 + five u8 (last = held item, items.js)
 
 const b64u = {
   enc: buf => btoa(String.fromCharCode(...new Uint8Array(buf)))
@@ -46,8 +47,9 @@ const b64u = {
  * dec*() take a DataView over the FULL frame (type byte at 0).
  * Headless-safe: no RTCPeerConnection needed. ------------------------- */
 function toView(d) { return d instanceof ArrayBuffer ? d : d.buffer; }
-export function encTrack(idx, hazards = 0) {
-  const v = new DataView(new ArrayBuffer(3)); v.setUint8(0, T_TRACK); v.setUint8(1, idx); v.setUint8(2, hazards ? 1 : 0); return v.buffer;
+export function encTrack(idx, hazards = 0, items = 0) {
+  const v = new DataView(new ArrayBuffer(4)); v.setUint8(0, T_TRACK); v.setUint8(1, idx);
+  v.setUint8(2, hazards ? 1 : 0); v.setUint8(3, items ? 1 : 0); return v.buffer;
 }
 export function encPrep(trackIdx, cdMs) {
   const v = new DataView(new ArrayBuffer(6)); v.setUint8(0, T_PREP); v.setUint8(1, trackIdx); v.setUint32(2, cdMs); return v.buffer;
@@ -68,18 +70,19 @@ export function decStart(d) {
     steerFlip: v.getInt8(4) !== 0, simDt: v.getFloat32(5), grid,
   };
 }
-export function encInput(throttle, steer, ping, drift = false) {
+export function encInput(throttle, steer, ping, drift = false, use = false) {
   const v = new DataView(new ArrayBuffer(6)); v.setUint8(0, T_INPUT);
   v.setInt8(1, Math.round(throttle * 127)); // scale -1..1 into the 8-bit field
   v.setInt8(2, Math.round(steer * 127));
   v.setUint16(3, ping & 0xffff);
-  v.setUint8(5, drift ? 1 : 0);             // flags: bit0 = drift button
+  v.setUint8(5, (drift ? 1 : 0) | (use ? 2 : 0));  // flags: bit0 = drift, bit1 = use item
   return v.buffer;
 }
 export function decInput(d) {
   const v = new DataView(toView(d), 0);
+  const flags = v.byteLength > 5 ? v.getUint8(5) : 0;
   return { throttle: v.getInt8(1) / 127, steer: v.getInt8(2) / 127, ping: v.getUint16(3),
-    drift: v.byteLength > 5 && (v.getUint8(5) & 1) !== 0 };
+    drift: (flags & 1) !== 0, use: (flags & 2) !== 0 };
 }
 export function makeStateEncoder(kartN) {
   const buf = new ArrayBuffer(1 + 4 + 2 + kartN * KART_BYTES);
@@ -99,18 +102,23 @@ export function makeStateEncoder(kartN) {
       v.setUint8(o, k.lapDone); o += 1;
       v.setUint8(o, k.posIdx); o += 1;
       v.setUint8(o, k.raceDone ? 1 : 0); o += 1;
+      v.setUint8(o, k.item ?? 0); o += 1;
     }
     return buf;
   };
 }
 export function decodeState(d, kartN) {
   const v = new DataView(toView(d), 0);
-  // pre-3D peers send 24-byte karts (no y) — decode them as y = 0 so an
-  // old client and a new host can still race (flat-track behaviour).
-  const stride = v.byteLength - 7 >= kartN * KART_BYTES ? KART_BYTES : KART_BYTES - 4; // legacy peer: no y
+  // legacy peers: pre-item karts are one byte shorter (item = 0); pre-3D
+  // karts have no y at all (y = 0). Old clients + new hosts still race.
+  const stride = v.byteLength - 7 >= kartN * KART_BYTES ? KART_BYTES
+    : v.byteLength - 7 >= kartN * (KART_BYTES - 1) ? KART_BYTES - 1
+    : KART_BYTES - 5;
   const karts = new Array(kartN); let o = 7;
   for (let i = 0; i < kartN; i++) {
-    const f = stride === KART_BYTES ? 4 : 0; // y shifts everything after x
+    // y is present in both the modern (29B) and pre-item (28B) frames; only
+    // the pre-3D (24B) layout lacks it — that shifts everything after x
+    const f = stride >= KART_BYTES - 1 ? 4 : 0;
     karts[i] = {
       x: v.getFloat32(o),
       y: f ? v.getFloat32(o + 4) : 0,
@@ -123,6 +131,7 @@ export function decodeState(d, kartN) {
     karts[i].lapDone = v.getUint8(o + 21 + f);
     karts[i].posIdx = v.getUint8(o + 22 + f);
     karts[i].raceDone = v.getUint8(o + 23 + f) !== 0;
+    karts[i].item = stride === KART_BYTES ? v.getUint8(o + 24 + f) : 0;
     o += stride;
   }
   return { hostMs: v.getUint32(1), echoPing: v.getUint16(5), karts };
@@ -182,7 +191,9 @@ export class NetSession {
   _route(buf) {
     const view = this._view(buf), d = new DataView(view, 0, view.byteLength);
     switch (d.getUint8(0)) {
-      case T_TRACK: this.cbs.onTrack && this.cbs.onTrack(d.getUint8(1), view.byteLength > 2 ? d.getUint8(2) : undefined); break;
+      case T_TRACK: this.cbs.onTrack && this.cbs.onTrack(d.getUint8(1),
+        view.byteLength > 2 ? d.getUint8(2) : undefined,
+        view.byteLength > 3 ? d.getUint8(3) : undefined); break;
       case T_PREP: this.cbs.onPrep && this.cbs.onPrep({ trackIdx: d.getUint8(1), cdMs: d.getUint32(2) }); break;
       case T_START: this.cbs.onStart && this.cbs.onStart(decStart(d)); break;
       case T_STATE: this.cbs.onState && this.cbs.onState(decodeState(d, this.kartN)); break;
@@ -227,10 +238,10 @@ export class NetSession {
     this._status('awaiting-host');
     return codeFromSdp(await this._gatheredSdp());
   }
-  inputNow(throttle, steer, drift = false) {
-    if (this.open) this.ch.send(encInput(throttle, steer, (Date.now() / 1000 | 0) & 0xffff, drift));
+  inputNow(throttle, steer, drift = false, use = false) {
+    if (this.open) this.ch.send(encInput(throttle, steer, (Date.now() / 1000 | 0) & 0xffff, drift, use));
   }
-  sendTrack(idx, hazards = 0) { if (this.open) this.ch.send(encTrack(idx, hazards)); }
+  sendTrack(idx, hazards = 0, items = 0) { if (this.open) this.ch.send(encTrack(idx, hazards, items)); }
   sendPrep(trackIdx, cdMs) { if (this.open) this.ch.send(encPrep(trackIdx, cdMs)); }
   sendStart(info) { if (this.open) this.ch.send(encStart(info)); }
   sendState(buf) { if (this.open) this.ch.send(buf); }

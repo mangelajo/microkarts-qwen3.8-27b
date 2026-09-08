@@ -10,13 +10,13 @@ Check items off as they land.
 - **2-player LAN over WebRTC** — serverless code-paste pairing, host-authoritative fixed-step sim,
   60 Hz state stream + 50 ms client interpolation, 2 humans + 2 AI or 1 v 1 (`plans/2_player_lan.md`)
 - 3 distinct AI drivers + headless test bench (`make sim` AI · `make netsim` wire + 2P race, `ai-sim/`)
+- **Item boxes** — 3 seeded candy boxes per track (turbo / rubber band / wall, fixed per-box rolls); pickups, fires and wall hits live in the shared `simulateTick`, host-authoritative projectiles; OFF by default, chip or `I` (`src/items.js`)
 - Fully procedural scene: wood table, tabletop props, dusk sky + mountains — no assets
 - Shadows, chase camera, HUD, countdown/results flow
 
 ## What's missing
 
-- **No item boxes / rubber-banding** — boost pads ✅ but no pickups; races stay 100% deterministic
-- Everything else: drift ✅ minimap ✅ touch ✅ best laps + ghost ✅ — they survive refresh
+- Everything else: drift ✅ minimap ✅ touch ✅ best laps + ghost ✅ item boxes ✅ — they survive refresh
 
 ---
 
@@ -55,9 +55,22 @@ Check items off as they land.
   (strip layout / determinism / on-asphalt / chain up / debounce / window expiry /
   re-arm). The AI rides the pads passively — best laps already ~1 s faster.
 - [x] **3D track elevation** (`src/kart.js` + `src/tracks.js`, SUGAR CANYON + MIDNIGHT RIDGE) — the road itself has height (y up to ~15 u). Karts stick to the road surface while on it; the slope drives speed (`speed += -slope * GRAVITY * dt` — climbs bleed, drops feed). Crest-launch: flat out over a crest, a kart launches when `v²·curvature > gravity` and flies a short parabola until the road holds it again (speed-gated, off-by-one-frame crest check). Wheel-level torque tipping: the 4 wheel corners are projected against the ribbon each frame; per-corner support (lip deadzone + fade as the wheel clears the face) → per-corner gap weighted by corner position → pitch/roll torques; angular velocity ramps from the torques (capped) and persists as momentum, so the tilt matches the exit direction (nose in → nose down, side → roll, one corner → diagonal flip) and the spin starts slow then speeds up. Off the edge: real-gravity fall to the table; landing off an elevated track = ~2.5 s stun ("FELL OFF") + respawn onto the racing line; a kart on the table under the track is never lifted (no magic lift). Height is pure track data — host and clients compute it locally, wire carries one f32 per kart (y, old peers decode y = 0); the AI brakes climbs off the slope field, camera/pitch/ghost ride the road. Flat tracks bit-identical; verified by `make sim` / `make netsim` + headless tilt matrices
-- [ ] **Item boxes** — a box lane granting a random power-up (turbo / rubber band /
-  wall) used with a dedicated key (`E` — `Space` is drift now); needs a per-player item
-  slot in the HUD + an item field on the state/input wire
+- [x] **Item boxes** ✅ (`src/items.js`) — three candy boxes per track (seeded layout + per-box
+  seeded PRNG, exactly like pads/hazards: host and clients build the identical field from the track
+  index, nothing streamed, races stay 100% deterministic). Each box holds a fixed weighted roll —
+  turbo (45%) / rubber band (30%) / wall (25%) — and re-grants the same item after an 8 s respawn.
+  Turbo is the drift/pad boost currency (full charge); the rubber band is passive MK8-style (a
+  trailing holder gets a push scaled to the gap; `E` does nothing while holding it); the wall is a
+  host-authoritative projectile that slams the first rival it touches (speed ×0.4 + jolt). Pickups,
+  fires and hits all live inside `simulateTick`, so solo / host / `make netsim` share one model;
+  the AI fires turbo on pickup and throws the wall only at close range (beyond ~10 u the
+  projectile can't outrun a kart inside its 2.8 s life). `E` fires (touch: 450 ms auto-fire on
+  pickup); HUD item slot with per-item colours. Wire: one u8 item per kart in the state frame
+  (29-byte karts; old 28/24-byte peers decode item = 0), a `use` bit in the 6-byte input frame
+  (old frames decode use = false), and the track frame grows to 4 bytes (items byte; old 3-byte
+  peers keep the local setting). OFF by default like hazards — menu chip or `I`, persisted,
+  host broadcasts. Gated by `make sim` (items-ON pack per track) + `make netsim` (wire
+  round-trips, legacy decodes, layout determinism, effect models, 2P races with items ON)
 - [x] **Skid-to-drift** ✅ (`src/kart.js` + config block) — hold `Space` (touch: stick to full lock)
     above `DRIFT_MIN_KMH` on asphalt: heading steers in ×`DRIFT_STEER` while the motion direction
     follows at `DRIFT_GRIP` with a hard `DRIFT_MAX_SLIP` cap → a real, controllable slide; slides

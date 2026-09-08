@@ -6,6 +6,7 @@ import { TRACKS, trackTheme } from './tracks.js';
 import { retintSky } from './sky.js';
 import { buildObstacles, obstacleList, getObstaclesOn, HAZ_COLOR } from './obstacles.js';
 import { buildPads, padList, CELL_LEN, CELL_W, GAP, CELLS } from './pads.js';
+import { buildItems, itemBoxList, walls } from './items.js';
 
 /* ------------------------------------------------------------------ *
  *  Track data — filled IN PLACE by buildTrack().
@@ -268,6 +269,88 @@ function scatterPads(parent) {
   }
 }
 
+/* ------------------------------------------------------------------ *
+ *  Item boxes + walls — the field (layout + rolls + live walls) lives in
+ *  items.js; this only draws it. Boxes ride the track group (swap +
+ *  dispose per rebuild); wall meshes live on the SCENE because a wall in
+ *  flight must survive a track rebuild — syncWallMeshes() is called on
+ *  every rebuild (hides stale walls) and every frame (main.js).
+ * ------------------------------------------------------------------ */
+let boxMats = null;   // persistent across rebuilds, like hazardMats
+function ensureBoxMats() {
+  if (boxMats) return boxMats;
+  if (typeof document === 'undefined') return null;   // headless (ai-sim)
+  boxMats = {
+    shell: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35, metalness: 0.1, transparent: true, opacity: 0.55 }),
+    core:  new THREE.MeshStandardMaterial({ color: 0x8fd4ff, emissive: 0x59b7ff, emissiveIntensity: 1.5, roughness: 0.4 }),
+    ring:  new THREE.MeshBasicMaterial({ color: 0x8fd4ff, transparent: true, opacity: 0.5 }),
+  };
+  return boxMats;
+}
+
+function scatterItemBoxes(parent) {
+  const m = ensureBoxMats();
+  if (!m || !itemBoxList.length) return;
+  for (const b of itemBoxList) {
+    const g = new THREE.Group();
+    g.position.set(b.x, b.y + 0.55, b.z);      // hovers just over the (elevated) road
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.05, 1.05, 1.05), m.shell);
+    body.rotation.set(Math.PI / 4, 0, 0);      // diamond orientation reads as "box"
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 10), m.core);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.05, 8, 24), m.ring);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = -0.55;
+    g.add(body, core, ring);
+    parent.add(g);
+    b._mesh = g;    // main.js spins it + hides it while respawning
+  }
+}
+
+// spin + bob the boxes; a box in its respawn cooldown is hidden (main.js calls this per frame)
+export function updateItemBoxes(dt, nowMs) {
+  for (const b of itemBoxList) {
+    const g = b._mesh;
+    if (!g) continue;
+    if (b.respawnT > 0) { g.visible = false; continue; }
+    g.visible = true;
+    g.position.y = b.y + 0.55 + 0.14 * Math.sin(nowMs * 0.004 + b.iid * 2.1);
+    g.rotation.y += dt * 1.8;
+  }
+}
+
+const wallGroup = new THREE.Group();   // scene-level: survives track rebuilds
+scene.add(wallGroup);
+let wallPool = [];
+function ensureWallPool() {
+  if (wallPool.length || typeof document === 'undefined') return wallPool;
+  const body = new THREE.MeshStandardMaterial({ color: 0xf5f0e8, roughness: 0.5 });
+  const halo = new THREE.MeshBasicMaterial({ color: 0xff8a3d, transparent: true, opacity: 0.45 });
+  for (let i = 0; i < 6; i++) {
+    const g = new THREE.Group();
+    const b = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.8, 0.35), body);
+    b.castShadow = true;
+    const h = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.4), halo);
+    h.position.z = -0.02;
+    g.add(b, h);
+    g.visible = false;
+    wallGroup.add(g);
+    wallPool.push(g);
+  }
+  return wallPool;
+}
+
+// point the pooled wall meshes at items.js's live projectile list
+export function syncWallMeshes() {
+  const pool = ensureWallPool();
+  for (let i = 0; i < pool.length; i++) {
+    const w = walls[i], g = pool[i];
+    if (!w) { g.visible = false; continue; }
+    g.visible = true;
+    g.position.set(w.x, w.y + 0.5, w.z);
+    g.rotation.y = Math.atan2(w.dx, w.dz);
+  }
+}
+
 export function buildTrack(def, index = 0) {
   // [x, y, z] (or legacy [x, z] → y = 0); cap elevation at MAX_ELEVATION
   let maxAbsY = 0;
@@ -338,6 +421,9 @@ export function buildTrack(def, index = 0) {
   if (getObstaclesOn()) scatterHazardMeshes(group);   // visuals only when hazards are on
   buildPads(index);               // boost-pad strips (deterministic; pads.js holds the hits)
   scatterPads(group);
+  buildItems(index);              // item boxes (deterministic; items.js holds the state)
+  scatterItemBoxes(group);
+  syncWallMeshes();               // walls live on the scene — hide any in flight
 
   // dispose the previous build's per-track materials (shared prop mats persist)
   for (const m of prevMats) m.dispose();

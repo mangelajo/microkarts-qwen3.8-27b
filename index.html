@@ -126,6 +126,15 @@
   <div id="speed">0</div>
   <div class="unit">KM/H</div>
 </div>
+<div class="hud hudbox" id="item-hud" style="bottom:118px; right:14px; text-align:center; padding:6px 10px">
+  <div class="lbl">ITEM · <kbd style="font-size:9px">E</kbd></div>
+  <div class="big" id="itemSlot" style="font-size:15px; letter-spacing:2px">—</div>
+</div>
+<style>
+  #itemSlot[data-item="1"] { color:#ffd23f; text-shadow:0 0 8px rgba(255,190,40,.8); }
+  #itemSlot[data-item="2"] { color:#9be36a; text-shadow:0 0 8px rgba(140,220,90,.8); }
+  #itemSlot[data-item="3"] { color:#ff8a3d; text-shadow:0 0 8px rgba(255,130,60,.8); }
+</style>
 <div class="hud" id="warn">OFF TRACK</div>
 <div class="hud" id="minimap"><canvas id="minimapCanvas" width="132" height="132"></canvas><div class="mm-label">MAP</div></div>
 <div id="netStatus"></div>
@@ -141,6 +150,7 @@
       <div><kbd>S / ↓</kbd>Brake · Reverse</div>
       <div><kbd>A D / ← →</kbd>Steer</div>
       <div><kbd>SPACE</kbd>Drift · release = boost</div>
+      <div><kbd>E</kbd>Use item (turbo · wall)</div>
       <div><kbd>M</kbd>Music · <kbd>N</kbd> SFX · <kbd>K</kbd> Map</div>
     </div>
     <div class="trk" id="modeWrap">
@@ -183,6 +193,13 @@
       <div class="trk-row" id="hazardRow">
         <button type="button" class="tchip" data-hazard="off">OFF</button>
         <button type="button" class="tchip" data-hazard="on">ON</button>
+      </div>
+    </div>
+    <div class="trk" id="itemWrap">
+      <div class="trk-label">ITEM BOXES <span style="opacity:.6">(I)</span></div>
+      <div class="trk-row" id="itemRow">
+        <button type="button" class="tchip sel" data-item="off">OFF</button>
+        <button type="button" class="tchip" data-item="on">ON</button>
       </div>
     </div>
     <div class="result" id="results" style="display:none"></div>

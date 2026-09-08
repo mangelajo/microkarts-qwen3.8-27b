@@ -1,6 +1,7 @@
 import { clamp, MAX_SPEED, MAX_REV } from './config.js';
 import { collideObstacles } from './obstacles.js';
 import { hitPads } from './pads.js';
+import { tickItems, tickRubber, useItem } from './items.js';
 
 /* ------------------------------------------------------------------ *
  *  Race core — pure, headless-safe (no DOM / WebGL). Shared by the
@@ -74,13 +75,16 @@ export function collideKarts(karts, crashFor) {
 // same as before this refactor); the net host passes racing=true once
 // the flag drops. `now` is ms (performance.now() for solo, host
 // sim-clock for net) and drives lap timing.
-export function simulateTick(karts, inputFor, dt, now, { racing, positions = true, crashFor, obFor } = {}) {
+export function simulateTick(karts, inputFor, dt, now, { racing, positions = true, crashFor, obFor, wallFor } = {}) {
   for (const k of karts) {
     const c = inputFor(k, racing);
     k.step(dt, c.throttle, c.steer, now, c.drift);   // drift optional — AI/sims omit it
+    if (racing && c.use) useItem(k);                 // E / AI item fire (edge-triggered)
   }
   collideKarts(karts, crashFor);
   collideObstacles(karts, obFor);   // sugar hazards — no-op when the field is empty
   hitPads(karts, dt);               // boost-pad strips — no-op before tracks build them
+  tickRubber(karts, dt);            // passive rubber band — no-op when nobody holds one
+  tickItems(karts, dt, wallFor);    // pickups + walls — no-op when items are off
   if (positions && racing) refreshPositions(karts);
 }

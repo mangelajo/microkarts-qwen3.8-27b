@@ -229,6 +229,9 @@ export class Kart {
     this.boostEdge = false; // true for one frame after a boost fires (main.js sfx)
     // boost-pad chain bookkeeping (pads.js hitPads)
     this.padT = 0; this.padChain = 0; this.padStrip = -1; this.padPrevCell = -1; this.padLast = -1;
+    // item-box state (items.js): held power-up id (0 = empty) + pickup cooldown
+    this.item = 0;
+    this.itemT = 0;
   }
 
   placeAt(t, offset) {
@@ -269,6 +272,7 @@ export class Kart {
     this.boost = 0;
     this.boostEdge = false;
     this.padT = 0; this.padChain = 0; this.padStrip = -1; this.padPrevCell = -1; this.padLast = -1;
+    this.item = 0; this.itemT = 0;
     this.mesh.root.position.copy(this.pos);
     this.pitch = -Math.atan(this.slope);
     this.setOrientation();

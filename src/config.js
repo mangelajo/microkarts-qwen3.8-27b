@@ -44,6 +44,28 @@ export const DRIFT_CHARGE_MIN = 0.4;   // shorter slides release nothing
 export const BOOST_ACCEL      = 26;    // boost kick acceleration (u/s^2)
 export const BOOST_HEADROOM   = 0.28;  // top-speed extension at full boost
 
+// Item boxes (items.js): N_ITEM_BOXES seeded boxes per track grant weighted
+// power-ups. Turbo = instant boost (the drift/pad currency); wall = a
+// projectile that slams the first kart it touches; rubber band = passive —
+// a trailing holder gets a push scaled by the gap to the leader (MK8-style:
+// pressing E while holding the rubber does nothing). Boxes are OFF by
+// default so the headless gates stay pure no-regression harnesses.
+export const ITEM_NONE   = 0;
+export const ITEM_TURBO  = 1;
+export const ITEM_RUBBER = 2;
+export const ITEM_WALL   = 3;
+export const ITEM_NAMES  = { 1: 'TURBO', 2: 'RUBBER', 3: 'WALL' };
+export const ITEM_WEIGHTS   = [45, 30, 25]; // turbo / rubber / wall
+export const N_ITEM_BOXES   = 3;
+export const ITEM_RESPAWN   = 8;     // s: a picked-up box reappears after this
+export const ITEM_COOLDOWN  = 0.25;  // s: per-kart pickup debounce
+export const ITEM_PICKUP_R  = 2.0;   // u: distance to box centre that counts
+export const RUBBER_ACCEL   = 9;     // u/s²: max push for the trailing holder
+export const WALL_SPEED     = 32;    // u/s (beats kart top speed so close shots land)
+export const WALL_LIFE      = 2.8;   // s
+export const WALL_HIT_R     = 2.0;   // u: combined wall+kart hit radius
+export const WALL_HIT_KILL  = 0.4;   // target speed multiplier on hit
+
 // AI opponents: N_AI total, skill in [0..1] drives their pace/cornering.
 // Deliberate spread: one front-runner, one mid-packer, one back-marker.
 export const N_AI         = 3;

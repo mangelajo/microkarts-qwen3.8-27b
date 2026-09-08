@@ -12,13 +12,14 @@
 import * as THREE from 'three';
 import { samples, selectTrack, angDiff, curvatureAt, trackLen } from '../src/track.js';
 import { TRACKS } from '../src/tracks.js';
-import { N_SAMPLES, SIM_DT, LAPS, AI_SKILL, clamp } from '../src/config.js';
+import { N_SAMPLES, SIM_DT, LAPS, AI_SKILL, clamp, ITEM_TURBO, ITEM_RUBBER, ITEM_WALL, ITEM_RESPAWN } from '../src/config.js';
 import { Kart } from '../src/kart.js';
 import { DRIFT_MAX_SLIP, DRIFT_CHARGE_MAX, ROAD_HW } from '../src/config.js';
 import { buildPads, hitPads, padList, PAD_STRENGTH } from '../src/pads.js';
 import { aiControl } from '../src/ai.js';
 import { GRID, simulateTick, raceOrder, progress, collideKarts } from '../src/race.js';
 import { setObstaclesOn, buildObstacles, obstacleList } from '../src/obstacles.js';
+import { setItemsOn, buildItems, itemBoxList, tickItems, tickRubber, useItem, walls } from '../src/items.js';
 import { FrameRing, sampleState, sampleRat } from '../src/interp.js';
 import { initGhost, ghostSetTrack, ghostLapStart, ghostFrame, ghostLapDone, ghostStop, getBestMs } from '../src/ghost.js';
 import {
@@ -59,7 +60,9 @@ function humanPilot(k) {
   let throttle = 1;
   if (k.speed > vCorner + 3) throttle = -1;                    // brake early
   if (k.offRoad && Math.abs(lat) > 6) throttle = 0;            // calm down wide
-  return { throttle, steer: clamp(err * 2.5, -1, 1) };
+  // a human fires eagerly: turbo right away, wall the moment they have one
+  const use = k.item === ITEM_TURBO || k.item === ITEM_WALL;
+  return { throttle, steer: clamp(err * 2.5, -1, 1), use };
 }
 
 /* Regression (user-reported): reversing into another kart's front used to pin
@@ -107,6 +110,10 @@ reverseCollisionRegression();
 console.log('== wire round-trip ==');
 mark(new DataView(encTrack(2)).getUint8(0) === T_TRACK, 'track type');
 mark(new DataView(encTrack(2)).getUint8(1) === 2, 'track idx');
+mark(new DataView(encTrack(2, 1, 1)).getUint8(2) === 1 && new DataView(encTrack(2, 1, 1)).getUint8(3) === 1,
+  'track frame carries hazards + items bytes');
+mark(new DataView(encTrack(2)).byteLength === 4 && new DataView(encTrack(2)).getUint8(3) === 0,
+  'items default off in the track frame');
 {
   const prep = encPrep(1, 3000);
   const dv = new DataView(prep);
@@ -120,9 +127,16 @@ mark(new DataView(encTrack(2)).getUint8(1) === 2, 'track idx');
   for (let i = 0; i < grid.length; i++) mark(Math.abs(d.grid[i] - grid[i]) < 1e-5, `start grid[${i}]`);
 }
 {
-  const d = decInput(encInput(-1, 1, 12345, true));
-  mark(d.throttle === -1 && d.steer === 1 && d.ping === 12345 && d.drift === true, 'input frame + drift flag');
+  const d = decInput(encInput(-1, 1, 12345, true, true));
+  mark(d.throttle === -1 && d.steer === 1 && d.ping === 12345 && d.drift === true && d.use === true,
+    'input frame + drift + use flags');
   mark(decInput(encInput(0.5, -0.5, 7)).drift === false, 'drift defaults to off');
+  mark(decInput(encInput(0.5, -0.5, 7)).use === false, 'use defaults to off');
+  {   // legacy: a pre-item peer sent a flagless 5-byte frame — both flags false
+    const legacy = new Uint8Array([0x10, 64, -13, 0x00, 0x02]);
+    const ld = decInput(legacy.buffer);
+    mark(ld.use === false && ld.drift === false, 'legacy 5-byte input frame: use = false');
+  }
 }
 /* Drift physics (kart.step): engage gate, slide, charge -> boost, headroom.
  * The kart is rail-ed back onto the centre line each frame — a 90-frame
@@ -209,7 +223,7 @@ console.log('\n== boost pads: layout + chain model ==');
   mark(K.padChain === 1, 'strips re-arm for the next pass');
 }
 {
-  const fake = [{ pos: new THREE.Vector3(1.5, 2.5, -2.25), heading: 0.75, speed: 12.5, steerVel: 0.3, offRoad: false, lapDone: 1, posIdx: 2, raceDone: false }];
+  const fake = [{ pos: new THREE.Vector3(1.5, 2.5, -2.25), heading: 0.75, speed: 12.5, steerVel: 0.3, offRoad: false, lapDone: 1, posIdx: 2, raceDone: false, item: ITEM_WALL }];
   const enc = makeStateEncoder(1);
   const d = decodeState(enc(987654, 17, fake), 1);
   mark(d.hostMs === 987654 && d.echoPing === 17, 'state header');
@@ -218,6 +232,20 @@ console.log('\n== boost pads: layout + chain model ==');
   mark(Math.abs(k.y - 2.5) < 1e-5, 'state pos y (elevation round-trips)');
   mark(Math.abs(k.heading - 0.75) < 1e-5 && Math.abs(k.speed - 12.5) < 1e-5, 'state speed');
   mark(k.lapDone === 1 && k.posIdx === 2 && !k.raceDone && !k.offRoad, 'state flags');
+  mark(k.item === ITEM_WALL, 'state frame round-trips the held item');
+}
+{
+  // legacy: a pre-item peer sends 28-byte karts (no item) — decode item = 0
+  // and still parse every other field at the right offsets
+  const v = new DataView(new ArrayBuffer(7 + 28));
+  v.setUint8(0, 0x20); v.setUint32(1, 42); v.setUint16(5, 9);
+  v.setFloat32(7, 1.5); v.setFloat32(11, 2.5); v.setFloat32(15, -2.25);
+  v.setFloat32(19, 0.75); v.setFloat32(23, 12.5); v.setFloat32(27, 0.3);
+  v.setUint8(31, 0); v.setUint8(32, 1); v.setUint8(33, 2); v.setUint8(34, 0);
+  const k = decodeState(v.buffer, 1).karts[0];
+  mark(k.item === 0, 'legacy 28-byte state frame decodes item = 0');
+  mark(Math.abs(k.y - 2.5) < 1e-5 && Math.abs(k.speed - 12.5) < 1e-5, 'legacy 28-byte frame still parses y/speed');
+  mark(k.lapDone === 1 && k.posIdx === 2 && !k.raceDone, 'legacy 28-byte frame still parses flags');
 }
 {   // backward compat: a pre-3D peer sends 24-byte karts (no y) — the
     // decoder must read y = 0 and still parse z/heading/speed correctly
@@ -381,11 +409,97 @@ console.log('\n== sugar hazards: LAN determinism + host race ==');
 }
 
 /* ------------------------------------------------------------------ *
+ *  Item boxes (items.js): seeded layout (wire-free, like pads/hazards),
+ *  deterministic rolls, and the effect models — turbo is the boost
+ *  currency, rubber is the passive trailing push, wall the projectile.
+ *  The 2P races below run with items ON, so simulateTick's full path
+ *  (pickups + AI/human fires + walls) is exercised end to end.
+ * ------------------------------------------------------------------ */
+console.log('\n== item boxes: layout + effect models ==');
+{
+  setItemsOn(true);
+  for (let ti = 0; ti < TRACKS.length; ti++) {
+    buildItems(ti);
+    const snap = itemBoxList.map(b => b.u.toFixed(4) + ',' + b.o.toFixed(3) + ',' + b.item).join('|');
+    buildItems(ti);   // as a "freshly-joined client" would
+    mark(itemBoxList.length >= 1 &&
+      itemBoxList.map(b => b.u.toFixed(4) + ',' + b.o.toFixed(3) + ',' + b.item).join('|') === snap,
+      `item layout seeded-deterministic (track ${ti}, ${itemBoxList.length} boxes)`);
+    mark(itemBoxList.every(b => [ITEM_TURBO, ITEM_RUBBER, ITEM_WALL].includes(b.item) && b.respawnT === 0),
+      `track ${ti}: boxes hold real items and start live`);
+  }
+  setItemsOn(false);
+  buildItems(0);
+  mark(itemBoxList.length === 0, 'items OFF: no boxes built (the gates stay pure)');
+  setItemsOn(true);
+
+  // effect models — two karts on the line of track 0
+  selectTrack(0);
+  buildItems(0);
+  const A = new Kart({ isPlayer: true, name: 'A' });
+  const B = new Kart({ isPlayer: false, name: 'B', skill: 1 });
+  // turbo: the drift/pad boost currency, full charge + edge flag
+  A.placeAt(0.20, 0);
+  A.item = ITEM_TURBO;
+  const ev = useItem(A);
+  mark(ev && ev.kind === 'turbo' && A.item === 0 && A.boost >= 1 && A.boostEdge,
+    'turbo fires: slot empties, boost full, edge flagged');
+  // rubber: pushes a TRAILING holder only
+  B.placeAt(0.30, 0);
+  A.item = ITEM_RUBBER;
+  const s0 = A.speed;
+  for (let i = 0; i < 60; i++) tickRubber([A, B], 1 / 60);
+  mark(A.speed > s0, `rubber pushes the trailing holder (${s0.toFixed(1)} -> ${A.speed.toFixed(1)} u/s)`);
+  B.item = ITEM_RUBBER; A.item = 0;
+  const s1 = B.speed;
+  for (let i = 0; i < 60; i++) tickRubber([A, B], 1 / 60);
+  mark(B.speed === s1, 'rubber never pushes the leader');
+  // wall: flies, slams the first rival, vanishes; thrower exempt; expires.
+  // (placeAt leaves heading/trackIdx alone — point A down the track first)
+  A.placeAt(0.40, 0);
+  {
+    const a = Math.floor(0.40 * n) % n;
+    A.heading = Math.atan2(samples[(a + 1) % n].x - samples[a].x, samples[(a + 1) % n].z - samples[a].z);
+    A.trackIdx = a;
+  }
+  // B sits 8u straight ahead along A's heading — ON the wall's flight line
+  // (a target 13u around the next corner would never be hit by a straight
+  //  projectile, which is correct behaviour, not a bug)
+  B.pos.set(A.pos.x + Math.sin(A.heading) * 8, 0, A.pos.z + Math.cos(A.heading) * 8);
+  B.trackIdx = A.trackIdx; B.speed = 15;
+  A.item = ITEM_WALL;
+  mark(useItem(A) && walls.length === 1, 'wall throw: one projectile in flight');
+  const bs = B.speed;
+  let hitWho = null;
+  for (let i = 0; i < 60 * 4 && walls.length; i++) tickItems([A, B], 1 / 60, (w, k) => { hitWho = k; });
+  mark(hitWho === B, 'wall slams the kart ahead of the thrower');
+  mark(hitWho && hitWho.speed < bs * 0.6, 'wall hit cuts the target speed');
+  mark(walls.length === 0, 'wall consumed on hit');
+  B.pos.z -= 200;   // clear the line so the next throw finds nothing
+  A.item = ITEM_WALL; useItem(A);
+  for (let i = 0; i < 60 * 4; i++) tickItems([A, B], 1 / 60);
+  mark(walls.length === 0, 'wall expires after its lifetime when it hits nothing');
+  // pickup: a kart over a live box grabs the box's (fixed) item; the box
+  // goes into its cooldown and comes back
+  buildItems(0);
+  const box = itemBoxList[0];
+  A.item = 0; A.itemT = 0;
+  A.pos.x = box.x; A.pos.y = box.y; A.pos.z = box.z;
+  tickItems([A, B], 1 / 60);
+  mark(A.item === box.item, `pickup grants the box item (${A.item})`);
+  mark(Math.abs(box.respawnT - ITEM_RESPAWN) < 1e-9, 'picked box enters its respawn cooldown');
+  for (let i = 0; i < 60 * (ITEM_RESPAWN + 1); i++) tickItems([A, B], 1 / 60);
+  mark(box.respawnT === 0, 'box back after the cooldown');
+  setItemsOn(true);   // the 2P race loop below wants them on
+}
+
+/* ------------------------------------------------------------------ *
  *  Host-authoritative 2P race: 2 human input streams + 2 AI, 60 Hz
+ *  (items ON — pickups + fires ride the same simulateTick path)
  * ------------------------------------------------------------------ */
 for (let ti = 0; ti < TRACKS.length; ti++) {
   const info = selectTrack(ti);
-  console.log(`\n== ${info.name} - 2P host race (${info.points} pts) ==`);
+  console.log(`\n== ${info.name} - 2P host race (${info.points} pts, items ON) ==`);
 
   // mirrors main.js resetKarts for 2P: humans front row, AI behind
   const list = [0, 1, 'P2', 'YOU'].map((who, i) => {
@@ -406,12 +520,20 @@ for (let ti = 0; ti < TRACKS.length; ti++) {
   const p1 = list[2], p2 = list[3];
 
   let t = 0; const GO = 3000; let racing = false;
+  let pickups = 0, wallHits = 0;
+  const seen = new Map();
   while (t < 300 * 1000 && !(p1.raceDone && p2.raceDone)) {
     racing = (t >= GO);
     simulateTick(list, (k, r) => r ? (k.net ? humanPilot(k) : aiControl(k, list)) : { throttle: 0, steer: 0 },
-      SIM_DT, t, { racing, crashFor: null });
+      SIM_DT, t, { racing, crashFor: null, wallFor: () => { wallHits++; } });
+    for (const k of list) {   // count 0 -> item transitions (pickups)
+      const was = seen.get(k) ?? 0;
+      if (k.item && !was) pickups++;
+      seen.set(k, k.item);
+    }
     t += SIM_DT * 1000;
   }
+  mark(pickups >= 3, `${info.name}: items exercised in the pack (pickups=${pickups})`);
 
   const secs = t / 1000;
   const order = raceOrder(list);
@@ -449,7 +571,9 @@ for (let ti = 0; ti < TRACKS.length; ti++) {
     mark(two[0].raceDone && two[1].raceDone, `${info.name}: 1v1 humans did not finish (${two.map(k => k.lapDone).join('/')})`);
     mark(two[0].posIdx !== two[1].posIdx, `${info.name}: 1v1 positions equal`);
   }
+  console.log(`  items: ${pickups} pickups, ${wallHits} wall hits`);
 }
+setItemsOn(false);
 
 console.log(failures === 0 ? `\n== NET-SIM PASS (${TRACKS.length} tracks, wire OK) ==`
                            : `\n== ${failures} NET-SIM FAILURE(S) ==`);

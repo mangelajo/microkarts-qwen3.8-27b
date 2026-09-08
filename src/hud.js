@@ -1,4 +1,4 @@
-import { LAPS, game, KMH_PER_U, BLAST_KMH } from './config.js';
+import { LAPS, game, KMH_PER_U, BLAST_KMH, ITEM_NAMES } from './config.js';
 import { TRACKS } from './tracks.js';
 import { getBestMs } from './ghost.js';
 
@@ -68,6 +68,7 @@ export function setMode(m) {
   netPanel.classList.toggle('hidden', m === 'solo');
   trackWrapEl().style.display = m === 'join' ? 'none' : '';
   hazardWrapEl().style.display = m === 'join' ? 'none' : ''; // join mirrors the host's pick
+  itemWrapEl().style.display = m === 'join' ? 'none' : '';   // ditto for item boxes
   for (const c of modeRow.children) c.classList.toggle('sel', c.dataset.mode === m);
   setStatus(m === 'solo' ? '' : 'standby');
 }
@@ -80,6 +81,7 @@ export function setStatus(s) {
 
 function trackWrapEl() { return el('trackWrap'); }
 function hazardWrapEl() { return el('hazardWrap'); }
+function itemWrapEl() { return el('itemWrap'); }
 
 let hostRoster = '2ai'; // '2ai' | '1v1' — host-owned, broadcast on start
 export function setHostRoster(r) {
@@ -125,6 +127,10 @@ export function updateHud(r, l, karts) {
   el('pos').parentElement.classList.toggle('lead', p.posIdx === 1);
   el('warn').textContent = p.fellOff ? 'FELL OFF — RESET' : 'OFF TRACK';
   el('warn').classList.toggle('on', (p.offRoad || p.fellOff) && game.state === 'racing');
+  // held item slot (items.js): glows per item kind; '—' while empty-handed
+  const it = p.item || 0;
+  el('itemSlot').textContent = it ? ITEM_NAMES[it] : '—';
+  el('itemSlot').dataset.item = it;
 }
 
 /* ------------------------------------------------------------------ *
@@ -204,4 +210,37 @@ export function getHazardOn() {
 
 export function loadHazardPref() {
   try { return localStorage.getItem('mkr-hazard') === '1'; } catch { return false; }
+}
+
+/* ------------------------------------------------------------------ *
+ *  Item-box toggle — chips on the menu; persisted in localStorage.
+ *  Mirrors the hazard picker exactly (host broadcasts the pick over the
+ *  wire; join clients mirror it and hide their own chips).
+ * ------------------------------------------------------------------ */
+const itemChips = [];
+let itemOnChange = null;
+
+export function initItemPicker(onChange, initialOn) {
+  itemOnChange = onChange;
+  const row = el('itemRow');
+  for (const c of row.children) {
+    c.addEventListener('click', e => { setItem(c.dataset.item === 'on'); e.target.blur(); });
+    itemChips.push(c);
+  }
+  setItem(initialOn, /*fire*/ false);
+}
+
+export function setItem(on, fire = true) {
+  const v = !!on;
+  for (const c of itemChips) c.classList.toggle('sel', c.dataset.item === (v ? 'on' : 'off'));
+  try { localStorage.setItem('mkr-items', v ? '1' : '0'); } catch { /* private mode */ }
+  if (fire && itemOnChange) itemOnChange(v);
+}
+
+export function getItemOn() {
+  return itemChips.some(c => c.dataset.item === 'on' && c.classList.contains('sel'));
+}
+
+export function loadItemPref() {
+  try { return localStorage.getItem('mkr-items') === '1'; } catch { return false; }
 }

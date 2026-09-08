@@ -9,9 +9,10 @@ import { renderer, scene, camera, updateDust, dustForKart } from './scene.js';
 import { initMinimap, setMinimapVisible, updateMinimap, resizeMinimap } from './minimap.js';
 import { Kart } from './kart.js';
 import { aiControl } from './ai.js';
-import { selectTrack, samples, trackLen } from './track.js';
+import { selectTrack, samples, trackLen, updateItemBoxes, syncWallMeshes } from './track.js';
 import { GRID, simulateTick, raceOrder } from './race.js';
 import { setObstaclesOn, getObstaclesOn } from './obstacles.js';
+import { setItemsOn, getItemsOn, itemBoxList, ITEM_TURBO, ITEM_WALL, ITEM_RESPAWN } from './items.js';
 import { NetSession, makeStateEncoder, encFinish } from './net.js';
 import { FrameRing, sampleState } from './interp.js';
 import {
@@ -20,12 +21,13 @@ import {
   setMode, setStatus, hostCode, hostMsg, joinMsg, getMode,
   initModePicker, setHostRoster,
   initHazardPicker, setHazard, getHazardOn, loadHazardPref,
+  initItemPicker, setItem, getItemOn, loadItemPref,
 } from './hud.js';
 import * as audio from './audio.js';
 import {
   initGhost, ghostSetTrack, ghostLapStart, ghostFrame, ghostLapDone, ghostStop,
 } from './ghost.js';
-import { getDrive, initTouch, setActive as touchSetActive, pulseHint } from './touch.js';
+import { getDrive, initTouch, setActive as touchSetActive, pulseHint, isTouchDevice } from './touch.js';
 
 /* ------------------------------------------------------------------ *
  *  Karts — the roster has 3 AI bodies (solo uses 3, 2P uses 2) + the
@@ -123,7 +125,11 @@ addEventListener('keydown', e => {
     if (e.code === 'KeyZ' && getMode() !== 'join') {
       audio.ensureAudio(); toggleHazard(); audio.beep(getObstaclesOn() ? 440 : 330);
     }
+    if (e.code === 'KeyI' && getMode() !== 'join') {
+      audio.ensureAudio(); toggleItems(); audio.beep(getItemsOn() ? 440 : 330);
+    }
   }
+  if (e.code === 'KeyE' && game.state === 'racing' && !e.repeat) itemUseQ++; // fire held item
   if (e.code === 'Space') { keys.drift = true; e.preventDefault(); }   // hold to drift
 });
 addEventListener('keyup', e => {
@@ -142,9 +148,26 @@ addEventListener('resize', () => {
 // via the same {throttle, steer} channel as the keyboard (see readDrive).
 initTouch(renderer.domElement);
 
+// item use is edge-triggered: E queues one fire (itemUseQ), touch devices
+// auto-fire a turbo/wall ~450 ms after pickup (autoUseAt). The rubber band
+// never needs the button — it works passively (items.js tickRubber).
+let itemUseQ = 0;
+let autoUseAt = 0;
+let lastPlayerItem = 0;   // pickup sfx + touch auto-fire arming
+function tryConsumeItemUse(now) {
+  const touchFire = isTouchDevice() && now >= autoUseAt
+    && (player.item === ITEM_TURBO || player.item === ITEM_WALL);
+  if (itemUseQ > 0 || touchFire) { itemUseQ = 0; autoUseAt = 0; return true; }
+  return false;
+}
+
 function keyInput(k, racing) {
   if (!k.isPlayer || !racing) return { throttle: 0, steer: 0 };
-  return readDrive(racing);
+  const c = readDrive(racing);
+  if (tryConsumeItemUse(performance.now())) {
+    return { throttle: c.throttle, steer: c.steer, drift: c.drift, use: true }; // spread: drive is shared
+  }
+  return c;
 }
 
 /* ------------------------------------------------------------------ *
@@ -154,7 +177,7 @@ game.netMode = 0; // 0 solo · 2 two-player
 let net = null;
 let hostSimT = 0;          // host sim clock (ms)
 let hostAcc = 0;           // fixed-step accumulator
-let lastNetInput = { throttle: 0, steer: 0, drift: false, ping: -1, at: 0 };
+let lastNetInput = { throttle: 0, steer: 0, drift: false, use: false, ping: -1, at: 0 };
 let stateEncoder = null;
 let clientRing = null;
 let clientLapSeen = [];
@@ -172,7 +195,7 @@ function sessionCbs() {
     onOpen: () => {
       setStatus('CONNECTED');
       audio.beep(880);
-      if (netRole() === 'host') { net.sendTrack(getTrackIdx(), getObstaclesOn()); hostMsg.textContent = 'P2 connected! Pick a track, then press START RACE.'; }
+      if (netRole() === 'host') { net.sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn()); hostMsg.textContent = 'P2 connected! Pick a track, then press START RACE.'; }
       if (netRole() === 'join') joinMsg.textContent = 'CONNECTED! Now wait — the host picks the track and starts the race.';
     },
     onStatus: s => {
@@ -209,13 +232,16 @@ function sessionCbs() {
         hideCountdown();
       }
     },
-    onTrack: (idx, haz) => { // host → live picker preview (client watches the host's chips)
+    onTrack: (idx, haz, itm) => { // host → live picker preview (client watches the host's chips)
       if (netRole() !== 'join') return;
       const wantObs = haz === undefined ? getObstaclesOn() : !!haz;
+      const wantItm = itm === undefined ? getItemsOn() : !!itm;   // old host: keep local
       const obsChanged = getObstaclesOn() !== wantObs;
+      const itmChanged = getItemsOn() !== wantItm;
       const idxChanged = idx !== getTrackIdx();
-      if (!idxChanged && !obsChanged) return;
+      if (!idxChanged && !obsChanged && !itmChanged) return;
       if (obsChanged) setObstaclesOn(wantObs);
+      if (itmChanged) setItemsOn(wantItm);
       if (idx === getTrackIdx()) selectTrack(idx);  // flag-only change: rebuild, chips already right
       else setTrack(idx);                            // idx change: rebuild + chips via onChange
     },
@@ -228,6 +254,7 @@ function sessionCbs() {
       if (netRole() !== 'join') return;
       if (!clientRing) return;
       clientRing.push(st, performance.now());
+      mirrorItemPickups(st);   // boxes are deterministic locally — no wire traffic
       game.net = st;
       clientRaceBookkeeping(st);
       // RTT readout: host echoes the ping from our latest input
@@ -240,7 +267,7 @@ function sessionCbs() {
       clientFinish(order, lapsMs);
     },
     onInput: inp => { // client → host: drives the peer's kart on the sim
-      lastNetInput = { throttle: inp.throttle, steer: inp.steer, drift: inp.drift, ping: inp.ping, at: performance.now() };
+      lastNetInput = { throttle: inp.throttle, steer: inp.steer, drift: inp.drift, use: !!inp.use, ping: inp.ping, at: performance.now() };
     },
     onClose: () => onPeerLost(),
   };
@@ -256,6 +283,7 @@ function onPeerLost() {
   const s = net; net = null;
   if (s && !s.closed) s.close(); // fires onClose → re-enters onPeerLost, guarded by s.closed
   hostAcc = 0; lastNetInput.ping = -1;
+  lastNetInput = { throttle: 0, steer: 0, drift: false, use: false, ping: -1, at: 0 };
   if (p2) p2.netOn = false;
   syncRosterVisibility();
   if (wasNet && wasRacing) {
@@ -277,7 +305,7 @@ const LAN_HINT = (location.hostname === 'localhost' || location.hostname === '12
 function beginHostSession() {
   if (net) net.close();
   hostSimT = 0; hostAcc = 0;
-  lastNetInput = { throttle: 0, steer: 0, drift: false, ping: -1, at: 0 };
+  lastNetInput = { throttle: 0, steer: 0, drift: false, use: false, ping: -1, at: 0 };
   ensureP2().netOn = false; // peer's kart is AI-free until the channel opens
   net = new NetSession('host', sessionCbs());
   net.kartN = racers().length;
@@ -320,8 +348,11 @@ function joinPasteOffer() {
 }
 
 /* ---------------------------- client (join) ---------------------------- */
+let clientItemSeen = [];   // per-kart: did the last frame carry an item? (pickup mirror)
+
 function clientStart(info) {
   ensureP2();
+  clientItemSeen = racers().map(() => false);
   game.roster = info.karts === 2 ? '1v1' : '2ai';
   net.kartN = info.karts;
   syncRosterVisibility();
@@ -405,6 +436,7 @@ function applyClientState(dt) {
     k.steerVel = m.steerVel;
     k.offRoad = m.offRoad;
     k.posIdx = m.posIdx;
+    k.item = m.item ?? 0;   // held item (interpolated frames pass it through intact)
     // cosmetic tumble mirror: run the same corner-torque dynamics as the
     // local sim so a falling remote kart tips the same way (host stays
     // authoritative for position; the pose is derived, never sent)
@@ -488,6 +520,34 @@ function obJuice(k, v) {
   if (k === player || k === p2) audio.crash(v * 0.8);
 }
 
+/* wall juice: shake + thump when one of our karts eats a wall (host + solo;
+ * the join client sees the slam via the host's position snap + jolt). */
+function wallJuice(w, k) {
+  if (k === player || k === p2) { addShake(0.8); audio.crash(0.8); }
+}
+
+/* Item pickup mirror (join client only): when a kart's item goes 0 -> X the
+ * host just grabbed a box — hide the nearest live box for the respawn window
+ * so our boxes match the host's. Layout + rolls are seeded identically on
+ * both ends, so only the pickup itself needs mirroring (it already rides
+ * the item field; we just use it to schedule the local box's cooldown). */
+function mirrorItemPickups(st) {
+  const list = racers();
+  for (let i = 0; i < list.length && i < st.karts.length; i++) {
+    const it = st.karts[i].item ?? 0;
+    if (it && !clientItemSeen[i]) {
+      let best = null, bd = 3 * 3;
+      for (const b of itemBoxList) {
+        if (b.respawnT > 0) continue;
+        const d2 = (b.x - st.karts[i].x) ** 2 + (b.z - st.karts[i].z) ** 2;
+        if (d2 < bd) { bd = d2; best = b; }
+      }
+      if (best) best.respawnT = ITEM_RESPAWN;
+    }
+    clientItemSeen[i] = !!it;
+  }
+}
+
 /* ------------------------------------------------------------------ *
  *  Race lifecycle
  * ------------------------------------------------------------------ */
@@ -502,6 +562,8 @@ function startRace() {
   audio.startMusic(getTrackIdx());
   game.laps = LAPS;
   resetKarts();
+  itemUseQ = 0; autoUseAt = 0; lastPlayerItem = 0;   // fresh item state each race
+  clientItemSeen = racers().map(() => false);
   ghostStop();          // fresh race: the ghost restarts at GO
   game.raceTime = 0;
   game.raceOverAt = 0;
@@ -607,7 +669,7 @@ initTrackPicker(
   idx => {
     selectTrack(idx);
     ghostSetTrack(idx);   // best laps + ghost timeline are per-track
-    if (netRole() === 'host') net.sendTrack(getTrackIdx(), getObstaclesOn()); // client previews the host's track
+    if (netRole() === 'host') net.sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn()); // client previews
   },
 );
 
@@ -619,11 +681,24 @@ initHazardPicker(
   on => {
     setObstaclesOn(on);
     selectTrack(getTrackIdx());
-    if (netRole() === 'host') net.sendTrack(getTrackIdx(), getObstaclesOn()); // client mirrors hazards
+    if (netRole() === 'host') net.sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn()); // client mirrors
   },
   getObstaclesOn(),
 );
-if (getTrackIdx() !== 0 || getObstaclesOn()) selectTrack(getTrackIdx());
+
+// item boxes: restore the persisted toggle BEFORE the first rebuild so the
+// boot-up track already has its boxes; I on the menu toggles them too.
+function toggleItems() { setItem(!getItemOn()); }
+setItemsOn(loadItemPref());
+initItemPicker(
+  on => {
+    setItemsOn(on);
+    selectTrack(getTrackIdx());
+    if (netRole() === 'host') net.sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn()); // client mirrors
+  },
+  getItemsOn(),
+);
+if (getTrackIdx() !== 0 || getObstaclesOn() || getItemsOn()) selectTrack(getTrackIdx());
 
 // restore mute preferences
 try {
@@ -695,7 +770,7 @@ initModePicker(
  * ------------------------------------------------------------------ */
 function soloInputFor(k, racing) {
   if (k.isPlayer) return keyInput(k, racing);
-  if (racing) { const c = aiControl(k, racers()); return { throttle: c.throttle, steer: c.steer }; }
+  if (racing) { const c = aiControl(k, racers()); return { throttle: c.throttle, steer: c.steer, use: !!c.use }; }
   return { throttle: 0, steer: 0 };
 }
 
@@ -705,11 +780,11 @@ function hostInputFor(k, racing) {
     // the peer's kart: driven from the wire (or still before the channel / GO)
     if (!racing || !net || !net.open || p2.netOn === false) return { throttle: 0, steer: 0 };
     if (lastNetInput.at && performance.now() - lastNetInput.at < 250) {
-      return { throttle: lastNetInput.throttle, steer: lastNetInput.steer, drift: lastNetInput.drift };
+      return { throttle: lastNetInput.throttle, steer: lastNetInput.steer, drift: lastNetInput.drift, use: !!lastNetInput.use };
     }
     return { throttle: 0, steer: 0 }; // peer frozen — no phantom throttle
   }
-  if (racing) { const c = aiControl(k, racers()); return { throttle: c.throttle, steer: c.steer }; }
+  if (racing) { const c = aiControl(k, racers()); return { throttle: c.throttle, steer: c.steer, use: !!c.use }; }
   return { throttle: 0, steer: 0 };
 }
 
@@ -807,9 +882,17 @@ function animate() {
     if (game.state === 'racing') {
       // live touch drag drives over the wire; otherwise the keyboard. steer pitch
       const d = readDrive(true);
-      net.inputNow(d.throttle, d.steer, d.drift);
+      const use = tryConsumeItemUse(performance.now());   // E / touch auto-fire
+      net.inputNow(d.throttle, d.steer, d.drift, use);
       applyClientState(dt);
       const sk = selfKart();
+      if (sk.item !== lastPlayerItem) {   // item juice on the wire-mirrored item
+        if (sk.item !== 0) {
+          audio.beep(660 + 220 * sk.item);
+          if (isTouchDevice() && (sk.item === ITEM_TURBO || sk.item === ITEM_WALL)) autoUseAt = performance.now() + 450;
+        }
+        lastPlayerItem = sk.item;
+      }
       audio.updateEngine(sk.speed, d.steer, !sk.offRoad, d.drift && sk.speed * KMH_PER_U > DRIFT_MIN_KMH); // engine sound from interpolated speed
     }
   } else {
@@ -828,6 +911,7 @@ function animate() {
           racing,
           crashFor: crashJuice,
           obFor: obJuice,
+          wallFor: wallJuice,
         });
         if (net.open && racing) broadcastState();
         hostAcc -= SIM_DT;
@@ -840,6 +924,7 @@ function animate() {
         racing,
         crashFor: crashJuice,
         obFor: obJuice,
+        wallFor: wallJuice,
       });
       clockMs = now;
     }
@@ -847,6 +932,13 @@ function animate() {
     if (player.boostEdge) {   // drift released with charge — whoosh (louder = more charge)
       player.boostEdge = false;
       if (player.boost > 0.2) audio.beep(430 + 640 * player.boost);
+    }
+    if (racing && player.item !== lastPlayerItem) {   // pickup chime + touch auto-fire arming
+      if (player.item !== 0) {
+        audio.beep(660 + 220 * player.item);
+        if (isTouchDevice() && (player.item === ITEM_TURBO || player.item === ITEM_WALL)) autoUseAt = now + 450;
+      }
+      lastPlayerItem = player.item;
     }
     if (player.lapDone !== game.lastLapBeep) {
       game.lastLapBeep = player.lapDone;
@@ -893,6 +985,8 @@ function animate() {
    } else {
     setMinimapVisible(false);
    }
+  updateItemBoxes(dt, now);   // spin + bob the item boxes (hidden while respawning)
+  syncWallMeshes();           // point the pooled wall meshes at live projectiles
   renderer.render(scene, camera);
 }
 

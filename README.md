@@ -42,6 +42,8 @@ non-zero if a driver can't hold the road or recover.
 | `N`            | SFX on/off        |
 | `K`            | Minimap on/off    |
 | `Z`            | Sugar hazards on/off (menu; join mirrors the host) |
+| `E`            | Use item — turbo / wall (rubber is passive; touch auto-fires on pickup) |
+| `I`            | Item boxes on/off (menu; join mirrors the host) |
 | `Enter` / `R`  | Start / restart   |
 
 3 laps to finish. Best lap per track is stored locally — a translucent ghost kart
@@ -125,6 +127,20 @@ take in the catalogue. All track shapes are validated headlessly.
 - **Beat your ghost** — best lap per track + a ~10 Hz position timeline persist in
   `localStorage`; a translucent ghost plays it back aligned to your current lap
   (solo + host — join clients mirror, never record)
+- **Item boxes** (`src/items.js`) — three candy boxes per track on a seed-per-track RNG
+  (like pads and hazards: host and every LAN client build the identical field from the track
+  index alone, nothing streamed). Each box's own seeded PRNG fixes its reward — turbo (45%),
+  rubber band (30%), wall (25%) — and it re-grants the same item after an 8 s respawn. Turbo is
+  the drift/pad boost currency; the rubber band passively pushes a trailing holder (MK8-style:
+  `E` does nothing while holding it); the wall flies as a host-authoritative projectile and
+  slams the first rival it touches. Pickups / fires / hits all run inside `simulateTick` (solo +
+  host + net-sim share the model); the AI fires turbo on pickup and throws the wall only at
+  close range; humans fire with `E` (touch: 450 ms auto-fire). Held item rides the state frame
+  as one u8 per kart (29-byte karts; pre-item peers decode item = 0), the input frame gains a
+  `use` bit (old frames decode use = false), and the track frame grows to 4 bytes (old 3-byte
+  peers keep their local setting). OFF by default — chip or `I` in the menu, persisted, host
+  broadcasts; `make sim` runs an items-ON pack per track and `make netsim` covers wire
+  round-trips, legacy decodes, layout determinism and the effect models
 
 ## Code layout
 
@@ -141,6 +157,7 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/race.js`     | Headless race core: grid, progress, positions, collisions, `simulateTick()` |
 | `src/pads.js`     | Boost-pad field: seeded straight-aware layout + chain-hit model (pure) |
 | `src/obstacles.js`| Sugar-hazard field: seeded candy layout + per-driver AI dodging (pure) |
+| `src/items.js`    | Item boxes: seeded layout + weighted rolls, pickups, wall projectiles, rubber band (pure) |
 | `src/touch.js`    | Mobile "pull" joystick: first finger seeds a virtual stick, drag = drive vector |
 | `src/textures.js` | Procedural canvas textures (wood table, …) |
 | `src/net.js`      | 2P wire protocol (enc/dec) + `NetSession` (pairing, DataChannel routing) |

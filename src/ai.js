@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { MAX_SPEED, STEER_RATE, ROAD_HW, N_SAMPLES, clamp, turnFactor, SLOPE_BRAKE_FACTOR } from './config.js';
+import { MAX_SPEED, STEER_RATE, ROAD_HW, N_SAMPLES, clamp, turnFactor, SLOPE_BRAKE_FACTOR, ITEM_TURBO, ITEM_WALL } from './config.js';
 import { samples, sampleHead, angDiff, curvatureAt, slopeAt, trackLen } from './track.js';
 import { obstacleAvoid, blockingHazard } from './obstacles.js';
 
@@ -155,5 +155,23 @@ let vNeed = Infinity;
     steer = clamp(rErr * (P.gain * 1.8 + 1.5), -1.5, 1.5);   // sharper pursuit while recovering
     if (throttle === 1 && k.speed < topSp * 0.5) throttle = 0.7; // don't floor it back onto the line
   }
-  return { throttle, steer };
+  // item use: turbo fires immediately (free speed, no reason to hold it);
+  // the wall fires only when a rival is inside a throw cone ahead; the
+  // rubber band is passive (tickRubber) and never needs the button.
+  let use = k.item === ITEM_TURBO;
+  if (k.item === ITEM_WALL) {
+    const fx = Math.sin(k.heading), fz = Math.cos(k.heading);
+    const lx = -Math.cos(k.heading), lz = Math.sin(k.heading);
+    for (const o of karts) {
+      if (o === k) continue;
+      const dx = o.pos.x - k.pos.x, dz = o.pos.z - k.pos.z;
+      const fwd = dx * fx + dz * fz;
+      // only close range: beyond ~10u the projectile can't outrun a rival
+      // kart inside its lifetime, so a long shot would just fizzle
+      if (fwd < 2 || fwd > 10) continue;
+      const side = dx * lx + dz * lz;
+      if (Math.abs(side) < 1 + fwd * 0.35) { use = true; break; }
+    }
+  }
+  return { throttle, steer, use };
 }
