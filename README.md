@@ -182,3 +182,7 @@ All game constants live in `src/config.js`: `ACCEL`, `BRAKE`, `MAX_SPEED`,
 To change a track shape, edit its control-point array in `src/tracks.js`
 (closed Catmull-Rom loop). After adjusting AI or physics, run `make sim` to make
 sure the drivers hold the road on every track.
+
+## License
+
+MIT-0 (zero-clause) — see [LICENSE](LICENSE).
