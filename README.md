@@ -77,7 +77,8 @@ take in the catalogue. All track shapes are validated headlessly.
   tracks). Karts stick to the road surface while on it, and the slope drives
   speed: `speed += -slope * GRAVITY * dt`, so climbs bleed and drops feed.
   Flat out over a crest, a kart launches when `v²·curvature > gravity` and
-  flies a short parabola until the road holds it again. Off the edge, a
+  flies a short parabola until the road holds it again. The red/white curb is
+  road: wheels on it are fully supported and never tip. Past the curb, a
   wheel-level torque model tips the kart in the direction of exit — nose into
   the edge: nose down, tail: tail down, side: roll to the floating side, one
   corner: diagonal flip — then it tumbles under real gravity to the table;

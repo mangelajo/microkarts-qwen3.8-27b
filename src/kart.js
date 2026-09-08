@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {
   ACCEL, BRAKE, MAX_SPEED, MAX_REV, DRAG, OFF_DRAG, OFF_GRIP, STEER_RATE, MAX_VISUAL_STEER,
-  ROAD_HW, WHEEL_R, N_SAMPLES, LAPS, KMH_PER_U, clamp, turnFactor, GRAVITY,
+  ROAD_HW, CURB_W, WHEEL_R, N_SAMPLES, LAPS, KMH_PER_U, clamp, turnFactor, GRAVITY,
   FALL_G, FELL_MIN_HEIGHT, FELL_PENALTY, JUMP_MIN_SPEED, TUMBLE_RATE,
   DRIFT_MIN_KMH, DRIFT_STEER, DRIFT_GRIP, DRIFT_MAX_SLIP, DRIFT_DRAG,
   DRIFT_CHARGE_MAX, DRIFT_CHARGE_MIN, BOOST_ACCEL, BOOST_HEADROOM,
@@ -9,6 +9,11 @@ import {
 import { scene } from './scene.js';
 import { samples, trackLen, sampleHead } from './track.js';
 import { makeBlastFx } from './blastfx.js';
+
+// The physical lip is the OUTER curb edge: the red/white border is still
+// road — wheels on it are fully supported and never tip. (offRoad handling
+// still fires earlier, so the curb keeps a little grip cost.)
+const ROAD_LIP = ROAD_HW + CURB_W;
 
 // orientation: tilt around the kart's OWN left-right axis, then yaw. Euler
 // x+y would yaw first and pitch around WORLD X, so the wheels dug into
@@ -316,10 +321,14 @@ export class Kart {
       const wz = this.pos.z - x2 * sh + z2 * ch;
       const wy = this.pos.y + y2;
       const lx = (wx - S.x) * nx + (wz - S.z) * nz;  // corner lateral offset
-      const dx = Math.abs(lx) - ROAD_HW;           // how far past the lip
+      const dx = Math.abs(lx) - ROAD_LIP;        // how far past the curb lip
       let sup;
-      if (dx <= 0.2) sup = S.y;                 // lip deadzone: road face still holds the wheel
-      else if (dx <= 2.5) sup = S.y * (1 - (dx - 0.2) / 2.3);  // grip fades as the wheel clears the face
+      // deadzone spans a full curb-width past the lip: a kart centred anywhere
+      // on the curb still has its outer wheel inside (max +0.95u), so the
+      // whole red/white border is drivable with zero float. Beyond the curb
+      // the grip fades over 2.3 u, then the wheel is gone.
+      if (dx <= CURB_W) sup = S.y;
+      else if (dx <= CURB_W + 2.3) sup = S.y * (1 - (dx - CURB_W) / 2.3);
       else sup = 0;                             // fully off the ribbon
       const g = Math.max(0, wy - sup - 0.15);
       tP += g * cz;    // front corner floats -> nose down (+X rotation)
@@ -484,9 +493,9 @@ export class Kart {
     {
       const n = N_SAMPLES, i = this.trackIdx;
       const roadY = samples[i].y;
-      // Physics stick band extends to the ribbon lip (the offRoad HUD flag
+      // Physics stick band extends to the curb lip (the offRoad HUD flag
       // fires earlier); a wheel just over the lip is still held by the face.
-      const onRoad = this.lat <= ROAD_HW + 0.5 && Math.abs(this.pos.y - roadY) < 1.5;
+      const onRoad = this.lat <= ROAD_LIP + 0.5 && Math.abs(this.pos.y - roadY) < 1.5;
       if (this.airborne) {
         this.slope = 0;
         if (this.tumbling) {
@@ -505,7 +514,7 @@ export class Kart {
           this.tipped = false;
           this.omegaP = 0;
           this.omegaR = 0;
-        } else if (this.lat <= ROAD_HW + 0.5 && !this.tipped && this.pos.y <= roadY && this.pos.y >= roadY - 1) {
+        } else if (this.lat <= ROAD_LIP + 0.5 && !this.tipped && this.pos.y <= roadY && this.pos.y >= roadY - 1) {
           // back on the surface (roadY-1 floor: a kart 13 u BELOW the road
           // never snaps up — no magic lift)
           const impact = -this.vy;

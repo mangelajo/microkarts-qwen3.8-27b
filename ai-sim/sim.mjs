@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import { samples, selectTrack } from '../src/track.js';
 import { TRACKS } from '../src/tracks.js';
-import { N_SAMPLES, AI_SKILL } from '../src/config.js';
+import { N_SAMPLES, AI_SKILL, ROAD_HW, CURB_W } from '../src/config.js';
 import { Kart } from '../src/kart.js';
 import { aiControl } from '../src/ai.js';
 import { setObstaclesOn, buildObstacles, collideObstacles, obstacleList } from '../src/obstacles.js';
@@ -267,6 +267,48 @@ for (let ti = 0; ti < TRACKS.length; ti++) {
     // restore the off state: items are opt-in, the other gates stay pure
     setItemsOn(false);
     selectTrack(ti);
+  }
+
+  console.log('\n== curb is road (wheels on the red/white border never tip) ==');
+  {
+    // worst case is the highest point of the track (largest possible float
+    // gap if the support ever fails); flat tracks: y = 0 everywhere
+    let hi = 0;
+    for (let i = 1; i < n; i++) if (samples[i].y > samples[hi].y) hi = i;
+    const H = posAt(hi / n);
+    const LIP = ROAD_HW + CURB_W;
+    const ky = new Kart({ isPlayer: true, name: 'YOU', skill: 0.95 });
+    const placeOn = lat => {
+      ky.pos.copy(H.P).addScaledVector(H.Nn, lat);
+      ky.heading = Math.atan2(H.T.x, H.T.z);
+      ky.velDir = ky.heading;
+      ky.trackIdx = hi;
+      ky.prevU = hi / n;
+      ky.airborne = false; ky.tumbling = false; ky.tipped = false;
+      ky.pitch = 0; ky.roll = 0; ky.omegaP = 0; ky.omegaR = 0;
+    };
+    // outer wheel (0.95u off the centre) sitting ON the curb: fully supported
+    placeOn(ROAD_HW - 0.55);
+    mark(ky.cornerTorques().maxG === 0, `${info.name}: wheel on the curb is fully supported`);
+    // centre at the outer curb edge: at most a whisper of float, never a tip
+    placeOn(LIP);
+    mark(ky.cornerTorques().maxG < 0.5, `${info.name}: centre at the curb edge does not tip (gap ${ky.cornerTorques().maxG.toFixed(2)})`);
+    // well past the curb: the edge is still real on an elevated track
+    placeOn(LIP + 2.0);
+    const past = ky.cornerTorques().maxG;
+    mark(H.P.y <= 0.5 || past > 0.5, `${info.name}: past the curb the edge torques again (gap ${past.toFixed(2)})`);
+    // integration: hold the curb line for 2 s through the full step() path
+    placeOn(ROAD_HW - 0.55);
+    let tipped = false;
+    for (let i = 0; i < 120; i++) {
+      ky.step(DT, 1, 0, i * 17, false);
+      if (ky.tipped) { tipped = true; break; }
+      const Q = posAt(ky.trackIdx / n);   // re-anchor: this test is about the curb,
+      ky.pos.copy(Q.P).addScaledVector(Q.Nn, ROAD_HW - 0.55);  // not about cornering
+      ky.heading = Math.atan2(Q.T.x, Q.T.z);
+      ky.velDir = ky.heading;
+    }
+    mark(!tipped, `${info.name}: 2 s driving on the curb never tips`);
   }
 }
 
