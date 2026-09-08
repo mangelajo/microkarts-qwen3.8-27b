@@ -1,6 +1,10 @@
 PORT ?= 8080
 
-.PHONY: install lint imports serve sim netsim
+.PHONY: install lint imports serve sim netsim deploy
+
+# production deploy target (ajo.es/microkarts) — override to deploy elsewhere
+DEPLOY_HOST ?= ajo@cpanel.optimizacionweb.es
+DEPLOY_DIR  ?= /home/ajo/public_html/ajo.es/microkarts
 
 install:
 	npm install
@@ -22,3 +26,8 @@ sim: install
 
 netsim: install
 	node --import ./ai-sim/stub.js ai-sim/net-sim.mjs
+
+# upload the game to the live server; run the gates first (`make sim netsim deploy`)
+deploy:
+	scp index.html $(DEPLOY_HOST):$(DEPLOY_DIR)/
+	scp src/* $(DEPLOY_HOST):$(DEPLOY_DIR)/src/

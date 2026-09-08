@@ -21,6 +21,9 @@ make sim     # AI drivers on every track
 make netsim  # wire round-trips + 2P race sims on every track
 ```
 
+Production deploy (uploads `index.html` + `src/` to ajo.es/microkarts — run the
+gates first: `make sim netsim deploy`):
+
 All game constants live in `src/config.js`: `ACCEL`, `BRAKE`, `MAX_SPEED`,
 `STEER_RATE`, `ROAD_HW`, `LAPS`, `AI_SKILL`, …
 
