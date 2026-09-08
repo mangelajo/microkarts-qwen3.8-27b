@@ -16,7 +16,8 @@ Headless AI test bench (runs the full suite on **every** track; fails the build 
 broken shape):
 
 ```bash
-make sim
+make sim     # AI drivers on every track
+make netsim  # wire round-trips + 2P race sims on every track
 ```
 
 All game constants live in `src/config.js`: `ACCEL`, `BRAKE`, `MAX_SPEED`,
@@ -40,6 +41,7 @@ non-zero if a driver can't hold the road or recover.
 | `M`            | Music on/off      |
 | `N`            | SFX on/off        |
 | `K`            | Minimap on/off    |
+| `Z`            | Sugar hazards on/off (menu; join mirrors the host) |
 | `Enter` / `R`  | Start / restart   |
 
 3 laps to finish. Best lap per track is stored locally — a translucent ghost kart
@@ -49,7 +51,7 @@ races it alongside you, so you're always chasing your own best lap.
 
 Five circuits on the same dinner table, each with its own theme palette
 (sky, fog, lighting, table wood, road colour) — three flat loops and two
-whose roads rise off the table (up to ~13 u):
+whose roads rise off the table (up to ~15 u):
 
 | # | Track | Style |
 |---|-------|-------|
@@ -105,6 +107,14 @@ take in the catalogue. All track shapes are validated headlessly.
   builds, releasing fires a mini-boost scaled by the slide. Touch: drag to full lock.
   Wire-compatible (flag byte in the input frame); the AI never drifts, so `make sim`
   is a true no-regression gate. 13 headless assertions in `make netsim`
+- **Sugar-hazard obstacles** (`src/obstacles.js`) — gumdrops, dice, gumballs and
+  other candy scattered on the asphalt on a seed-per-track RNG, so host and every
+  LAN client build the identical layout from the track index alone — nothing is
+  streamed over the wire and races stay 100% deterministic. Hits live in the shared
+  `race.js` `simulateTick` (solo + host + net-sim), and the AI dodges like a human:
+  skill-scaled lane avoidance with per-driver side hysteresis, and a
+  reverse-to-unwrap + 6 s per-hazard cooldown when a weak driver gets wedged.
+  Menu toggle: chip or `Z` (persisted)
 - **Boost pads** — glowing chevron strips auto-placed on each track's straights;
   crossing the three cells back-to-back chains a bigger and bigger kick, and the
   chain stacks with a drift release (drift-into-the-pads = go). The layout is
@@ -130,6 +140,9 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/blastfx.js`  | Exhaust flame/smoke particle pools above the speed threshold |
 | `src/race.js`     | Headless race core: grid, progress, positions, collisions, `simulateTick()` |
 | `src/pads.js`     | Boost-pad field: seeded straight-aware layout + chain-hit model (pure) |
+| `src/obstacles.js`| Sugar-hazard field: seeded candy layout + per-driver AI dodging (pure) |
+| `src/touch.js`    | Mobile "pull" joystick: first finger seeds a virtual stick, drag = drive vector |
+| `src/textures.js` | Procedural canvas textures (wood table, …) |
 | `src/net.js`      | 2P wire protocol (enc/dec) + `NetSession` (pairing, DataChannel routing) |
 | `src/interp.js`   | Client-side interpolation ring + sampler (50 ms delay, angular wrap) |
 | `src/main.js`     | Game loop, input, race lifecycle, camera, 2P host/join orchestration |

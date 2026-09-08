@@ -24,7 +24,7 @@ node --import ./ai-sim/stub.js ai-sim/sim.mjs
 
 ## Tuning the AI
 * `ai-sim/cal.mjs` sweeps lookahead parameters per skill — useful when
-  re-tuning `aiParams()` in `src/kart.js`:
+  re-tuning `aiParams()` in `src/ai.js`:
   `node --import ./ai-sim/stub.js ai-sim/cal.mjs`
 * Skills come from `AI_SKILL` in `src/config.js`; change them and re-run
   `make sim` to see the new pace spread (best-lap times should separate).
