@@ -13,5 +13,7 @@ class NoCache(SimpleHTTPRequestHandler):
 
 if __name__ == '__main__':
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
-    print(f'micro-kart dev server: http://localhost:{port} (no-cache)')
+    print('micro-kart dev server (no-cache):')
+    print(f'  game:                 http://localhost:{port}/')
+    print(f'  ai-sim playground:    http://localhost:{port}/ai-sim/playground.html')
     HTTPServer(('', port), NoCache).serve_forever()
