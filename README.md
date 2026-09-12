@@ -55,8 +55,8 @@ races it alongside you, so you're always chasing your own best lap.
 
 ## Tracks
 
-Five circuits on the same dinner table, each with its own theme palette
-(sky, fog, lighting, table wood, road colour) — three flat loops and two
+Six circuits on the same dinner table, each with its own theme palette
+(sky, fog, lighting, table wood, road colour) — four flat loops and two
 whose roads rise off the table (up to ~15 u):
 
 | # | Track | Style |
@@ -66,6 +66,7 @@ whose roads rise off the table (up to ~15 u):
 | 3 | MIDNIGHT TEARDROP | one long flowing bank, night |
 | 4 | SUGAR CANYON | the old loop over a ridge, sunset — climbs to the far crest, fast run back down |
 | 5 | MIDNIGHT RIDGE | teardrop over a ridge, night — climb the bank, drop the long bend |
+| 6 | NEBULA SWIRL | space table — outer ring + two inner hooks (a fast loop with a slow, twisty heart) |
 
 Pick with the chips on the menu (or `←`/`→`); the choice is remembered.
 Adding a track = a new entry in `src/tracks.js` (points + theme) and a

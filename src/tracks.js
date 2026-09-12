@@ -41,6 +41,13 @@ const THEMES = {
     wood: '#7a4a2e', road: 0x332e2c,
     light: { sun: 1.7, hemi: 0.9, fill: 0.4 },
   },
+  // a space-table night: deep indigo, a magenta nebula on the horizon
+  space: {
+    fog: 0x0d0a1e,
+    sky: [[0.00, 0x06041a], [0.35, 0x120d33], [0.62, 0x2b1a4d], [0.82, 0x4a2d6b], [0.93, 0x6b3d84], [1.00, 0x8a4d9e]],
+    wood: '#2e2a3e', road: 0x2a2438,
+    light: { sun: 1.1, hemi: 0.7, fill: 0.45 },
+  },
 };
 
 export const TRACKS = [
@@ -141,6 +148,26 @@ export const TRACKS = [
       [   40,    1,   50],
       [   -5,    0,   54],
       [  -50,    0,   40],
+    ],
+  },
+  {
+    // flat: a swirl — the outer ring runs the table, two inner hooks cut
+    // back through the middle (a fast loop with a slow, twisty heart).
+    name: 'NEBULA SWIRL',
+    theme: 'space',
+    points: [
+      [    0,    0,  -95],
+      [   60,    0,  -70],
+      [   95,    0,  -10],
+      [   75,    0,   50],
+      [   30,    0,   30],
+      [   35,    0,   75],
+      [  -10,    0,   92],
+      [  -65,    0,   68],
+      [  -95,    0,    5],
+      [  -75,    0,  -40],
+      [  -35,    0,  -30],
+      [  -20,    0,  -75],
     ],
   },
 ];

@@ -19,7 +19,7 @@ Check items off as they land.
 ## What's missing
 
 - **Phase 2 tail**: QR pairing (v1.5); local-prediction polish if the join client's own kart feels laggy
-- **Phase 4 (pick by mood)**: day/night cycle or new track themes · drift sound pitch / nitro flame / reactive props · results confetti + podium pips · `package.json` scripts + Playwright screenshot test (CI-able render check)
+- **Phase 4 (pick by mood)**: day/night cycle · reactive props (spinning lollipop on contact) · `package.json` scripts + Playwright screenshot test (CI-able render check)
 
 ---
 
@@ -103,7 +103,8 @@ Check items off as they land.
 ## Phase 4 — *Polish* (endless, pick by mood)
 
 - [x] **Results confetti + podium pips** ✅ (`src/resultsfx.js`) — the finish screen now opens with a **podium block** (top 3 as gold/silver/bronze pips in the classic 2-1-3 layout, 1st biggest, the rest as plain numbered pips) and a **confetti burst** (~180 procedurally-animated coloured rects on an overlay canvas, 6 s, self-clearing, zero assets). Solo, 2P host AND the join client all call the same two functions; the ordering data is the headless-tested `raceOrder()`, so `make netsim` still covers what the pips display
-- [ ] Day/night cycle or a new track theme (candyland, space table)
+- [x] **New track theme** ✅ — **NEBULA SWIRL** (space table, `src/tracks.js`): a flat 12-point swirl — the outer ring runs the table while two inner hooks cut back through the middle (a fast loop with a slow, twisty heart, 654 u) — with a deep-indigo sky, magenta nebula horizon, dark-slate table and dark-indigo road. Pure data (points + a `space` theme entry in `TRACKS`), so the full AI suite + hazard/items/2P races now run against it automatically (`make sim` + `make netsim` = 6/6 tracks). Remaining from this item: the day/night cycle
+- [ ] Day/night cycle — the remainder of the theme item
 - [x] **Drift sound pitch + nitro flame on boost** ✅ (`audio.js` + `blastfx.js`) — the skid howl's pitch rises as the drift charge builds (bandpass 950 → 3350 Hz); a dedicated boost whoosh (2.6 kHz bandpass) decays with `k.boost`, so a drift release OR a pad boost sounds like an engine hit; `blastfx.update()` now takes `k.boost` and flares a **golden nitro exhaust** (0xffc23f, distinct from the speed-gated orange flame) at any speed — a release works while slowing down. All visuals/audio only: physics untouched, `make sim` unchanged
 - [ ] Props that react (spinning lollipop on contact) — the remainder of the drift-polish item
 - [ ] ~~Results confetti + podium pips~~ ✅ done
