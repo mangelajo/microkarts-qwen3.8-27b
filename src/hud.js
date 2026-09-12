@@ -2,6 +2,7 @@ import { LAPS, game, KMH_PER_U, BLAST_KMH, ITEM_NAMES } from './config.js';
 import { TRACKS } from './tracks.js';
 import { getBestMs } from './ghost.js';
 import { getTop } from './rankings.js';
+import { isTouchDevice } from './touch.js';
 
 /* ------------------------------------------------------------------ *
  *  HUD
@@ -102,6 +103,13 @@ export function initModePicker(onMode, onHostAnswer, onJoinSend, onRoster) {
     c.addEventListener('click', e => { onRoster(c.dataset.roster); e.target.blur(); });
   }
   el('joinInField').addEventListener('input', () => { joinInField.innerText = joinInField.innerText.trimStart(); });
+  // phones have no keyboard — swap the key list for the pull-stick hints
+  if (isTouchDevice()) {
+    keysEl.innerHTML =
+      '<div><kbd>DRAG</kbd>Drive + steer</div>' +
+      '<div><kbd>PULL ↓</kbd>Brake · reverse</div>' +
+      '<div><kbd>FULL LOCK</kbd>Drift · release = boost</div>';
+  }
   joinOutCode.addEventListener('click', () => {
     if (joinOutCode.textContent === '—') return;
     try { navigator.clipboard.writeText(joinOutCode.textContent); joinMsg.textContent = 'Copied! Paste it in the host STEP 2 box.'; }

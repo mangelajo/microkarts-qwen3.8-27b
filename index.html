@@ -46,11 +46,11 @@
   #muteMusic, #muteSfx { font-size:12px; letter-spacing:2px; color:#d8b07f; cursor:pointer; pointer-events:auto; opacity:.75; }
   #muteMusic.on, #muteSfx.on { color:#ff9d6b; opacity:1; }
 
-  #overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+  #overlay { position:fixed; inset:0; display:flex; justify-content:center;
     background:radial-gradient(ellipse at center, rgba(22,14,7,.5), rgba(10,6,3,.88)); z-index:10; }
   #overlay.hidden { display:none; }
   .hidden { display:none !important; }
-  .panel { text-align:center; color:#ffe9c9; padding:36px 48px; max-width:540px;
+  .panel { text-align:center; color:#ffe9c9; padding:36px 48px; max-width:540px; margin:auto;
     background:rgba(18,12,7,.78); border:1px solid rgba(255,200,120,.25); border-radius:16px;
     backdrop-filter:blur(6px); }
   .panel h1 { font-size:30px; letter-spacing:5px; color:#ffd07a; margin-bottom:6px; }
@@ -104,6 +104,24 @@
     font-size:12px; letter-spacing:3px; color:#ffe9c9; text-shadow:0 1px 4px rgba(0,0,0,.7);
     white-space:nowrap; opacity:0; transition:opacity .45s; }
    .joy-hint.on { opacity:.85; transition:opacity .2s; }
+
+  /* small screens: the menu must never clip — start at the top + scroll
+     vertically (the panel is taller than a phone's viewport), with a
+     compact layout (2-col key grid, smaller chips/title) */
+  #overlay { overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  @media (max-width:520px), (max-height:1000px) {
+    #overlay { padding:12px 10px; }
+    .panel { padding:18px 14px; max-width:100%; border-radius:12px; }
+    .panel h1 { font-size:20px; letter-spacing:4px; margin-bottom:4px; }
+    .panel .sub { font-size:9px; letter-spacing:2px; margin-bottom:14px; }
+    .keys { display:grid; grid-template-columns:repeat(2,1fr); width:100%; max-width:360px;
+      margin:0 auto 12px; gap:5px 10px; font-size:11px; line-height:1.5; }
+    .keys kbd { font-size:9px; min-width:0; padding:2px 7px; }
+    .trk-label { margin-bottom:5px; font-size:9px; letter-spacing:2px; }
+    .trk-row { gap:6px; }
+    .tchip { font-size:11px; padding:6px 12px; }
+    .btn { font-size:13px; padding:10px 26px; margin-top:10px; }
+  }
   </style>
 </head>
 <body>

@@ -21,3 +21,15 @@ jobs:
         run: make sim
       - name: Wire + host-authoritative 2P sims
         run: make netsim
+  render:  # Playwright boot check — if the browser can start the game and
+           # render the menu/race without a single JS error, it works.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npx playwright install --with-deps chromium
+      - name: Screenshots (menu + 2P + countdown + race, desktop & phone)
+        run: npm run screens

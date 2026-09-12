@@ -19,7 +19,7 @@ Check items off as they land.
 ## What's missing
 
 - **Phase 2 tail**: QR pairing (v1.5); local-prediction polish if the join client's own kart feels laggy
-- **Phase 4 (pick by mood)**: day/night cycle · reactive props (spinning lollipop on contact) · `package.json` scripts + Playwright screenshot test (CI-able render check)
+- **Phase 4 (pick by mood)**: day/night cycle · reactive props (spinning lollipop on contact)
 
 ---
 
@@ -108,7 +108,8 @@ Check items off as they land.
 - [x] **Drift sound pitch + nitro flame on boost** ✅ (`audio.js` + `blastfx.js`) — the skid howl's pitch rises as the drift charge builds (bandpass 950 → 3350 Hz); a dedicated boost whoosh (2.6 kHz bandpass) decays with `k.boost`, so a drift release OR a pad boost sounds like an engine hit; `blastfx.update()` now takes `k.boost` and flares a **golden nitro exhaust** (0xffc23f, distinct from the speed-gated orange flame) at any speed — a release works while slowing down. All visuals/audio only: physics untouched, `make sim` unchanged
 - [ ] Props that react (spinning lollipop on contact) — the remainder of the drift-polish item
 - [ ] ~~Results confetti + podium pips~~ ✅ done
-- [ ] `package.json` scripts + Playwright screenshot test (CI-able render check)
+- [x] **`package.json` scripts + Playwright screenshot test** ✅ (`ai-sim/screens.mjs` + CI `render` job) — `npm run screens` serves the game no-cache and boots it in headless Chromium (Playwright) on desktop (1280×800) and phone (390×844) viewports; it captures the menu, the 2P host panel, the countdown and a live race into `screens/` (gitignored) and **fails on any page JS error** — the first check that sees what the browser actually renders (the headless benches can't). Along the way it exposed the real bug it was built to catch: the 6-track menu overflowed every viewport below ~1000 px tall (phone included — the START button sat below the fold, Playwright couldn't even click it). Fix: the overlay is now scroll-safe (`#overlay {overflow-y:auto}` + `.panel {margin:auto}` = centred when it fits, top-aligned when it overflows), a compact media-query layout (2-col key grid, smaller title/chips) under 520 px / 1000 px, and touch devices get pull-stick hints instead of the keyboard list
+- [ ] ~~`package.json` scripts + Playwright screenshot test (CI-able render check)~~ ✅ done — see checked item above
 
 ---
 
