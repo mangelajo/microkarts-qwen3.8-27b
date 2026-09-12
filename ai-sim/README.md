@@ -26,6 +26,42 @@ node --import ./ai-sim/stub.js ai-sim/sim.mjs
 3. **head-on start** — on the road, facing the wrong way.
 4. **full 4-kart race** — grid + kart collisions, as in `main.js`.
 
+## Watch mode — `make simwatch`
+
+Re-runs the full AI bench on every change under `src/` or `ai-sim/`
+(debounced; a change that lands mid-run re-triggers the next run):
+
+```sh
+make simwatch   # or: node ai-sim/watch.mjs
+```
+
+## Tuning playground (browser) — `make serve` → `ai-sim/playground.html`
+
+The real race core (`race.js simulateTick` + `ai.js aiControl` — the same
+call as `sim.mjs`'s items scenario) on a live 2D top-down canvas, with
+`config.js` tunable **at runtime**: the constants are live `let` exports and
+`config.js tuneConfig()` overwrites them in place, so the next sim tick runs
+the new values (no reload). The 51 tunables are listed in the pre-filled
+editor (physics / 3D / drift / items / AI / 2P groups); unknown names are
+rejected with an error. Applying a tuning resets the race so the run starts
+clean. `N_SAMPLES` is excluded on purpose (track.js bakes it into module-scope
+arrays).
+
+Controls: track select (all 5), hazards/items toggles, 1×/2×/4× speed, pause,
+reset, and a skill slider (per-kart `k.skill`, live). Telemetry per kart:
+laps, km/h, cumulative **off-road %**, **stall %** and best lap — the same
+numbers the headless bench prints, so a tuning that fixes the playground fixes
+the game. A finish report (per-kart finish/stuck + wall hits) appears when
+the pack ends or the 300 s cap hits.
+
+The page also hosts `scene.js`'s real WebGL canvas in a parked, off-screen
+`#app` div (track.js / kart.js import it) — the playground itself renders
+2D only.
+
+```sh
+make serve   # then open http://localhost:8080/ai-sim/playground.html
+```
+
 ## Tuning the AI
 * `ai-sim/cal.mjs` sweeps lookahead parameters per skill — useful when
   re-tuning `aiParams()` in `src/ai.js`:

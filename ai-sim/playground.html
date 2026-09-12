@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ai-sim tuning playground</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #120c07; color: #e8d8c0;
+    font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; overflow: hidden; }
+  /* scene.js's WebGL canvas — a real module import, parked off-screen (2D view below) */
+  #app { position: fixed; left: -99999px; top: 0; }
+  #wrap { display: flex; height: 100%; }
+  #side { width: 350px; min-width: 350px; padding: 10px 12px; overflow-y: auto;
+    border-right: 1px solid #3a2c1c; }
+  #view { flex: 1; width: auto; height: 100%; display: block; }
+  h1 { font-size: 14px; letter-spacing: 1px; margin: 4px 0 6px; }
+  .note { font-size: 11px; color: #a89070; margin-bottom: 4px; }
+  h2 { font-size: 11px; letter-spacing: 1px; color: #b89870; margin: 14px 0 6px; text-transform: uppercase; }
+  .row { display: flex; gap: 8px; align-items: center; margin: 5px 0; flex-wrap: wrap; }
+  label { color: #c8b090; }
+  select, button { font: inherit; background: #2a2015; color: #e8d8c0;
+    border: 1px solid #4a3822; border-radius: 4px; }
+  button { cursor: pointer; padding: 3px 10px; }
+  button.on { background: #6a4c22; }
+  input[type=range] { width: 130px; }
+  textarea { width: 100%; height: 210px; background: #1a130b; color: #d8c8a8;
+    border: 1px solid #4a3822; font: 12px/1.35 ui-monospace, monospace; border-radius: 4px;
+    box-sizing: border-box; resize: vertical; }
+  table { border-collapse: collapse; width: 100%; margin-top: 6px; }
+  th, td { text-align: left; padding: 2px 6px; border-bottom: 1px solid #2e2416; white-space: nowrap; }
+  th { color: #a89070; font-weight: normal; }
+  #report { margin-top: 8px; white-space: pre-line; font-size: 12px; }
+  #tuneErr { color: #e88a8a; min-height: 16px; font-size: 12px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "../node_modules/three/build/three.module.min.js" } }
+</script>
+</head>
+<body>
+<div id="app"></div>
+<div id="wrap">
+  <div id="side">
+    <h1>ai-sim TUNING PLAYGROUND</h1>
+    <div class="note">Real <b>simulateTick</b> + <b>AI</b> on a live 2D view.<br>
+      Tune config.js at runtime; the telemetry matches <b>make sim</b>.</div>
+
+    <h2>Race</h2>
+    <div class="row"><label>track</label><select id="track"></select></div>
+    <div class="row"><label>speed</label>
+      <button id="sp1" class="on">1×</button><button id="sp2">2×</button><button id="sp4">4×</button>
+      <button id="pause">pause</button><button id="reset">reset</button>
+    </div>
+    <div class="row"><label>hazards</label><input type="checkbox" id="haz">
+      <label>items</label><input type="checkbox" id="itm">
+    </div>
+    <div class="row"><label>skill</label><input type="checkbox" id="skillDef" checked>
+      <input type="range" id="skill" min="0" max="1" step="0.01" value="0.85" disabled>
+      <span id="skillV"></span>
+    </div>
+
+    <h2>Tune (live config.js)</h2>
+    <textarea id="tune" spellcheck="false"></textarea>
+    <div class="row" style="margin-top:6px">
+      <button id="apply">apply + reset</button><button id="def">reset defaults</button>
+    </div>
+    <div id="tuneErr"></div>
+
+    <h2>Telemetry</h2>
+    <table id="tele"></table>
+    <div id="report"></div>
+  </div>
+  <canvas id="view"></canvas>
+</div>
+<script type="module" src="./playground.js"></script>
+</body>
+</html>

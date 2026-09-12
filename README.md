@@ -100,6 +100,10 @@ take in the catalogue. All track shapes are validated headlessly.
   checkpoint (backing over the line doesn't count a lap)
 - 3 AI opponents with distinct ability levels — pure-pursuit line following,
   curvature-aware braking, off-road recovery; tuning backed by `ai-sim/`
+  (headless bench + a **live tuning playground**: `make serve` →
+  `ai-sim/playground.html` runs the real `simulateTick` + AI on a 2D top-down
+  canvas and writes straight into `config.js`'s live bindings via `tuneConfig`;
+  `make simwatch` re-runs the bench on every save)
 - Procedural dusk scene: canvas-painted sky dome with stars + mountains + sun glow,
   wood-textured table, scattered tabletop props (donuts, lollipops, pencil, …)
 - Fully synthesized audio (`src/audio.js`): engine, tire skids, crashes, lap &
@@ -174,11 +178,22 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/ghost.js`    | Best-lap `localStorage` store + ghost-kart playback |
 | `src/audio.js`    | WebAudio SFX + music sequencer |
 | `ai-sim/`         | Node harnesses: `make sim` (AI) · `make netsim` (wire + 2P race sim) |
+| `ai-sim/playground.html` + `.js` | Browser **tuning playground**: the real `simulateTick` + AI on a 2D top-down canvas, runtime `tuneConfig`, telemetry (off % / stalls / laps / best lap) |
+| `ai-sim/watch.mjs`  | `make simwatch` — re-runs the AI bench on every change in `src/` + `ai-sim/` |
 
 ## Tuning
 
 All game constants live in `src/config.js`: `ACCEL`, `BRAKE`, `MAX_SPEED`,
 `STEER_RATE`, `ROAD_HW`, `LAPS`, `AI_SKILL`, …
+
+Two ways to tune:
+* **Live (recommended):** `make serve` → `http://localhost:8080/ai-sim/playground.html`
+  — the real race core on a 2D top-down canvas; the editor writes straight into
+  `config.js`'s live `let` bindings (`tuneConfig`), so the next sim tick runs the
+  new values. Telemetry matches `make sim`'s numbers, so a tuning that fixes the
+  playground fixes the game.
+* **Static:** edit the constants, then run `make sim`. `make simwatch` re-runs the
+  bench automatically on every save.
 
 To change a track shape, edit its control-point array in `src/tracks.js`
 (closed Catmull-Rom loop). After adjusting AI or physics, run `make sim` to make

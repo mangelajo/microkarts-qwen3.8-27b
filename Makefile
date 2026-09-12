@@ -1,6 +1,6 @@
 PORT ?= 8080
 
-.PHONY: install lint imports serve sim netsim deploy
+.PHONY: install lint imports serve sim simwatch netsim deploy
 
 # production deploy target (ajo.es/microkarts) — override to deploy elsewhere
 DEPLOY_HOST ?= ajo@cpanel.optimizacionweb.es
@@ -23,6 +23,10 @@ serve:
 
 sim: install
 	node --import ./ai-sim/stub.js ai-sim/sim.mjs
+
+# watch mode: re-run the AI bench on every change in src/ + ai-sim/
+simwatch: install
+	node ai-sim/watch.mjs
 
 netsim: install
 	node --import ./ai-sim/stub.js ai-sim/net-sim.mjs

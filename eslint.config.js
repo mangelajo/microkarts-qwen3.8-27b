@@ -21,4 +21,13 @@ export default [
       globals: globals.node,
     },
   },
+  {
+    // the tuning playground runs in the browser (not Node)
+    files: ['ai-sim/playground.js'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: globals.browser,
+    },
+  },
 ];

@@ -11,13 +11,14 @@ Check items off as they land.
   60 Hz state stream + 50 ms client interpolation, 2 humans + 2 AI or 1 v 1 (`plans/2_player_lan.md`)
 - 3 distinct AI drivers + headless test bench (`make sim` AI · `make netsim` wire + 2P race, `ai-sim/`)
 - **Modular browser code** — `src/game.js` (state machine: karts, input, race lifecycle, cameras, `animate()`) drives `src/net2p.js` (2P host/join orchestration: session lifecycle, code pairing, client render mirror); one-way dependency, split verified behavior-preserving (`make sim` output byte-identical pre/post)
+- **ai-sim tuning playground** — browser port (`ai-sim/playground.html`: the real `simulateTick` + AI on a 2D top-down canvas, runtime tuning via `config.js` `tuneConfig` live `let` bindings, per-kart telemetry = the bench's numbers) + `make simwatch` watch mode (bench re-runs on every `src/`/`ai-sim/` change)
 - **Item boxes** — 3 seeded candy boxes per track (turbo / rubber band / wall, fixed per-box rolls); pickups, fires and wall hits live in the shared `simulateTick`, host-authoritative projectiles; OFF by default, chip or `I` (`src/items.js`)
 - Fully procedural scene: wood table, tabletop props, dusk sky + mountains — no assets
 - Shadows, chase camera, HUD, countdown/results flow
 
 ## What's missing
 
-- **Phase 3**: `ai-sim/` tuning playground (`--watch` mode or a browser port); rankings (remnant of the ghost phase)
+- **Phase 3**: rankings (remnant of the ghost phase)
 - **Phase 2 tail**: QR pairing (v1.5); local-prediction polish if the join client's own kart feels laggy
 - **Phase 4 (pick by mood)**: day/night cycle or new track themes · drift sound pitch / nitro flame / reactive props · results confetti + podium pips · `package.json` scripts + Playwright screenshot test (CI-able render check)
 
@@ -89,7 +90,7 @@ Check items off as they land.
 ## Phase 3 — *Structure* (keep the project sustainable)
 
 - [x] **Split monoliths** — `aiControl` → `src/ai.js`, exhaust FX → `src/blastfx.js` (`kart.js` 551 → 301 lines; since regrown to ~600 with the 3D elevation physics); the duplicated solo/host sim bodies in `animate()` merged into one shared loop (only the time base differs — also fixed the host re-running `finishRace()` + re-sending finish frames every frame after the flag dropped); **`main.js` (994 lines) → `src/game.js` (state machine: karts, input, race lifecycle, cameras, `animate()`) + `src/net2p.js` (host/join orchestration: `NetSession` lifecycle, code pairing, client render mirror)** — one-way dependency (game.js drives net2p via a context object; no import cycle), `COUNTDOWN_MS` moved to `config.js`, the duplicated grid camera-snap deduped into `camSnap()`. Verified behavior-preserving: `make sim` output byte-identical to the pre-split tree, `make netsim` pass, and a per-function body diff of all 40 moved functions
-- [ ] **`ai-sim/` as tuning playground** — `--watch` mode or a browser port (pure data in, telemetry out): tune physics/drift against a live canvas instead of guessing
+- [x] **`ai-sim/` as tuning playground** ✅ — shipped both halves: the **browser port** (`ai-sim/playground.html` + `playground.js`) runs the real `simulateTick` + `aiControl` (the exact `sim.mjs` items-scenario call) on a 2D top-down canvas — road shaded by elevation, pads/hazards/item boxes drawn, per-kart telemetry (laps, km/h, off %, stall %, best lap) + a finish report; and **`--watch` mode** (`ai-sim/watch.mjs`, `make simwatch`) re-runs the full bench on every change in `src/` + `ai-sim/` (debounced, mid-run changes re-trigger). The enabling change: `config.js`'s 51 tuning constants are now live `let` exports + `tuneConfig()` (setter map; `N_SAMPLES` excluded — track.js bakes it into module-scope arrays), so the playground writes physics values in place and the next sim tick runs them — no reload. `make sim` output unchanged (bit-identical), lint/imports/netsim green, playground init + full race + tuning validated via a headless DOM-shim smoke test
 - [x] **localStorage best laps + ghost** ✅ (`src/ghost.js`) — best lap per track + a ~10 Hz
   position timeline (flat rounded JSON, ~1.7 KB / 30 s lap) in `localStorage mkr-ghost`;
   a translucent ghost kart plays it back aligned to YOUR current lap (starts when you
