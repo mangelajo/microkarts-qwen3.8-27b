@@ -1,26 +1,22 @@
 import * as THREE from 'three';
 import {
-  N_AI, AI_SKILL,
-  CAM_DIST, CAM_HEIGHT, SIM_DT, INTERP_DELAY, P2_COLOR, LAPS, KMH_PER_U, DRIFT_MIN_KMH, N_SAMPLES,
-  FELL_MIN_HEIGHT, FELL_PENALTY,
-  ITEM_TURBO, ITEM_WALL, ITEM_RESPAWN,
   game,
+  N_AI, AI_SKILL,
+  CAM_DIST, CAM_HEIGHT, SIM_DT, COUNTDOWN_MS, LAPS, KMH_PER_U, DRIFT_MIN_KMH, P2_COLOR,
+  ITEM_TURBO, ITEM_WALL,
 } from './config.js';
 import { renderer, scene, camera, updateDust, dustForKart } from './scene.js';
 import { initMinimap, setMinimapVisible, updateMinimap, resizeMinimap } from './minimap.js';
 import { Kart } from './kart.js';
 import { aiControl } from './ai.js';
-import { selectTrack, samples, trackLen, updateItemBoxes, syncWallMeshes } from './track.js';
+import { selectTrack, updateItemBoxes, syncWallMeshes } from './track.js';
 import { GRID, simulateTick, raceOrder } from './race.js';
 import { setObstaclesOn, getObstaclesOn } from './obstacles.js';
-import { setItemsOn, getItemsOn, itemBoxList } from './items.js';
-import { NetSession, makeStateEncoder, encFinish } from './net.js';
-import { FrameRing, sampleState } from './interp.js';
+import { setItemsOn, getItemsOn } from './items.js';
+import { makeStateEncoder, encFinish } from './net.js';
 import {
   fmt, el, startBtn, resultsEl, showOverlay, hideOverlay, hideCountdown, updateHud,
-  initTrackPicker, setTrack, cycleTrack, getTrackIdx,
-  setMode, setStatus, hostCode, hostMsg, joinMsg, getMode,
-  initModePicker, setHostRoster,
+  initTrackPicker, cycleTrack, getTrackIdx, getMode,
   initHazardPicker, setHazard, getHazardOn, loadHazardPref,
   initItemPicker, setItem, getItemOn, loadItemPref,
 } from './hud.js';
@@ -29,6 +25,7 @@ import {
   initGhost, ghostSetTrack, ghostLapStart, ghostFrame, ghostLapDone, ghostStop,
 } from './ghost.js';
 import { getDrive, initTouch, setActive as touchSetActive, pulseHint, isTouchDevice } from './touch.js';
+import { createNet2p } from './net2p.js';
 
 /* ------------------------------------------------------------------ *
  *  Karts — the roster has 3 AI bodies (solo uses 3, 2P uses 2) + the
@@ -172,382 +169,15 @@ function keyInput(k, racing) {
 }
 
 /* ------------------------------------------------------------------ *
- *  2P net session (host = authoritative sim; join = render-only)
+ *  2P net session — the orchestration (NetSession, host/join lifecycle,
+ *  the client render mirror, HUD mode wiring) lives in net2p.js; game.js
+ *  hands in the shared context and drives the per-frame host ticks +
+ *  client pass in animate().
  * ------------------------------------------------------------------ */
-game.netMode = 0; // 0 solo · 2 two-player
-let net = null;
-let hostSimT = 0;          // host sim clock (ms)
-let hostAcc = 0;           // fixed-step accumulator
-let lastNetInput = { throttle: 0, steer: 0, drift: false, use: false, ping: -1, at: 0 };
-let stateEncoder = null;
-let clientRing = null;
-let clientLapSeen = [];
-let clientLapMark = []; // host-sim-ms of each kart's last detected line crossing
-let netStartWall = 0;      // join role: when the host's start frame landed
-
-const COUNTDOWN_MS = 3000;
-
-function netRole() { return game.netMode === 2 && net ? net.role : null; }
-// "you" per device: host/solo = player kart · client = p2 (its own wire kart)
-function selfKart() { return netRole() === 'join' ? p2 : player; }
-
-function sessionCbs() {
-  return {
-    onOpen: () => {
-      setStatus('CONNECTED');
-      audio.beep(880);
-      if (netRole() === 'host') { net.sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn()); hostMsg.textContent = 'P2 connected! Pick a track, then press START RACE.'; }
-      if (netRole() === 'join') joinMsg.textContent = 'CONNECTED! Now wait — the host picks the track and starts the race.';
-    },
-    onStatus: s => {
-      const label = {
-        'standby': 'NO PEER',
-        'awaiting-peer': 'WAITING FOR P2…',
-        'awaiting-host': 'WAITING FOR HOST…',
-        'connected': 'CONNECTED',
-        'open': 'CONNECTED',
-        'closed': 'P2 LOST',
-        'failed': 'P2 LOST',
-      }[s];
-      if (label) setStatus(label);
-      if (s === 'failed' || s === 'closed') {
-        const hint = 'CONNECTION LOST/FAILED — same Wi-Fi? Open the game via a LAN IP (not localhost) and retry.';
-        if (netRole() === 'host') hostMsg.textContent = hint;
-        if (netRole() === 'join') joinMsg.textContent = hint;
-      }
-    },
-    onPrep: prep => {
-      if (netRole() !== 'join') return;
-      if (prep.trackIdx !== getTrackIdx()) setTrack(prep.trackIdx); // mirror the host's pick
-      netStartWall = performance.now();
-      clientRing = new FrameRing();
-      clientLapSeen = racers().map(() => 0);
-      clientLapMark = racers().map(() => 0);
-      game.raceStart = netStartWall + prep.cdMs;
-      game.raceOverAt = 0;
-      game.cdText = -1;
-      syncRosterVisibility();
-      if (game.state !== 'countdown') { // skip the re-countdown after a finished race
-        game.state = 'countdown';
-        hideOverlay();
-        hideCountdown();
-      }
-    },
-    onTrack: (idx, haz, itm) => { // host → live picker preview (client watches the host's chips)
-      if (netRole() !== 'join') return;
-      const wantObs = haz === undefined ? getObstaclesOn() : !!haz;
-      const wantItm = itm === undefined ? getItemsOn() : !!itm;   // old host: keep local
-      const obsChanged = getObstaclesOn() !== wantObs;
-      const itmChanged = getItemsOn() !== wantItm;
-      const idxChanged = idx !== getTrackIdx();
-      if (!idxChanged && !obsChanged && !itmChanged) return;
-      if (obsChanged) setObstaclesOn(wantObs);
-      if (itmChanged) setItemsOn(wantItm);
-      if (idx === getTrackIdx()) selectTrack(idx);  // flag-only change: rebuild, chips already right
-      else setTrack(idx);                            // idx change: rebuild + chips via onChange
-    },
-    onStart: info => {
-      if (netRole() !== 'join') return;
-      clientStart(info);
-    },
-    onState: st => {
-      // session already decoded the frame: { hostMs, echoPing, karts }
-      if (netRole() !== 'join') return;
-      if (!clientRing) return;
-      clientRing.push(st, performance.now());
-      mirrorItemPickups(st);   // boxes are deterministic locally — no wire traffic
-      game.net = st;
-      clientRaceBookkeeping(st);
-      // RTT readout: host echoes the ping from our latest input
-      if (st.echoPing !== lastNetInput.ping && lastNetInput.at > 0) {
-        const rtt = Math.round(performance.now() - lastNetInput.at);
-        if (rtt > 0 && rtt < 2500) { setStatus('P2 CONNECTED · ' + rtt + ' ms'); net.rtt = rtt; }
-      }
-    },    onFinish: (order, lapsMs) => {
-      if (netRole() !== 'join') return;
-      clientFinish(order, lapsMs);
-    },
-    onInput: inp => { // client → host: drives the peer's kart on the sim
-      lastNetInput = { throttle: inp.throttle, steer: inp.steer, drift: inp.drift, use: !!inp.use, ping: inp.ping, at: performance.now() };
-    },
-    onClose: () => onPeerLost(),
-  };
-}
-
-function onPeerLost() {
-  const wasNet = game.netMode === 2;
-  const wasRacing = wasNet && (game.state === 'racing' || game.state === 'countdown');
-  game.netMode = 0;
-  startBtn.textContent = 'START RACE';
-  ghostStop();
-  if (clientRing) clientRing.clear();
-  const s = net; net = null;
-  if (s && !s.closed) s.close(); // fires onClose → re-enters onPeerLost, guarded by s.closed
-  hostAcc = 0; lastNetInput.ping = -1;
-  lastNetInput = { throttle: 0, steer: 0, drift: false, use: false, ping: -1, at: 0 };
-  if (p2) p2.netOn = false;
-  syncRosterVisibility();
-  if (wasNet && wasRacing) {
-    game.state = 'menu';
-    game.raceOverAt = 0;
-    game.laps = LAPS;
-    karts.forEach(k => { k.raceDone = false; k.lapDone = 0; k.lapTimes = []; k.laps = LAPS; });
-    hideCountdown();
-    showOverlay('LINK DROPPED', 'PLAYER 2 LEFT — BACK TO SOLO', 'START RACE', false, 'OR PRESS ENTER · 3 LAPS');
-  } else {
-    setStatus(''); // intentional mode switch: clear the 'P2 LOST' chip
-  }
-}
-
-const LAN_HINT = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-  ? '  ⚠ You opened the game via localhost — other devices can’t reach it. Open http://<your-LAN-IP>:8080 on THIS machine instead.'
-  : '';
-
-function beginHostSession() {
-  if (net) net.close();
-  hostSimT = 0; hostAcc = 0;
-  lastNetInput = { throttle: 0, steer: 0, drift: false, use: false, ping: -1, at: 0 };
-  ensureP2().netOn = false; // peer's kart is AI-free until the channel opens
-  net = new NetSession('host', sessionCbs());
-  net.kartN = racers().length;
-  net.hostStart().then(code => {
-    hostCode.textContent = code;
-    hostMsg.textContent = 'Send this code to player 2, then paste their answer in STEP 2.' + LAN_HINT;
-  }).catch(err => { hostMsg.textContent = 'WEBRTC UNAVAILABLE — ' + err.message; });
-}
-
-function hostPasteAnswer() {
-  const code = el('answerField').innerText.trim();
-  if (!code || !net) return;
-  el('answerField').innerText = '';
-  net.hostAnswer(code).then(() => {
-    hostMsg.textContent = 'Handshake done — connecting… (same Wi-Fi?); status top-right';
-  }).catch(err => { hostMsg.textContent = 'BAD CODE — ' + err.message; });
-}
-
-function joinPasteOffer() {
-  const code = el('joinInField').innerText.trim();
-  if (!code) return;
-  if (!net) net = new NetSession('join', sessionCbs());
-  net.kartN = 4;
-  el('joinBtn').disabled = true;
-  joinMsg.textContent = 'Working…';
-  net.joinOffer(code).then(answerCode => {
-    el('joinInField').innerText = '';
-    const out = el('joinOutCode');
-    out.textContent = answerCode;
-    out.classList.remove('hidden');
-    el('joinOutLabel').style.display = '';
-    el('joinBtn').disabled = false;
-    try {
-      navigator.clipboard.writeText(answerCode);
-      joinMsg.textContent = 'Copied! Paste it in the host STEP 2 box, then wait for CONNECTED.';
-    } catch {
-      joinMsg.textContent = 'Click the code box to copy it, then paste it in the host STEP 2 box.';
-    }
-  }).catch(err => { joinMsg.textContent = 'BAD CODE — ' + err.message; el('joinBtn').disabled = false; });
-}
-
-/* ---------------------------- client (join) ---------------------------- */
-let clientItemSeen = [];   // per-kart: did the last frame carry an item? (pickup mirror)
-
-function clientStart(info) {
-  ensureP2();
-  clientItemSeen = racers().map(() => false);
-  game.roster = info.karts === 2 ? '1v1' : '2ai';
-  net.kartN = info.karts;
-  syncRosterVisibility();
-  for (const k of racers()) { k.laps = info.laps; }
-  for (let i = 0; i < racers().length; i++) {
-    racers()[i].placeAt(info.grid[i * 2], info.grid[i * 2 + 1]);
-  }
-  game.laps = info.laps;
-  clientRing = new FrameRing();
-  lastClientSp = 0;
-  clientLapSeen = racers().map(() => 0);
-  clientLapMark = racers().map(() => 0);
-  netStartWall = performance.now();
-  game.raceStart = netStartWall + COUNTDOWN_MS;
-  game.raceOverAt = 0;
-  game.state = 'countdown';
-  game.cdText = -1;
-  hideOverlay();
-  hideCountdown();
-  // snap camera behind our grid spot (state frames take over in a moment)
-  const p = selfKart();
-  const f = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
-  camPos.copy(p.pos).addScaledVector(f, -CAM_DIST);
-  camPos.y = p.pos.y + CAM_HEIGHT;
-  camLook.copy(p.pos);
-  camera.position.copy(camPos);
-  camera.lookAt(camLook);
-  pulseHint();               // client sees the same cue when the host's race begins
-}
-
-// client mirrors host lap/finish events from the snapshot deltas
-function clientRaceBookkeeping(st) {
-  const list = racers();
-  for (let i = 0; i < list.length && i < st.karts.length; i++) {
-    const m = st.karts[i];
-    if (m.lapDone > clientLapSeen[i]) {
-      clientLapSeen[i] = m.lapDone;
-      list[i].lapDone = m.lapDone;
-      list[i].lapTimes.push((st.hostMs - clientLapMark[i]) / 1000);
-      clientLapMark[i] = st.hostMs;
-      const isYou = i === list.length - 2;
-      const isP1 = i === list.length - 1;
-      if (isYou && !m.raceDone) audio.lap();   // our own lap crossing
-      if (isP1 && !m.raceDone) audio.beep(660); // P1 crossing (party cue)
-    }
-    if (m.raceDone) list[i].raceDone = true;
-  }
-}
-
-// the client never runs the sim — derive the road slope at a kart's XZ so
-// remote karts sit on the elevated road and pitch with it (PLAN.md 3D)
-function nearestSampleIdx(x, z) {
-  let best = 0, bd = Infinity;
-  for (let i = 0; i < N_SAMPLES; i++) {
-    const dx = samples[i].x - x, dz = samples[i].z - z;
-    const d = dx * dx + dz * dz;
-    if (d < bd) { bd = d; best = i; }
-  }
-  return best;
-}
-
-function slopeAtKart(x, z) {
-  const best = nearestSampleIdx(x, z);
-  return (samples[(best + 1) % N_SAMPLES].y - samples[(best + N_SAMPLES - 1) % N_SAMPLES].y)
-    / Math.max(1e-6, 2 * trackLen / N_SAMPLES);
-}
-
-let lastClientSp = 0; // own-kart speed from the last applied frame (impact estimate)
-let lastClientY = 0; // own-kart height — detects a fall for the HUD message
-function applyClientState(dt) {
-  if (!clientRing || clientRing.size < 1) return;
-  const st = sampleState(clientRing, performance.now() - INTERP_DELAY);
-  if (!st || !game.net) return;
-  const list = racers();
-  for (let i = 0; i < list.length && i < st.karts.length; i++) {
-    const k = list[i], m = st.karts[i];
-    k.pos.set(m.x, m.y ?? 0, m.z);
-    k.slope = slopeAtKart(m.x, m.z);
-    k.heading = m.heading;
-    k.speed = m.speed;
-    k.steerVel = m.steerVel;
-    k.offRoad = m.offRoad;
-    k.posIdx = m.posIdx;
-    k.item = m.item ?? 0;   // held item (interpolated frames pass it through intact)
-    // cosmetic tumble mirror: run the same corner-torque dynamics as the
-    // local sim so a falling remote kart tips the same way (host stays
-    // authoritative for position; the pose is derived, never sent)
-    const my = m.y ?? 0;
-    const bi = nearestSampleIdx(m.x, m.z);
-    k.trackIdx = bi;
-    const ry = samples[bi].y;
-    if (my > 0.3 && my < ry - 1) {
-      k.tumbling = true;
-      k.updateTumble(dt);
-    } else {
-      k.tumbling = false;
-      k.omegaP = 0;
-      k.omegaR = 0;
-      if (my >= ry - 1.5) k.roll += (0 - k.roll) * Math.min(1, 8 * dt);   // settle flat
-    }
-    k.sync(dt); // cosmetic: wheels, roll, pitch (fed by interpolated speed)
-  }
-  // fell-off message: the host runs the penalty sim; the client just mirrors
-  // its own kart's fellOff so the HUD reads the same (y drops from the
-  // track to the table, then clears when it respawns back up)
-  if (lastClientY > FELL_MIN_HEIGHT && player.pos.y < 0.3) {
-    player.fellOff = true;
-    player.fellTimer = FELL_PENALTY;
-  }
-  if (player.fellOff) {
-    player.fellTimer -= dt;
-    if (player.fellTimer <= 0 || player.pos.y > 1) player.fellOff = false;
-  }
-  lastClientY = player.pos.y;
-  // collision juice on the client: we don't run the sim, so estimate our own
-  // impact from how hard our kart's speed dropped since the last frame
-  const sk = selfKart();
-  const drop = lastClientSp - sk.speed;
-  if (drop > 5 && sk.speed > 1) {
-    sk.jolt = Math.min(1, drop / 16);
-    addShake(sk.jolt * 0.8);
-    audio.crash(sk.jolt);
-  }
-  lastClientSp = Math.abs(sk.speed);
-  game.raceTime = st.hostMs / 1000;
-  const you = list.length - 2; // client "you" = p2; updateHud reads the last kart
-  const lapStartMs = clientLapMark[you] || COUNTDOWN_MS; // host clock: GO at cdMs
-  const hudList = [...list.slice(0, -2), player, p2];
-  updateHud(game.raceTime, Math.max(0, (st.hostMs - lapStartMs) / 1000), hudList);
-  snapChaseCam(dt);
-}
-
-function clientFinish(order, lapsMs) {
-  game.state = 'finished';
-  hideCountdown();
-  const list = racers();
-  audio.stopMusicTimer();
-  const rows = order.map((idx, i) => {
-    const nm = idx === list.length - 2 ? '<b>YOU</b>' : idx === list.length - 1 ? '<b>P1</b>' : list[idx].name;
-    const lap = lapsMs[idx] ? ' ' + fmt(lapsMs[idx] / 1000) : '';
-    return (i + 1) + '. ' + nm + lap;
-  });
-  resultsEl.innerHTML = rows.join(' &nbsp;&nbsp; ');
-  resultsEl.style.display = '';
-  const place = order.indexOf(list.length - 2) + 1;
-  const placeMsg =
-    place === 1 ? 'YOU WRECKED THE TABLE!' :
-    'YOU WERE ' + place + ' OF ' + list.length;
-  showOverlay('RACE COMPLETE', placeMsg, 'WAIT FOR HOST', false, 'HOST CAN RACE AGAIN');
-}
-
-/* Collision juice: jolt both karts + shake the camera if it's our kart */
-function crashJuice(a, b, v) {
-  a.jolt = Math.min(1, Math.max(a.jolt, v));
-  b.jolt = Math.min(1, Math.max(b.jolt, v));
-  if (a === player || b === player) addShake(v * 0.9);
-  if (a === p2 || b === p2) addShake(v * 0.9); // client: our kart is p2
-  if (a === player || b === player) audio.crash(v);
-}
-
-/* Sugar-hazard juice: jolt + shake + thump when one of OUR karts clips candy */
-function obJuice(k, v) {
-  k.jolt = Math.min(1, Math.max(k.jolt, v));
-  if (k === player || k === p2) addShake(v * 0.7);
-  if (k === player || k === p2) audio.crash(v * 0.8);
-}
-
-/* wall juice: shake + thump when one of our karts eats a wall (host + solo;
- * the join client sees the slam via the host's position snap + jolt). */
-function wallJuice(w, k) {
-  if (k === player || k === p2) { addShake(0.8); audio.crash(0.8); }
-}
-
-/* Item pickup mirror (join client only): when a kart's item goes 0 -> X the
- * host just grabbed a box — hide the nearest live box for the respawn window
- * so our boxes match the host's. Layout + rolls are seeded identically on
- * both ends, so only the pickup itself needs mirroring (it already rides
- * the item field; we just use it to schedule the local box's cooldown). */
-function mirrorItemPickups(st) {
-  const list = racers();
-  for (let i = 0; i < list.length && i < st.karts.length; i++) {
-    const it = st.karts[i].item ?? 0;
-    if (it && !clientItemSeen[i]) {
-      let best = null, bd = 3 * 3;
-      for (const b of itemBoxList) {
-        if (b.respawnT > 0) continue;
-        const d2 = (b.x - st.karts[i].x) ** 2 + (b.z - st.karts[i].z) ** 2;
-        if (d2 < bd) { bd = d2; best = b; }
-      }
-      if (best) best.respawnT = ITEM_RESPAWN;
-    }
-    clientItemSeen[i] = !!it;
-  }
-}
+const n2 = createNet2p({
+  karts, player, p2Ref: () => p2, ensureP2,
+  racers, syncRosterVisibility, addShake, snapChaseCam, camSnap,
+});
 
 /* ------------------------------------------------------------------ *
  *  Race lifecycle
@@ -558,13 +188,23 @@ const _cdVec = new THREE.Vector3();
 
 el('nCars').textContent = String(karts.length);
 
+// snap the chase camera behind a kart's grid spot (startRace + clientStart)
+function camSnap(p) {
+  const f = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
+  camPos.copy(p.pos).addScaledVector(f, -CAM_DIST);
+  camPos.y = p.pos.y + CAM_HEIGHT;
+  camLook.copy(p.pos);
+  camera.position.copy(camPos);
+  camera.lookAt(camLook);
+}
+
 function startRace() {
   audio.ensureAudio();
   audio.startMusic(getTrackIdx());
   game.laps = LAPS;
   resetKarts();
   itemUseQ = 0; autoUseAt = 0; lastPlayerItem = 0;   // fresh item state each race
-  clientItemSeen = racers().map(() => false);
+  n2.resetClientItems();
   ghostStop();          // fresh race: the ghost restarts at GO
   game.raceTime = 0;
   game.raceOverAt = 0;
@@ -574,15 +214,15 @@ function startRace() {
   hideOverlay();
   hideCountdown();
   startBtn.blur();
-  if (netRole() === 'host') {
+  if (n2.role() === 'host') {
     // fixed sim clock starts at 0 → GO at COUNTDOWN_MS
-    hostSimT = 0; hostAcc = 0;
+    n2.host.t = 0; n2.host.acc = 0;
     game.raceStart = COUNTDOWN_MS; // host-sim-ms
-    stateEncoder = makeStateEncoder(racers().length);
-    net.kartN = racers().length;
+    n2.host.enc = makeStateEncoder(racers().length);
+    n2.net().kartN = racers().length;
     const list = racers();
-    net.sendPrep(getTrackIdx(), COUNTDOWN_MS); // client syncs countdown first (ordered channel)
-    net.sendStart({
+    n2.net().sendPrep(getTrackIdx(), COUNTDOWN_MS); // client syncs countdown first (ordered channel)
+    n2.net().sendStart({
       karts: list.length, laps: LAPS, rosterN: list.length,
       steerFlip: false, simDt: SIM_DT,
       grid: list.flatMap(k => [GRID[gridSlot(k)].u, GRID[gridSlot(k)].o]),
@@ -591,13 +231,7 @@ function startRace() {
     game.raceStart = now + COUNTDOWN_MS;
   }
   for (const k of racers()) k.lapStart = game.raceStart;
-  // snap camera behind the player kart
-  const p = player, f = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
-  camPos.copy(p.pos).addScaledVector(f, -CAM_DIST);
-  camPos.y = p.pos.y + CAM_HEIGHT;
-  camLook.copy(p.pos);
-  camera.position.copy(camPos);
-  camera.lookAt(camLook);
+  camSnap(player);               // snap camera behind the player kart
   updateHud(0, 0, racers());
   pulseHint();               // show the "PULL TO DRIVE" cue (no-op on non-touch)
 }
@@ -634,15 +268,15 @@ function finishRace() {
     fmt(best) + '</b><div style="font-size:13px;letter-spacing:1px;margin-top:10px">' +
     rows.join(' &nbsp;&nbsp; ') + '</div>';
   resultsEl.style.display = '';
-  if (netRole() === 'host') {
-    net.sendFinish(encFinish(order.map(k => list.indexOf(k)),
+  if (n2.role() === 'host') {
+    n2.net().sendFinish(encFinish(order.map(k => list.indexOf(k)),
       order.map(k => k.lapTimes.length ? k.lapTimes[k.lapTimes.length - 1] * 1000 : 0)));
   }
 }
 
 function primaryAction() {
-  if (netRole() === 'join') return;               // the host calls the shots
-  if (netRole() === 'host' && !net.open) return;  // wait for the pairing
+  if (n2.role() === 'join') return;               // the host calls the shots
+  if (n2.role() === 'host' && !n2.net().open) return;  // wait for the pairing
   if (game.state === 'menu' || game.state === 'finished') startRace();
 }
 
@@ -670,7 +304,7 @@ initTrackPicker(
   idx => {
     selectTrack(idx);
     ghostSetTrack(idx);   // best laps + ghost timeline are per-track
-    if (netRole() === 'host') net.sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn()); // client previews
+    if (n2.role() === 'host') n2.net().sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn()); // client previews
   },
 );
 
@@ -682,7 +316,7 @@ initHazardPicker(
   on => {
     setObstaclesOn(on);
     selectTrack(getTrackIdx());
-    if (netRole() === 'host') net.sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn()); // client mirrors
+    if (n2.role() === 'host') n2.net().sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn()); // client mirrors
   },
   getObstaclesOn(),
 );
@@ -695,7 +329,7 @@ initItemPicker(
   on => {
     setItemsOn(on);
     selectTrack(getTrackIdx());
-    if (netRole() === 'host') net.sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn()); // client mirrors
+    if (n2.role() === 'host') n2.net().sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn()); // client mirrors
   },
   getItemsOn(),
 );
@@ -728,43 +362,28 @@ function toggleMap() {
 }
 
 /* ------------------------------------------------------------------ *
- *  Mode / 2P wiring
+ *  Collision juice: jolt both karts + shake the camera if it's our kart
  * ------------------------------------------------------------------ */
-hostCode.addEventListener('click', () => {
-  try {
-    navigator.clipboard.writeText(hostCode.textContent);
-    hostMsg.textContent = 'Code copied! Send it to player 2.';
-  } catch { /* select + copy manually */ }
-});
-initModePicker(
-  m => {
-    if (game.state === 'racing' || game.state === 'countdown') return;
-    setMode(m);
-    if (m === 'solo') {
-      if (game.netMode === 2) onPeerLost();
-      game.netMode = 0;
-      startBtn.textContent = 'START RACE';
-    } else if (m === 'host') {
-      startBtn.textContent = 'START RACE';
-      game.netMode = 2;
-      beginHostSession();
-      syncRosterVisibility();
-    } else if (m === 'join') {
-      if (game.netMode === 2 && net && net.role === 'join') return;
-      if (net) net.close();
-      startBtn.textContent = 'WAITING FOR HOST…';
-      game.netMode = 2;
-      net = new NetSession('join', sessionCbs());
-      net.kartN = 4;
-      setHostRoster(game.roster);
-      joinMsg.textContent = "Paste the host's MKR-… code here.";
-      el('joinInField').innerText = '';
-    }
-  },
-  hostPasteAnswer,
-  joinPasteOffer,
-  r => { game.roster = r; setHostRoster(r); if (game.netMode === 2) syncRosterVisibility(); },
-);
+function crashJuice(a, b, v) {
+  a.jolt = Math.min(1, Math.max(a.jolt, v));
+  b.jolt = Math.min(1, Math.max(b.jolt, v));
+  if (a === player || b === player) addShake(v * 0.9);
+  if (a === p2 || b === p2) addShake(v * 0.9); // client: our kart is p2
+  if (a === player || b === player) audio.crash(v);
+}
+
+/* Sugar-hazard juice: jolt + shake + thump when one of OUR karts clips candy */
+function obJuice(k, v) {
+  k.jolt = Math.min(1, Math.max(k.jolt, v));
+  if (k === player || k === p2) addShake(v * 0.7);
+  if (k === player || k === p2) audio.crash(v * 0.8);
+}
+
+/* wall juice: shake + thump when one of our karts eats a wall (host + solo;
+ * the join client sees the slam via the host's position snap + jolt). */
+function wallJuice(w, k) {
+  if (k === player || k === p2) { addShake(0.8); audio.crash(0.8); }
+}
 
 /* ------------------------------------------------------------------ *
  *  Per-kart input: who drives each kart, per context
@@ -779,9 +398,10 @@ function hostInputFor(k, racing) {
   if (k.isPlayer) return keyInput(k, racing);
   if (k === p2) {
     // the peer's kart: driven from the wire (or still before the channel / GO)
-    if (!racing || !net || !net.open || p2.netOn === false) return { throttle: 0, steer: 0 };
-    if (lastNetInput.at && performance.now() - lastNetInput.at < 250) {
-      return { throttle: lastNetInput.throttle, steer: lastNetInput.steer, drift: lastNetInput.drift, use: !!lastNetInput.use };
+    if (!racing || !n2.net() || !n2.net().open || p2.netOn === false) return { throttle: 0, steer: 0 };
+    const inp = n2.input();
+    if (inp.at && performance.now() - inp.at < 250) {
+      return { throttle: inp.throttle, steer: inp.steer, drift: inp.drift, use: !!inp.use };
     }
     return { throttle: 0, steer: 0 }; // peer frozen — no phantom throttle
   }
@@ -796,7 +416,7 @@ let camShake = 0; // collision camera shake, decays
 function addShake(v) { camShake = Math.min(1, camShake + v); }
 
 function snapChaseCam(dt) {
-  const p = selfKart();
+  const p = n2.selfKart();
   const fx = Math.sin(p.heading), fz = Math.cos(p.heading);
   // the camera rides with the kart's elevation (3D tracks: p.pos.y > 0)
   const target = _cdVec.set(p.pos.x - fx * CAM_DIST, p.pos.y + CAM_HEIGHT, p.pos.z - fz * CAM_DIST);
@@ -828,17 +448,13 @@ function snapChaseCam(dt) {
 const clock = new THREE.Clock();
 const menuLook = new THREE.Vector3(0, 0, 5);
 
-function broadcastState() {
-  net.sendState(stateEncoder(hostSimT, lastNetInput.ping, racers()));
-}
-
 function animate() {
   requestAnimationFrame(animate);
   game.dt = Math.min(clock.getDelta(), 0.05);
   const dt = game.dt;
   const now = performance.now();
   const list = racers();
-  const role = netRole();
+  const role = n2.role();
   // the pull-joystick only drives while the car may move; it parks on menu/results
   touchSetActive(game.state === 'countdown' || game.state === 'racing');
 
@@ -850,17 +466,17 @@ function animate() {
     let clockMs = now;
     if (role === 'host') {
       // step the (static) sim so hostSimT tracks the client's expected wall clock
-      hostAcc += Math.min(dt, 0.1);
+      n2.host.acc += Math.min(dt, 0.1);
       let steps = 0;
-      while (hostAcc >= SIM_DT && steps < 8) {
-        hostSimT += SIM_DT * 1000;
-        simulateTick(list, hostInputFor, SIM_DT, hostSimT, { racing: false });
-        if (net.open) broadcastState();
-        hostAcc -= SIM_DT;
+      while (n2.host.acc >= SIM_DT && steps < 8) {
+        n2.host.t += SIM_DT * 1000;
+        simulateTick(list, hostInputFor, SIM_DT, n2.host.t, { racing: false });
+        n2.broadcast();
+        n2.host.acc -= SIM_DT;
         steps++;
       }
-      if (steps === 8) hostAcc = 0;
-      clockMs = hostSimT;
+      if (steps === 8) n2.host.acc = 0;
+      clockMs = n2.host.t;
     }
     const remain = (game.raceStart - clockMs) / 1000;
     const txt = remain <= 0 ? 'GO' : String(remain > 3 ? 3 : Math.ceil(remain - 1e-6));
@@ -875,7 +491,7 @@ function animate() {
     if (clockMs >= game.raceStart + 700) {
       game.state = 'racing';
       hideCountdown();
-      if (role === 'host') { hostAcc = 0; p2.netOn = true; }
+      if (role === 'host') { n2.host.acc = 0; p2.netOn = true; }
       // GO — the ghost laps with us from here (join clients mirror, never record)
       if (role !== 'join') ghostLapStart();
     }
@@ -884,9 +500,9 @@ function animate() {
       // live touch drag drives over the wire; otherwise the keyboard. steer pitch
       const d = readDrive(true);
       const use = tryConsumeItemUse(performance.now());   // E / touch auto-fire
-      net.inputNow(d.throttle, d.steer, d.drift, use);
-      applyClientState(dt);
-      const sk = selfKart();
+      n2.net().inputNow(d.throttle, d.steer, d.drift, use);
+      n2.applyClientState(dt);
+      const sk = n2.selfKart();
       if (sk.item !== lastPlayerItem) {   // item juice on the wire-mirrored item
         if (sk.item !== 0) {
           audio.beep(660 + 220 * sk.item);
@@ -898,28 +514,28 @@ function animate() {
     }
   } else {
     // ---- solo + net host sim: ONE shared body, only the time base differs.
-    // The host steps fixed SIM_DT ticks off its own sim clock (hostSimT) and
+    // The host steps fixed SIM_DT ticks off its own sim clock (n2.host.t) and
     // streams every tick; solo steps a single variable dt off performance.now().
     const racing = game.state === 'racing'; // false after finish: karts coast
     let clockMs;
     if (role === 'host') {
-      hostAcc += Math.min(dt, 0.1);
+      n2.host.acc += Math.min(dt, 0.1);
       let steps = 0;
-      while (hostAcc >= SIM_DT && steps < 8) {
-        hostSimT += SIM_DT * 1000;
+      while (n2.host.acc >= SIM_DT && steps < 8) {
+        n2.host.t += SIM_DT * 1000;
         p2.netOn = true;
-        simulateTick(list, hostInputFor, SIM_DT, hostSimT, {
+        simulateTick(list, hostInputFor, SIM_DT, n2.host.t, {
           racing,
           crashFor: crashJuice,
           obFor: obJuice,
           wallFor: wallJuice,
         });
-        if (net.open && racing) broadcastState();
-        hostAcc -= SIM_DT;
+        if (racing) n2.broadcast();
+        n2.host.acc -= SIM_DT;
         steps++;
       }
-      if (steps === 8) hostAcc = 0; // tab stall — stop the sim rather than spiral
-      clockMs = hostSimT;
+      if (steps === 8) n2.host.acc = 0; // tab stall — stop the sim rather than spiral
+      clockMs = n2.host.t;
     } else {
       simulateTick(list, soloInputFor, dt, now, {
         racing,
@@ -982,7 +598,7 @@ function animate() {
    // minimap: on the grid + during the race (hidden on menu / results)
   if (mmOn && (game.state === 'countdown' || game.state === 'racing')) {
     setMinimapVisible(true);
-    updateMinimap(list, selfKart());
+    updateMinimap(list, n2.selfKart());
    } else {
     setMinimapVisible(false);
    }

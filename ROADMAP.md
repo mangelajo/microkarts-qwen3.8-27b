@@ -10,13 +10,16 @@ Check items off as they land.
 - **2-player LAN over WebRTC** — serverless code-paste pairing, host-authoritative fixed-step sim,
   60 Hz state stream + 50 ms client interpolation, 2 humans + 2 AI or 1 v 1 (`plans/2_player_lan.md`)
 - 3 distinct AI drivers + headless test bench (`make sim` AI · `make netsim` wire + 2P race, `ai-sim/`)
+- **Modular browser code** — `src/game.js` (state machine: karts, input, race lifecycle, cameras, `animate()`) drives `src/net2p.js` (2P host/join orchestration: session lifecycle, code pairing, client render mirror); one-way dependency, split verified behavior-preserving (`make sim` output byte-identical pre/post)
 - **Item boxes** — 3 seeded candy boxes per track (turbo / rubber band / wall, fixed per-box rolls); pickups, fires and wall hits live in the shared `simulateTick`, host-authoritative projectiles; OFF by default, chip or `I` (`src/items.js`)
 - Fully procedural scene: wood table, tabletop props, dusk sky + mountains — no assets
 - Shadows, chase camera, HUD, countdown/results flow
 
 ## What's missing
 
-- Everything else: drift ✅ minimap ✅ touch ✅ best laps + ghost ✅ item boxes ✅ — they survive refresh
+- **Phase 3**: `ai-sim/` tuning playground (`--watch` mode or a browser port); rankings (remnant of the ghost phase)
+- **Phase 2 tail**: QR pairing (v1.5); local-prediction polish if the join client's own kart feels laggy
+- **Phase 4 (pick by mood)**: day/night cycle or new track themes · drift sound pitch / nitro flame / reactive props · results confetti + podium pips · `package.json` scripts + Playwright screenshot test (CI-able render check)
 
 ---
 
@@ -85,7 +88,7 @@ Check items off as they land.
 
 ## Phase 3 — *Structure* (keep the project sustainable)
 
-- [ ] **Split monoliths** — partial ✅: `aiControl` → `src/ai.js`, exhaust FX → `src/blastfx.js` (`kart.js` 551 → 301 lines; since regrown to ~600 with the 3D elevation physics); the duplicated solo/host sim bodies in `animate()` merged into one shared loop (only the time base differs — also fixed the host re-running `finishRace()` + re-sending finish frames every frame after the flag dropped). Remaining if ever needed: `main.js` → `game.js` (state machine) + `net2p.js` (host/join orchestration)
+- [x] **Split monoliths** — `aiControl` → `src/ai.js`, exhaust FX → `src/blastfx.js` (`kart.js` 551 → 301 lines; since regrown to ~600 with the 3D elevation physics); the duplicated solo/host sim bodies in `animate()` merged into one shared loop (only the time base differs — also fixed the host re-running `finishRace()` + re-sending finish frames every frame after the flag dropped); **`main.js` (994 lines) → `src/game.js` (state machine: karts, input, race lifecycle, cameras, `animate()`) + `src/net2p.js` (host/join orchestration: `NetSession` lifecycle, code pairing, client render mirror)** — one-way dependency (game.js drives net2p via a context object; no import cycle), `COUNTDOWN_MS` moved to `config.js`, the duplicated grid camera-snap deduped into `camSnap()`. Verified behavior-preserving: `make sim` output byte-identical to the pre-split tree, `make netsim` pass, and a per-function body diff of all 40 moved functions
 - [ ] **`ai-sim/` as tuning playground** — `--watch` mode or a browser port (pure data in, telemetry out): tune physics/drift against a live canvas instead of guessing
 - [x] **localStorage best laps + ghost** ✅ (`src/ghost.js`) — best lap per track + a ~10 Hz
   position timeline (flat rounded JSON, ~1.7 KB / 30 s lap) in `localStorage mkr-ghost`;
@@ -112,7 +115,7 @@ Check items off as they land.
 Phase 1 (audio → feel)        →  "playable demo"
 Phase 2.1 (3 tracks)          →  ✅ done — "variety demo"
 Phase 2.4 (2-player)          →  ✅ done (LAN, not local) — "party demo"
-Phase 2.1 + Phase 3.1         →  content milestone: add tracks (Phase 2.1 ✅ done) + split code
+Phase 2.1 + Phase 3.1         →  ✅ done — content milestone: add tracks (Phase 2.1 ✅ done) + split code (Phase 3.1 ✅ done)
 Phase 3.3 (ghost)             →  "comeback" milestone
 ```
 

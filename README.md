@@ -167,7 +167,8 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/textures.js` | Procedural canvas textures (wood table, …) |
 | `src/net.js`      | 2P wire protocol (enc/dec) + `NetSession` (pairing, DataChannel routing) |
 | `src/interp.js`   | Client-side interpolation ring + sampler (50 ms delay, angular wrap) |
-| `src/main.js`     | Game loop, input, race lifecycle, camera, 2P host/join orchestration |
+| `src/game.js`     | Game state machine: karts, input, race lifecycle, cameras, the `animate()` loop (solo/host sim + client pass) — boots the `net2p` session |
+| `src/net2p.js`    | 2P net orchestration: `NetSession` host/join lifecycle, code pairing, client render mirror (interp, lap/finish bookkeeping, item-pickup mirror) |
 | `src/hud.js`      | DOM HUD + overlays, 2P mode/roster pickers + net panels |
 | `src/minimap.js`  | HUD minimap: track outline + racer dots + heading arrow |
 | `src/ghost.js`    | Best-lap `localStorage` store + ghost-kart playback |

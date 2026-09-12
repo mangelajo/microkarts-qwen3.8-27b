@@ -73,6 +73,7 @@ export const AI_SKILL     = [0.96, 0.85, 0.62];
 
 // 2-player LAN (see plans/2_player_lan.md)
 export const SIM_DT       = 1 / 60;  // fixed sim step for the networked host (solo keeps variable step)
+export const COUNTDOWN_MS = 3000;  // ms: pre-GO countdown (host sim clock + client wall clock)
 export const INTERP_DELAY = 50;      // ms the client interpolates in the past (hides LAN jitter)
 export const P2_COLOR     = 0x1fc9b8; // player-2 kart (teal), distinct from solo red
 export const N_AI_2P      = 2;       // 2P default roster: 2 humans + 2 AI
