@@ -28,6 +28,7 @@ import {
 import { rankInit, rankSetTrack, rankLapDone } from './rankings.js';
 import { getDrive, initTouch, setActive as touchSetActive, pulseHint, isTouchDevice } from './touch.js';
 import { createNet2p } from './net2p.js';
+import { podiumHtml, celebrate } from './resultsfx.js';
 
 /* ------------------------------------------------------------------ *
  *  Karts — the roster has 3 AI bodies (solo uses 3, 2P uses 2) + the
@@ -253,9 +254,10 @@ function finishRace() {
   el('best').innerHTML = 'BEST <span class="val">' + fmt(best) + '</span>';
   const list = racers();
   const order = raceOrder(list);
+  const nameOf = k => k.isPlayer ? 'YOU' : (k === p2 ? 'P2' : k.name);
   const rows = [];
   order.forEach((k, i) => {
-    const nm = k.isPlayer ? 'YOU' : (k === p2 ? 'P2' : k.name);
+    const nm = nameOf(k);
     const lap = k.lapTimes.length ? ' ' + fmt(k.lapTimes[k.lapTimes.length - 1]) : '';
     rows.push((i + 1) + '. ' + (k.isPlayer ? '<b>' + nm + '</b>' : nm) + lap);
   });
@@ -267,9 +269,11 @@ function finishRace() {
   showOverlay('RACE COMPLETE', placeMsg, 'RACE AGAIN', false, 'OR PRESS R');
   audio.stopMusicTimer();
   resultsEl.innerHTML = '<b>TOTAL ' + fmt(game.raceTime) + '</b> &nbsp;·&nbsp; BEST LAP <b>' +
-    fmt(best) + '</b><div style="font-size:13px;letter-spacing:1px;margin-top:10px">' +
+    fmt(best) + '</b>' + podiumHtml(order, nameOf) +
+    '<div style="font-size:13px;letter-spacing:1px;margin-top:10px">' +
     rows.join(' &nbsp;&nbsp; ') + '</div>';
   resultsEl.style.display = '';
+  celebrate();   // confetti burst (resultsfx.js)
   if (n2.role() === 'host') {
     n2.net().sendFinish(encFinish(order.map(k => list.indexOf(k)),
       order.map(k => k.lapTimes.length ? k.lapTimes[k.lapTimes.length - 1] * 1000 : 0)));

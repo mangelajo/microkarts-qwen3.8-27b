@@ -140,6 +140,10 @@ take in the catalogue. All track shapes are validated headlessly.
   (`src/rankings.js`, ms + date per entry, nothing over the wire); the menu shows
   the current track's board, and a lap that cracks it flashes "NEW RECORD — #N"
   (a new #1 keeps the chime). `make netsim` covers insert/sort/cap/reject/reload
+- **Results juice** — podium pips on the finish screen (2-1-3 medal layout, the
+  rest plain) + a ~180-piece procedural confetti burst; solo, 2P host and join
+  client all go through `src/resultsfx.js` (ordering data = `raceOrder()`,
+  covered headlessly by `make netsim`)
 - **Item boxes** (`src/items.js`) — three candy boxes per track on a seed-per-track RNG
   (like pads and hazards: host and every LAN client build the identical field from the track
   index alone, nothing streamed). Each box's own seeded PRNG fixes its reward — turbo (45%),
@@ -180,7 +184,8 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/hud.js`      | DOM HUD + overlays, 2P mode/roster pickers + net panels |
 | `src/minimap.js`  | HUD minimap: track outline + racer dots + heading arrow |
 | `src/ghost.js`    | Best-lap `localStorage` store + ghost-kart playback |
-| `src/rankings.js` | Per-track top-5 best-lap board (separate `localStorage` key) + `rankLapDone()` rank
+| `src/rankings.js` | Per-track top-5 best-lap board (separate `localStorage` key) + `rankLapDone()` rank |
+| `src/resultsfx.js`| Results juice: podium pips (`podiumHtml`) + procedural confetti burst (`celebrate`) |
 | `src/audio.js`    | WebAudio SFX + music sequencer |
 | `ai-sim/`         | Node harnesses: `make sim` (AI) · `make netsim` (wire + 2P race sim) |
 | `ai-sim/playground.html` + `.js` | Browser **tuning playground**: the real `simulateTick` + AI on a 2D top-down canvas, runtime `tuneConfig`, telemetry (off % / stalls / laps / best lap) |

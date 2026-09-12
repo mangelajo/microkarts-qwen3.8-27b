@@ -102,9 +102,10 @@ Check items off as they land.
 
 ## Phase 4 — *Polish* (endless, pick by mood)
 
+- [x] **Results confetti + podium pips** ✅ (`src/resultsfx.js`) — the finish screen now opens with a **podium block** (top 3 as gold/silver/bronze pips in the classic 2-1-3 layout, 1st biggest, the rest as plain numbered pips) and a **confetti burst** (~180 procedurally-animated coloured rects on an overlay canvas, 6 s, self-clearing, zero assets). Solo, 2P host AND the join client all call the same two functions; the ordering data is the headless-tested `raceOrder()`, so `make netsim` still covers what the pips display
 - [ ] Day/night cycle or a new track theme (candyland, space table)
 - [ ] Drift sound pitch, nitro flame on boost, props that react (spinning lollipop on contact)
-- [ ] Results confetti + podium pips
+- [ ] Results confetti + podium pips  (done — see checked item above)
 - [ ] `package.json` scripts + Playwright screenshot test (CI-able render check)
 
 ---

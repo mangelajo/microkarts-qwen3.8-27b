@@ -13,6 +13,7 @@ import {
   setTrack, getTrackIdx, getItemOn,
   showOverlay, hideOverlay, hideCountdown, updateHud, fmt, resultsEl,
 } from './hud.js';
+import { podiumHtml, celebrate } from './resultsfx.js';
 import * as audio from './audio.js';
 import { ghostStop } from './ghost.js';
 import { pulseHint } from './touch.js';
@@ -333,13 +334,16 @@ export function createNet2p(ctx) {
     hideCountdown();
     const list = ctx.racers();
     audio.stopMusicTimer();
+    const nameOfIdx = idx => idx === list.length - 2 ? '<b>YOU</b>' : idx === list.length - 1 ? '<b>P1</b>' : list[idx].name;
     const rows = order.map((idx, i) => {
-      const nm = idx === list.length - 2 ? '<b>YOU</b>' : idx === list.length - 1 ? '<b>P1</b>' : list[idx].name;
+      const nm = nameOfIdx(idx);
       const lap = lapsMs[idx] ? ' ' + fmt(lapsMs[idx] / 1000) : '';
       return (i + 1) + '. ' + nm + lap;
     });
-    resultsEl.innerHTML = rows.join(' &nbsp;&nbsp; ');
+    const nameOf = idx => idx === list.length - 2 ? 'YOU' : idx === list.length - 1 ? 'P1' : list[idx].name;
+    resultsEl.innerHTML = podiumHtml(order, nameOf) + rows.join(' &nbsp;&nbsp; ');
     resultsEl.style.display = '';
+    celebrate();   // confetti burst (resultsfx.js)
     const place = order.indexOf(list.length - 2) + 1;
     const placeMsg =
       place === 1 ? 'YOU WRECKED THE TABLE!' :
