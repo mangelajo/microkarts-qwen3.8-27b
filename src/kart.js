@@ -612,8 +612,9 @@ export class Kart {
     this.mesh.bodyGroup.rotation.x += (pitchT + j * 0.5 - this.mesh.bodyGroup.rotation.x) * Math.min(1, 14 * dt);
     this.jolt *= Math.exp(-6 * dt);
     if (this.jolt < 0.01) this.jolt = 0;
-      // exhaust blast: above BLAST_KMH the kart sprays flame + smoke from its tips
+      // exhaust blast: above BLAST_KMH the kart sprays flame + smoke from its tips;
+      // a boost (drift release / pad) flares golden nitro at any speed
     const b = this.mesh.blast;
-    if (b) b.update(dt, this.speed);
+    if (b) b.update(dt, this.speed, this.boost);
   }
 }

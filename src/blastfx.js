@@ -33,7 +33,9 @@ function fxTexture() {
  * Build the blast for one kart.
  * @param parent  the kart root group (local-space tips hang off it)
  * @param tips    two local-space exhaust mouth positions
- * @returns {update(dt, speed)} — call once per frame with the kart's speed.
+ * @returns {update(dt, speed, boost)} — call once per frame; `boost` (0..1,
+ *          k.boost) drives a golden nitro flare that works at any speed
+ *          (a drift release fires while slowing down).
  */
 export function makeBlastFx(parent, tips) {
   const tex = fxTexture();
@@ -63,11 +65,12 @@ export function makeBlastFx(parent, tips) {
   let fireT = 0, smokeT = 0;
 
   return {
-    update(dt, speed) {
+    update(dt, speed, boost = 0) {
       const over = Math.abs(speed) * KMH_PER_U > BLAST_KMH
         ? Math.min((Math.abs(speed) * KMH_PER_U - BLAST_KMH) / 30, 1) : 0; // 0..1, hottest at the top end
+      const hot = Math.max(over, Math.min(boost, 1) * 0.9);             // boost flare (any speed)
       // emission only above the threshold
-      if (over > 0) {
+      if (hot > 0) {
         fireT -= dt;
         while (fireT <= 0) {
           const t = tips[(Math.random() * 2) | 0];
@@ -75,12 +78,13 @@ export function makeBlastFx(parent, tips) {
           slot.x = t.x; slot.y = t.y - 0.05; slot.z = t.z;
           slot.vx = (Math.random() - 0.5) * 0.25;
           slot.vy = 0.1 + Math.random() * 0.2;
-          slot.vz = -(4.0 + over * 6.0) - Math.random() * 1.5;    // shoot backward (-z)
-          slot.base = 0.14 + over * 0.22 + Math.random() * 0.06;
+          slot.vz = -(4.0 + hot * 6.0) - Math.random() * 1.5;    // shoot backward (-z)
+          slot.base = 0.14 + hot * 0.22 + Math.random() * 0.06;
           slot.ttl = 0.16 + Math.random() * 0.14; slot.life = slot.ttl;
-          slot.s.material.color.setHex(over > 0.55 ? 0xffd24a : 0xff4e10);
+          slot.s.material.color.setHex(hot > over + 0.01 ? 0xffc23f
+            : over > 0.55 ? 0xffd24a : 0xff4e10);           // golden nitro > hot > base
           slot.s.visible = true;
-          fireT += 0.028 - over * 0.022;                           // faster cadence when hotter
+          fireT += 0.028 - hot * 0.022;                           // faster cadence when hotter
         }
         smokeT -= dt;
         while (smokeT <= 0) {
@@ -89,8 +93,8 @@ export function makeBlastFx(parent, tips) {
           slot.x = t.x; slot.y = t.y; slot.z = t.z - 0.2;
           slot.vx = (Math.random() - 0.5) * 0.3;
           slot.vy = 0.3 + Math.random() * 0.3;
-          slot.vz = -(2.0 + over * 2.5);
-          slot.base = 0.22 + over * 0.12;
+          slot.vz = -(2.0 + hot * 2.5);
+          slot.base = 0.22 + hot * 0.12;
           slot.ttl = 0.7 + Math.random() * 0.5; slot.life = slot.ttl;
           slot.s.visible = true;
           smokeT += 0.09;

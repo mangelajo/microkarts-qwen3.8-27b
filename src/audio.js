@@ -57,7 +57,7 @@ const SONGS = [
 let song = SONGS[0];
 let BEAT, SIX; // re-derived in startMusic, per song
 
-let ctx, master, musicGain, sfxGain, engGain, engFilter, engOsc = [], skidGain, skidSrc;
+let ctx, master, musicGain, sfxGain, engGain, engFilter, engOsc = [], skidGain, skidSrc, skidFilter, boostGain, boostSrc, boostFilter;
 let noiseBuf;
 const SFX_GAIN = Math.pow(10, -2 / 20); // sfx bus level when enabled (-2 dB)
 let musicMuted = false, sfxMuted = false;
@@ -215,8 +215,9 @@ function scheduleStep(s, t, chord) {
 }
 
 /* ---------------- engine + skid (continuous) ---------------- */
-export function updateEngine(speed, steering, onRoad, drifting = false) {
+export function updateEngine(speed, steering, onRoad, drifting = false, charge = 0, boost = 0) {
   if (!ctx) return;
+  if (!boostGain) return;   // buildEngine not run yet (headless / pre-audio)
   const sp = Math.min(Math.abs(speed) / 30, 1);
   const gear = Math.floor(sp * 2.7 + 0.4);
   const inGear = sp * 2.7 + 0.4 - gear;        // 0..1 within the current "gear" — gives pitch steps
@@ -232,6 +233,11 @@ export function updateEngine(speed, steering, onRoad, drifting = false) {
   const skidT = Math.max(drifting && onRoad ? 0.85 : 0,
     onRoad && sp > 0.35 ? (Math.abs(steering) - 0.55) * 1.0 : 0);
   skidGain.gain.setTargetAtTime(Math.max(0, Math.min(0.22, skidT)), t, 0.04);
+  // drift pitch: the howl rises as the charge builds (0..1) — a full-charge
+  // release sounds distinctly higher than a shallow slide
+  skidFilter.frequency.setTargetAtTime(950 + 2400 * Math.min(charge, 1), t, 0.05);
+  // boost: the nitro whoosh, decaying with k.boost (drift release OR pad)
+  boostGain.gain.setTargetAtTime(Math.min(0.2, Math.max(0, boost) * 0.25), t, 0.05);
 }
 
 function buildEngine() {
@@ -251,12 +257,19 @@ function buildEngine() {
     engOsc.push(o);
   }
   skidSrc = noise(ctx);
-  const sf = ctx.createBiquadFilter();
-  sf.type = 'bandpass'; sf.frequency.value = 950; sf.Q.value = 0.9;
+  skidFilter = ctx.createBiquadFilter();
+  skidFilter.type = 'bandpass'; skidFilter.frequency.value = 950; skidFilter.Q.value = 0.9;
   skidGain = ctx.createGain();
   skidGain.gain.value = 0;
-  skidSrc.connect(sf).connect(skidGain).connect(sfxGain);
+  skidSrc.connect(skidFilter).connect(skidGain).connect(sfxGain);
   skidSrc.start();
+  boostSrc = noise(ctx);
+  boostFilter = ctx.createBiquadFilter();
+  boostFilter.type = 'bandpass'; boostFilter.frequency.value = 2600; boostFilter.Q.value = 0.7;
+  boostGain = ctx.createGain();
+  boostGain.gain.value = 0;
+  boostSrc.connect(boostFilter).connect(boostGain).connect(sfxGain);
+  boostSrc.start();
 }
 
 /* ---------------- one-shot SFX ---------------- */

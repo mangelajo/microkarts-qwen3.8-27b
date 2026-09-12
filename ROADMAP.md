@@ -104,8 +104,9 @@ Check items off as they land.
 
 - [x] **Results confetti + podium pips** ✅ (`src/resultsfx.js`) — the finish screen now opens with a **podium block** (top 3 as gold/silver/bronze pips in the classic 2-1-3 layout, 1st biggest, the rest as plain numbered pips) and a **confetti burst** (~180 procedurally-animated coloured rects on an overlay canvas, 6 s, self-clearing, zero assets). Solo, 2P host AND the join client all call the same two functions; the ordering data is the headless-tested `raceOrder()`, so `make netsim` still covers what the pips display
 - [ ] Day/night cycle or a new track theme (candyland, space table)
-- [ ] Drift sound pitch, nitro flame on boost, props that react (spinning lollipop on contact)
-- [ ] Results confetti + podium pips  (done — see checked item above)
+- [x] **Drift sound pitch + nitro flame on boost** ✅ (`audio.js` + `blastfx.js`) — the skid howl's pitch rises as the drift charge builds (bandpass 950 → 3350 Hz); a dedicated boost whoosh (2.6 kHz bandpass) decays with `k.boost`, so a drift release OR a pad boost sounds like an engine hit; `blastfx.update()` now takes `k.boost` and flares a **golden nitro exhaust** (0xffc23f, distinct from the speed-gated orange flame) at any speed — a release works while slowing down. All visuals/audio only: physics untouched, `make sim` unchanged
+- [ ] Props that react (spinning lollipop on contact) — the remainder of the drift-polish item
+- [ ] ~~Results confetti + podium pips~~ ✅ done
 - [ ] `package.json` scripts + Playwright screenshot test (CI-able render check)
 
 ---

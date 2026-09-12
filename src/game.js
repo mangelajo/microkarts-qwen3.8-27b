@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {
   game,
   N_AI, AI_SKILL,
-  CAM_DIST, CAM_HEIGHT, SIM_DT, COUNTDOWN_MS, LAPS, KMH_PER_U, DRIFT_MIN_KMH, P2_COLOR,
+  CAM_DIST, CAM_HEIGHT, SIM_DT, COUNTDOWN_MS, LAPS, KMH_PER_U, DRIFT_MIN_KMH, DRIFT_CHARGE_MAX, P2_COLOR,
   ITEM_TURBO, ITEM_WALL,
 } from './config.js';
 import { renderer, scene, camera, updateDust, dustForKart } from './scene.js';
@@ -518,7 +518,7 @@ function animate() {
         }
         lastPlayerItem = sk.item;
       }
-      audio.updateEngine(sk.speed, d.steer, !sk.offRoad, d.drift && sk.speed * KMH_PER_U > DRIFT_MIN_KMH); // engine sound from interpolated speed
+      audio.updateEngine(sk.speed, d.steer, !sk.offRoad, d.drift && sk.speed * KMH_PER_U > DRIFT_MIN_KMH, (sk.charge || 0) / DRIFT_CHARGE_MAX, sk.boost || 0); // engine sound from interpolated speed
     }
   } else {
     // ---- solo + net host sim: ONE shared body, only the time base differs.
@@ -553,7 +553,7 @@ function animate() {
       });
       clockMs = now;
     }
-    audio.updateEngine(player.speed, readDrive(racing).steer, !player.offRoad, player.drifting);
+    audio.updateEngine(player.speed, readDrive(racing).steer, !player.offRoad, player.drifting, player.charge / DRIFT_CHARGE_MAX, player.boost);
     if (player.boostEdge) {   // drift released with charge — whoosh (louder = more charge)
       player.boostEdge = false;
       if (player.boost > 0.2) audio.beep(430 + 640 * player.boost);

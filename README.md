@@ -115,9 +115,12 @@ take in the catalogue. All track shapes are validated headlessly.
   Protocol + simulation are verified headlessly (`make netsim`)
 - **Skid-to-drift** — hold `Space` above ~95 km/h on asphalt: the nose steers in
   faster than the motion follows (real slip angle, capped + controllable), charge
-  builds, releasing fires a mini-boost scaled by the slide. Touch: drag to full lock.
-  Wire-compatible (flag byte in the input frame); the AI never drifts, so `make sim`
-  is a true no-regression gate. 13 headless assertions in `make netsim`
+  builds, releasing fires a mini-boost scaled by the slide. The skid howl's pitch
+  rises as the charge builds, the boost whoosh decays with `k.boost` (drift release
+  OR pad, `audio.js`), and any boost flares a **golden nitro exhaust** at any speed
+  (`blastfx.js`). Touch: drag to full lock. Wire-compatible (flag byte in the input
+  frame); the AI never drifts, so `make sim` is a true no-regression gate. 13 headless
+  assertions in `make netsim`
 - **Sugar-hazard obstacles** (`src/obstacles.js`) — gumdrops, dice, gumballs and
   other candy scattered on the asphalt on a seed-per-track RNG, so host and every
   LAN client build the identical layout from the track index alone — nothing is
@@ -170,7 +173,7 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/sky.js`      | Procedural sky dome + sun (re-paintable gradient per theme) |
 | `src/kart.js`     | Kart mesh + physics `step()` |
 | `src/ai.js`       | AI driver: pure-pursuit line following, curvature-aware braking, recovery |
-| `src/blastfx.js`  | Exhaust flame/smoke particle pools above the speed threshold |
+| `src/blastfx.js`  | Exhaust flame/smoke particle pools above the speed threshold + golden nitro flare on boost |
 | `src/race.js`     | Headless race core: grid, progress, positions, collisions, `simulateTick()` |
 | `src/pads.js`     | Boost-pad field: seeded straight-aware layout + chain-hit model (pure) |
 | `src/obstacles.js`| Sugar-hazard field: seeded candy layout + per-driver AI dodging (pure) |
@@ -186,7 +189,7 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/ghost.js`    | Best-lap `localStorage` store + ghost-kart playback |
 | `src/rankings.js` | Per-track top-5 best-lap board (separate `localStorage` key) + `rankLapDone()` rank |
 | `src/resultsfx.js`| Results juice: podium pips (`podiumHtml`) + procedural confetti burst (`celebrate`) |
-| `src/audio.js`    | WebAudio SFX + music sequencer |
+| `src/audio.js`    | WebAudio SFX + music sequencer (skid pitch follows drift charge, boost whoosh decays with `k.boost`) |
 | `ai-sim/`         | Node harnesses: `make sim` (AI) · `make netsim` (wire + 2P race sim) |
 | `ai-sim/playground.html` + `.js` | Browser **tuning playground**: the real `simulateTick` + AI on a 2D top-down canvas, runtime `tuneConfig`, telemetry (off % / stalls / laps / best lap) |
 | `ai-sim/watch.mjs`  | `make simwatch` — re-runs the AI bench on every change in `src/` + `ai-sim/` |
