@@ -18,7 +18,6 @@ Check items off as they land.
 
 ## What's missing
 
-- **Phase 3**: rankings (remnant of the ghost phase)
 - **Phase 2 tail**: QR pairing (v1.5); local-prediction polish if the join client's own kart feels laggy
 - **Phase 4 (pick by mood)**: day/night cycle or new track themes · drift sound pitch / nitro flame / reactive props · results confetti + podium pips · `package.json` scripts + Playwright screenshot test (CI-able render check)
 
@@ -91,14 +90,14 @@ Check items off as they land.
 
 - [x] **Split monoliths** — `aiControl` → `src/ai.js`, exhaust FX → `src/blastfx.js` (`kart.js` 551 → 301 lines; since regrown to ~600 with the 3D elevation physics); the duplicated solo/host sim bodies in `animate()` merged into one shared loop (only the time base differs — also fixed the host re-running `finishRace()` + re-sending finish frames every frame after the flag dropped); **`main.js` (994 lines) → `src/game.js` (state machine: karts, input, race lifecycle, cameras, `animate()`) + `src/net2p.js` (host/join orchestration: `NetSession` lifecycle, code pairing, client render mirror)** — one-way dependency (game.js drives net2p via a context object; no import cycle), `COUNTDOWN_MS` moved to `config.js`, the duplicated grid camera-snap deduped into `camSnap()`. Verified behavior-preserving: `make sim` output byte-identical to the pre-split tree, `make netsim` pass, and a per-function body diff of all 40 moved functions
 - [x] **`ai-sim/` as tuning playground** ✅ — shipped both halves: the **browser port** (`ai-sim/playground.html` + `playground.js`) runs the real `simulateTick` + `aiControl` (the exact `sim.mjs` items-scenario call) on a 2D top-down canvas — road shaded by elevation, pads/hazards/item boxes drawn, per-kart telemetry (laps, km/h, off %, stall %, best lap) + a finish report; and **`--watch` mode** (`ai-sim/watch.mjs`, `make simwatch`) re-runs the full bench on every change in `src/` + `ai-sim/` (debounced, mid-run changes re-trigger). The enabling change: `config.js`'s 51 tuning constants are now live `let` exports + `tuneConfig()` (setter map; `N_SAMPLES` excluded — track.js bakes it into module-scope arrays), so the playground writes physics values in place and the next sim tick runs them — no reload. `make sim` output unchanged (bit-identical), lint/imports/netsim green, playground init + full race + tuning validated via a headless DOM-shim smoke test
+- [x] **Rankings** ✅ (`src/rankings.js`) — the ghost phase's remnant: a **top-5 best-lap board per track** in its own `localStorage` key (`mkr-rank`, separate from the ghost's `mkr-ghost` — the ghost key format is untouched) — `rankLapDone(lapMs)` slots a finished lap in (ms + short `YYMMDD` date, no timeline, so entries are tens of bytes) and returns the rank 1..5 for the nudge; a tie with the worst slot is rejected so the board stays stable. Local-only like the ghost (solo + host, the join-client gate is the same `role !== 'join'` block; nothing goes over the wire). The **menu shows the current track's board** (refreshes on track change) and a lap that cracks the top 5 flashes **"NEW RECORD — #N"** (a new #1 keeps the existing chime). `make netsim` covers insert/sort/cap/reject/reload + key separation
 - [x] **localStorage best laps + ghost** ✅ (`src/ghost.js`) — best lap per track + a ~10 Hz
   position timeline (flat rounded JSON, ~1.7 KB / 30 s lap) in `localStorage mkr-ghost`;
   a translucent ghost kart plays it back aligned to YOUR current lap (starts when you
   start; you always race the best that existed before this lap). Solo + host only — the
   join client's lap events are host-clock-mirrored, recording there would store garbage.
   HUD BEST shows the stored record from lap 1; new records chime. Headless coverage in
-  `make netsim` (store / overwrite / per-track / reload / sample-rate). Remaining from
-  this phase: rankings
+  `make netsim` (store / overwrite / per-track / reload / sample-rate)
 - [x] **Mobile / touch** — `src/touch.js`, a floating "pull" joystick: the **first finger down anywhere on the canvas seeds a virtual stick at that point** and the live **drag delta = the drive vector** (`pull up → throttle, down → brake/reverse, sideways → steer`), each axis clamped to [-1,1] on a 74 px spring with a 12 px dead-zone. It feeds the *same* `{throttle, steer}` channel as the keyboard via `readDrive()` (a live drag wins so the two never fight), so solo + host + client are all covered; the client streams it over the LAN. The `i8` input fields now carry the ±1 range ×127, so an analog drag survives the wire while keyboard's ±1/0 stay exact (`decInput(encInput(-1,1)) === {-1,1}`). Headless-safe (`initTouch` is a no-op without a DOM; `ai-sim` never imports it), so `make netsim` still passes (wire + all 3 races). A "PULL FROM ANYWHERE TO DRIVE" cue flashes at GO on touch devices. Steer sign is `INVERT_STEER` one-liner if a phone test flips it.
 
 ## Phase 4 — *Polish* (endless, pick by mood)

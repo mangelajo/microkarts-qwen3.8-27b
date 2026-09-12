@@ -22,6 +22,7 @@ import { setObstaclesOn, buildObstacles, obstacleList } from '../src/obstacles.j
 import { setItemsOn, buildItems, itemBoxList, tickItems, tickRubber, useItem, walls } from '../src/items.js';
 import { FrameRing, sampleState, sampleRat } from '../src/interp.js';
 import { initGhost, ghostSetTrack, ghostLapStart, ghostFrame, ghostLapDone, ghostStop, getBestMs } from '../src/ghost.js';
+import { rankInit, rankSetTrack, rankLapDone, getTop } from '../src/rankings.js';
 import {
   encTrack, encPrep, encStart, decStart,
   encInput, decInput,
@@ -362,6 +363,42 @@ console.log('\n== ghost: best-lap record + store ==');
     `timeline sampled ~10Hz (got ${flat.length / 3} samples, want ~300)`);
   ghostStop();
 }/* ------------------------------------------------------------------ *
+ *  Rankings (rankings.js): the per-track top-5 best-lap board. Separate
+ *  localStorage key from the ghost — verify insert/sort/cap/reject and
+ *  that the ghost key is never touched.
+ * ------------------------------------------------------------------ */
+console.log('\n== rankings: top-5 best laps per track ==');
+{
+  const mem = {};
+  globalThis.localStorage = {
+    getItem: k => (k in mem ? mem[k] : null),
+    setItem: (k, v) => { mem[k] = String(v); },
+  };
+  rankInit();
+  rankSetTrack(0);
+  mark(getTop().length === 0, 'no board entries initially');
+  mark(rankLapDone(32000) === 1, 'first lap is #1');
+  mark(rankLapDone(35000) === 2, 'slower lap slots in at #2');
+  mark(rankLapDone(30000) === 1, 'faster lap jumps to #1');
+  mark(getTop().map(r => r.ms).join(',') === '30000,32000,35000', 'board sorted ascending');
+  mark(/^\d{6}$/.test(getTop()[0].d), 'entries carry a short YYMMDD date');
+  mark(rankLapDone(0) === 0, 'non-positive lap rejected');
+  mark(rankLapDone(-5) === 0, 'negative lap rejected');
+  mark(rankLapDone(29000) === 1, 'fourth entry: 4th lap in');
+  mark(rankLapDone(28000) === 1, 'fifth entry: board full (5)');
+  mark(getTop().length === 5, 'board capped at 5');
+  mark(rankLapDone(34000) === 5, 'sixth lap (faster than the worst) evicts the worst slot');
+  mark(getTop().length === 5 && getTop()[4].ms === 34000, 'eviction kept the 5 fastest');
+  mark(rankLapDone(34000) === 0, 'tie with the worst: rejected (stable board)');
+  mark(rankLapDone(41000) === 0, 'slower than the worst: rejected');
+  rankSetTrack(1);
+  mark(getTop().length === 0, 'boards are per-track');
+  rankInit();              // simulate a refresh: reload from storage
+  rankSetTrack(0);
+  mark(getTop().length === 5 && getTop()[0].ms === 28000, 'board reloads from localStorage');
+  mark(Object.keys(mem).sort().join(',') === 'mkr-rank', 'only the mkr-rank key is written (ghost key untouched)');
+}
+/* ------------------------------------------------------------------ *
  *  Sugar-hazard multiplayer determinism: the whole reason the hazard
  *  layout is seeded (trackIdx) alone is that the HOST and every LAN
  *  CLIENT build the identical candy layout with NOTHING streamed over

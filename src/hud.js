@@ -1,6 +1,7 @@
 import { LAPS, game, KMH_PER_U, BLAST_KMH, ITEM_NAMES } from './config.js';
 import { TRACKS } from './tracks.js';
 import { getBestMs } from './ghost.js';
+import { getTop } from './rankings.js';
 
 /* ------------------------------------------------------------------ *
  *  HUD
@@ -162,6 +163,7 @@ export function setTrack(i) {
   trackChips.forEach((c, j) => c.classList.toggle('sel', j === n));
   el('trackName').textContent = TRACKS[n].name;
   try { localStorage.setItem('mkr-track', String(n)); } catch { /* private mode */ }
+  refreshRanks();
   trackSel.onChange && trackSel.onChange(n);
 }
 
@@ -179,6 +181,31 @@ function loadPersisted() {
   trackSel.idx = i;
   trackChips.forEach((c, j) => c.classList.toggle('sel', j === i));
   el('trackName').textContent = TRACKS[i].name;
+  refreshRanks();
+}
+
+/* ------------------------------------------------------------------ *
+ *  Rankings (rankings.js) — the menu's per-track top-5 board + the
+ *  "NEW RECORD — #N" flash when a lap cracks it
+ * ------------------------------------------------------------------ */
+let rankNudgeTimer = 0;
+export function hudRankNudge(rk) {
+  const n = el('rankNudge');
+  n.textContent = 'NEW RECORD — #' + rk;
+  n.style.opacity = '1';
+  clearTimeout(rankNudgeTimer);
+  rankNudgeTimer = setTimeout(() => { n.style.opacity = '0'; }, 3500);
+}
+
+const rankRow = el('rankRow');
+const rankTrackName = el('rankTrackName');
+export function refreshRanks() {
+  const top = getTop();
+  rankTrackName.textContent = TRACKS[trackSel.idx].name;
+  rankRow.innerHTML = top.length
+    ? top.map((r, i) =>
+      `<div class="rk"><b>${i + 1}</b><span>${fmt(r.ms / 1000)}</span><span class="rkd">${r.d}</span></div>`).join('')
+    : '<div class="rk" style="opacity:.5">— first lap to the board —</div>';
 }
 
 /* ------------------------------------------------------------------ *

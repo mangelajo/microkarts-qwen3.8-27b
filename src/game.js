@@ -19,11 +19,13 @@ import {
   initTrackPicker, cycleTrack, getTrackIdx, getMode,
   initHazardPicker, setHazard, getHazardOn, loadHazardPref,
   initItemPicker, setItem, getItemOn, loadItemPref,
+  hudRankNudge,
 } from './hud.js';
 import * as audio from './audio.js';
 import {
   initGhost, ghostSetTrack, ghostLapStart, ghostFrame, ghostLapDone, ghostStop,
 } from './ghost.js';
+import { rankInit, rankSetTrack, rankLapDone } from './rankings.js';
 import { getDrive, initTouch, setActive as touchSetActive, pulseHint, isTouchDevice } from './touch.js';
 import { createNet2p } from './net2p.js';
 
@@ -304,6 +306,7 @@ initTrackPicker(
   idx => {
     selectTrack(idx);
     ghostSetTrack(idx);   // best laps + ghost timeline are per-track
+    rankSetTrack(idx);   // the top-5 board is per-track too
     if (n2.role() === 'host') n2.net().sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn()); // client previews
   },
 );
@@ -355,6 +358,7 @@ let mmOn = true;
 try { if (localStorage.getItem('mkr-map') === '0') mmOn = false; } catch { /* private mode */ }
 initMinimap();
 initGhost(getTrackIdx());
+rankInit();   // top-5 best-lap board (rankings.js)
 function toggleMap() {
   mmOn = !mmOn;
   try { localStorage.setItem('mkr-map', mmOn ? '1' : '0'); } catch { /* private mode */ }
@@ -567,6 +571,8 @@ function animate() {
         if (!player.raceDone || prev <= player.laps) {
           const lapMs = player.lapTimes.length ? player.lapTimes[player.lapTimes.length - 1] * 1000 : 0;
           if (ghostLapDone(lapMs)) audio.beep(990);   // new track record chime
+          const rk = rankLapDone(lapMs);              // top-5 board (same local-only gate)
+          if (rk > 0) hudRankNudge(rk);              // "NEW RECORD — #N" flash
           if (!player.raceDone) ghostLapStart();
         }
       }

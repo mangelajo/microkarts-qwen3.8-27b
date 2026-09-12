@@ -118,6 +118,7 @@
   <div>POS</div>
 </div>
 <div class="hud" id="trackName" style="top:18px; left:50%; transform:translateX(-50%); font-size:11px; letter-spacing:3px; opacity:.75"></div>
+<div class="hud" id="rankNudge" style="top:44px; left:50%; transform:translateX(-50%); font-size:13px; letter-spacing:2px; color:#ffd23f; opacity:0; transition:opacity .35s; pointer-events:none; text-shadow:0 0 10px rgba(255,190,40,.8)"></div>
 <div class="hud hudbox" id="time-hud">
   <div>LAP <span class="val" id="laptime">0:00.0</span></div>
   <div class="lbl" id="best">BEST <span class="val">--</span></div>
@@ -133,6 +134,9 @@
 <style>
   #itemSlot[data-item="1"] { color:#ffd23f; text-shadow:0 0 8px rgba(255,190,40,.8); }
   #itemSlot[data-item="2"] { color:#9be36a; text-shadow:0 0 8px rgba(140,220,90,.8); }
+  #rankRow .rk { display:flex; gap:10px; opacity:.85; }
+  #rankRow .rk b { min-width:16px; color:#ffd23f; }
+  #rankRow .rk .rkd { opacity:.55; margin-left:auto; padding-left:18px; }
   #itemSlot[data-item="3"] { color:#ff8a3d; text-shadow:0 0 8px rgba(255,130,60,.8); }
 </style>
 <div class="hud" id="warn">OFF TRACK</div>
@@ -201,6 +205,10 @@
         <button type="button" class="tchip sel" data-item="off">OFF</button>
         <button type="button" class="tchip" data-item="on">ON</button>
       </div>
+    </div>
+    <div class="trk" id="rankWrap">
+      <div class="trk-label">TOP 5 — <span id="rankTrackName">?</span></div>
+      <div id="rankRow" style="font-size:12px; letter-spacing:1px; line-height:1.7"></div>
     </div>
     <div class="result" id="results" style="display:none"></div>
     <br/>
