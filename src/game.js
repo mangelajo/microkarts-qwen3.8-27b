@@ -630,6 +630,8 @@ function animate() {
       clockMs = now;
     }
     audio.updateEngine(player.speed, readDrive(racing).steer, !player.offRoad, player.drifting, player.charge / DRIFT_CHARGE_MAX, player.boost);
+    // music reactivity: drift charge + boost open the filter + add arp density
+    audio.setMusicEnergy(0.55 * (player.charge / DRIFT_CHARGE_MAX) + 0.45 * Math.min(player.boost, 1));
     if (player.boostEdge) {   // drift released with charge — whoosh (louder = more charge)
       player.boostEdge = false;
       if (player.boost > 0.2) audio.beep(430 + 640 * player.boost);

@@ -57,7 +57,11 @@ const SONGS = [
 let song = SONGS[0];
 let BEAT, SIX; // re-derived in startMusic, per song
 
-let ctx, master, musicGain, sfxGain, engGain, engFilter, engOsc = [], skidGain, skidSrc, skidFilter, boostGain, boostSrc, boostFilter;
+let ctx, master, musicGain, sfxGain, engGain, engFilter, engOsc = [], skidGain, skidSrc, skidFilter, boostGain, boostSrc, boostFilter, musicFilter;
+// music reactivity: 0..1, driven by drift charge + boost (game.js). At 0 the
+// reactive layer is silent + the filter is fully open — the song plays as-is.
+let musicEnergy = 0;
+export function setMusicEnergy(v) { musicEnergy = Math.max(0, Math.min(1, v)); }
 let noiseBuf;
 const SFX_GAIN = Math.pow(10, -2 / 20); // sfx bus level when enabled (-2 dB)
 let musicMuted = false, sfxMuted = false;
@@ -83,7 +87,9 @@ export function ensureAudio() {
   master.connect(ctx.destination);
   // separate buses so music and sfx can be muted independently
   musicGain = ctx.createGain(); musicGain.gain.value = musicMuted ? 0 : 1;
-  musicGain.connect(master);
+  musicFilter = ctx.createBiquadFilter();
+  musicFilter.type = 'lowpass'; musicFilter.frequency.value = 20000; // 20k idle = transparent
+  musicGain.connect(musicFilter); musicFilter.connect(master);
   sfxGain = ctx.createGain(); sfxGain.gain.value = sfxMuted ? 0 : SFX_GAIN;
   sfxGain.connect(master);
   buildEngine();
@@ -126,6 +132,8 @@ export function startMusic(trackIdx = 0) {
   step = 0;
   nextNote = ctx.currentTime + 0.08;
   musicTimer = setInterval(() => {
+    // reactive filter: opens with drift charge + boost (20k at idle = as-is)
+    if (musicFilter) musicFilter.frequency.setTargetAtTime(1500 + musicEnergy * 18500, ctx.currentTime, 0.15);
     try {
       while (nextNote < ctx.currentTime + 0.22) {
         scheduleStep(step & 15, nextNote, (step >> 4) % 4);
@@ -186,6 +194,8 @@ function scheduleStep(s, t, chord) {
 
   // arp shimmer — kept in every style
   note(ctx, t, midiHz(60 + midi[0] + song.arp[s]), SIX * 1.4, 'triangle', 0.08, musicGain);
+  // reactive layer: off-beat arp density while drifting / boosting (silent at energy 0)
+  if (musicEnergy > 0.5 && s % 2 === 1) note(ctx, t, midiHz(84 + midi[2] + song.arp[(s + 5) & 15]), SIX * 1.2, 'triangle', 0.06 * musicEnergy, musicGain);
 
   // lead top-line
   if (song.style === 'drive') {

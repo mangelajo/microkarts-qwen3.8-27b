@@ -42,10 +42,12 @@ flat tracks stay flat.
   fallback. Pure `mapGamepad()` — a connected, active pad overrides
   keyboard/touch; browser wiring is guarded (no-op headless); `make netsim` tests
   the mapping with a fake pad
-- [ ] **Music reactivity** — the per-track chiptune gains a second layer
-  (arpeggio density + filter opening) driven by drift charge and boost, so a
-  big release audibly "hits". `audio.js` only; headless: assert the layer
-  gain tracks the charge curve with fake karts.
+- [x] **Music reactivity** ✅ (`audio.js` + `game.js`) — a lowpass in the music
+  bus opens from 1.5 kHz to 20 kHz with energy (0.55 · drift charge + 0.45 ·
+  boost, fed every frame), plus off-beat arp notes above 0.5 energy, so a big
+  release audibly "hits". Pure additive: at energy 0 the filter is at 20 kHz
+  (transparent) and the reactive layer is silent — the song plays as before.
+  Headless-safe; `make netsim` smoke-tests the setter
 
 ## Phase 6 — World
 

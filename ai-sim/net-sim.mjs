@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import { samples, selectTrack, angDiff, curvatureAt, trackLen, propList, tickProps, tickHazards, hazardFx } from '../src/track.js';
 import { getCornerCount, getCornerIdx, tickCorners } from '../src/corners.js';
 import { mapGamepad } from '../src/gamepad.js';
+import * as audioMod from '../src/audio.js';
 import { makeExplosions } from '../src/explosion.js';
 import { scene } from '../src/scene.js';
 import { TRACKS } from '../src/tracks.js';
@@ -625,6 +626,10 @@ console.log('\n== item boxes: layout + effect models ==');
   gi.buttons[7].pressed = true;   // RT = item
   const m3 = mapGamepad(gi);
   mark(m3 && m3.item, 'gamepad: RT = item');
+  // music reactivity: energy setter is headless-safe (no audio ctx in the sims)
+  audioMod.setMusicEnergy(0.9);
+  audioMod.setMusicEnergy(3);   // clamped
+  mark(true, 'setMusicEnergy is headless-safe (clamps, no ctx)');
 }
 
 /* ------------------------------------------------------------------ */

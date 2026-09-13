@@ -174,6 +174,13 @@ take in the catalogue. All track shapes are validated headlessly.
   own from the fellOff mirror and the remote's from the existing y f32 drop —
   zero wire change. The pool saturates (8 booms) and fully decays; `make netsim`
   covers spawn/decay/saturation
+- **Music reactivity** — the per-track chiptune gains a second layer driven by
+  `audio.setMusicEnergy()` (0.55 · drift charge + 0.45 · boost, fed every frame
+  from `game.js`): a lowpass in the music bus opens from 1.5 kHz to 20 kHz with
+  energy, plus off-beat arp notes appear above 0.5 energy. Pure additive — at
+  energy 0 the filter sits at 20 kHz (transparent) and the reactive layer is
+  silent, so the song plays exactly as before. Headless-safe (the setter clamps
+  and the filter path is browser-only); `make netsim` smoke-tests the setter
 - **Gamepad support** — `navigator.getGamepads()` wired at boot (`src/gamepad.js`):
   left stick steer, stick-down = gas / up = brake, LT or Y = drift (release =
   boost), RT or X = item (edge-triggered into the same `itemUseQ` as `E`), D-pad
@@ -276,7 +283,7 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/qr.js`       | Self-contained QR encoder (auto v1–40, byte mode, level-M RS, 8-mask penalty selection) + canvas `drawQr()` |
 | `src/resultsfx.js`| Results juice: podium pips (`podiumHtml`) + procedural confetti burst (`celebrate`) |
 | `src/daynight.js` | Day/night cycle: 6-min day drift (sun/moon arc, starfield dome, light/tint/fog phase) per theme — cycle / night / static |
-| `src/audio.js`    | WebAudio SFX + music sequencer (skid pitch follows drift charge, boost whoosh decays with `k.boost`, floor-hit boom) |
+| `src/audio.js`    | WebAudio SFX + music sequencer (skid pitch follows drift charge, boost whoosh decays with `k.boost`, floor-hit boom, reactive filter + off-beat arp from drift/boost energy) |
 | `ai-sim/`         | Node harnesses: `make sim` (AI) · `make netsim` (wire + 2P race sim) |
 | `ai-sim/playground.html` + `.js` | Browser **tuning playground**: the real `simulateTick` + AI on a 2D top-down canvas, runtime `tuneConfig`, telemetry (off % / stalls / laps / best lap) |
 | `ai-sim/watch.mjs`  | `make simwatch` — re-runs the AI bench on every change in `src/` + `ai-sim/` |
