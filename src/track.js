@@ -4,7 +4,7 @@ import { scene, sun, hemi, fill } from './scene.js';
 import { woodTexture, checkerTexture, curbTexture } from './textures.js';
 import { TRACKS, trackTheme } from './tracks.js';
 import { retintSky } from './sky.js';
-import { buildObstacles, obstacleList, getObstaclesOn, HAZ_COLOR, mulberry32 } from './obstacles.js';
+import { buildObstacles, obstacleList, getObstaclesOn, HAZ_COLOR, mulberry32, KART_R } from './obstacles.js';
 import { buildPads, padList, CELL_LEN, CELL_W, GAP, CELLS } from './pads.js';
 import { buildItems, itemBoxList, walls } from './items.js';
 
@@ -227,6 +227,7 @@ export function tickProps(dt, karts) {
  *  with every rebuild. No-op when hazards are off.
  * ------------------------------------------------------------------ */
 let hazardMats = null; // persistent: ring + base + per-kind body, like propMats
+export const hazardFx = []; // per-obstacle reaction state (pulse) — reset on rebuild
 function ensureHazardMats() {
   if (hazardMats) return hazardMats;
   const ring = new THREE.MeshStandardMaterial({ color: 0x241008, emissive: 0xff5a1e, emissiveIntensity: 0.85, roughness: 0.6 });
@@ -252,6 +253,7 @@ function hazardGeo(kind) {
 
 function scatterHazardMeshes(parent) {
   const m = ensureHazardMats();
+  hazardFx.length = 0;
   for (const o of obstacleList) {
     const body = new THREE.Group();
     body.position.set(o.x, o.y || 0, o.z);   // sits ON the (elevated) road
@@ -282,6 +284,34 @@ function scatterHazardMeshes(parent) {
     body.add(baseM);
 
     parent.add(body);
+    hazardFx.push({ o, body, mesh, baseS: s, pulse: 0, ph: o.rot * 3 });
+  }
+}
+
+/* reactive hazards (cosmetic, like the props): a fast kart in a hazard's
+ * radius squash-stretches + wobbles the candy, decaying to rest. State
+ * lives in hazardFx so the function is headless-safe. */
+export function tickHazards(dt, karts) {
+  for (const h of hazardFx) {
+    const o = h.o, R = o.r + KART_R;
+    for (const k of karts) {
+      if (Math.abs(k.pos.y - (o.y || 0)) > 2.2) continue;
+      const dx = k.pos.x - o.x, dz = k.pos.z - o.z;
+      const sp = Math.abs(k.speed);
+      if (dx * dx + dz * dz < R * R && sp > 3) h.pulse = Math.min(1, h.pulse + sp * 0.06);
+    }
+    if (h.pulse > 0.01) {
+      h.ph += 14 * dt;
+      const w = h.pulse * Math.cos(h.ph);
+      h.mesh.scale.set(h.baseS * (1 + 0.28 * w), h.baseS * (1 - 0.22 * w), h.baseS * (1 + 0.28 * w));
+      h.body.rotation.y = o.rot + 0.45 * h.pulse * Math.sin(h.ph);
+      h.pulse *= Math.exp(-4.5 * dt);
+      if (h.pulse < 0.01) {
+        h.pulse = 0;
+        h.mesh.scale.setScalar(h.baseS);
+        h.body.rotation.y = o.rot;
+      }
+    }
   }
 }
 
@@ -441,6 +471,7 @@ export function buildTrack(def, index = 0) {
   }
 
   // --- visible: swap the track group's contents (dispose old) ---
+  hazardFx.length = 0;
   while (group.children.length) {
     const c = group.children.pop();
     c.traverse(n => { if (n.isMesh) n.geometry.dispose(); });

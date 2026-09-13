@@ -160,6 +160,15 @@ take in the catalogue. All track shapes are validated headlessly.
   `race.js` `simulateTick` (solo + host + net-sim), and the AI dodges like a human:
   skill-scaled lane avoidance with per-driver side hysteresis, and a
   reverse-to-unwrap + 6 s per-hazard cooldown when a weak driver gets wedged.
+  **Reactive**: a fast kart in a hazard's radius squash-stretches + wobbles the
+  candy (a decaying pulse, `track.js` `tickHazards` — cosmetic, headless-safe).
+- **Floor-hit explosion** (`src/explosion.js` + `audio.js`) — a kart that fell off
+  an elevated track bursts when it hits the table: 12 pooled particles + smoke +
+  an expanding shockwave ring, plus a synthesized boom (lowpass thump + sub +
+  crackle). Host/solo fire on the `fellOff` transition; the join client fires its
+  own from the fellOff mirror and the remote's from the existing y f32 drop —
+  zero wire change. The pool saturates (8 booms) and fully decays; `make netsim`
+  covers spawn/decay/saturation
   Menu toggle: chip or `Z` (persisted, **ON by default**)
 - **Boost pads** — glowing chevron strips auto-placed on each track's straights;
   crossing the three cells back-to-back chains a bigger and bigger kick, and the
@@ -222,12 +231,13 @@ take in the catalogue. All track shapes are validated headlessly.
 |--------------------|--------------|
 | `src/config.js`   | Tunable constants (speed, steering, track, AI skill levels) |
 | `src/tracks.js`   | Track catalogue: control points + name + theme palette per track |
-| `src/track.js`    | `buildTrack()`: spline → samples → ribbon road, curbs, table, reactive props (`tickProps`) |
+| `src/track.js`    | `buildTrack()`: spline → samples → ribbon road, curbs, table, reactive props (`tickProps`) + reactive hazards (`tickHazards`) |
 | `src/scene.js`    | Renderer, lights, fog, sky |
 | `src/sky.js`      | Procedural sky dome + sun (re-paintable gradient per theme) |
 | `src/kart.js`     | Kart mesh + physics `step()` |
 | `src/ai.js`       | AI driver: pure-pursuit line following, curvature-aware braking, recovery |
 | `src/blastfx.js`  | Exhaust flame/smoke particle pools above the speed threshold + golden nitro flare on boost |
+| `src/explosion.js`| Pooled floor-hit explosion FX (particle burst + smoke + shockwave ring) |
 | `src/race.js`     | Headless race core: grid, progress, positions, collisions, `simulateTick()` |
 | `src/pads.js`     | Boost-pad field: seeded straight-aware layout + chain-hit model (pure) |
 | `src/obstacles.js`| Sugar-hazard field: seeded candy layout + per-driver AI dodging (pure) |
@@ -245,7 +255,7 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/qr.js`       | Self-contained QR encoder (auto v1–40, byte mode, level-M RS, 8-mask penalty selection) + canvas `drawQr()` |
 | `src/resultsfx.js`| Results juice: podium pips (`podiumHtml`) + procedural confetti burst (`celebrate`) |
 | `src/daynight.js` | Day/night cycle: 6-min day drift (sun/moon arc, starfield dome, light/tint/fog phase) per theme — cycle / night / static |
-| `src/audio.js`    | WebAudio SFX + music sequencer (skid pitch follows drift charge, boost whoosh decays with `k.boost`) |
+| `src/audio.js`    | WebAudio SFX + music sequencer (skid pitch follows drift charge, boost whoosh decays with `k.boost`, floor-hit boom) |
 | `ai-sim/`         | Node harnesses: `make sim` (AI) · `make netsim` (wire + 2P race sim) |
 | `ai-sim/playground.html` + `.js` | Browser **tuning playground**: the real `simulateTick` + AI on a 2D top-down canvas, runtime `tuneConfig`, telemetry (off % / stalls / laps / best lap) |
 | `ai-sim/watch.mjs`  | `make simwatch` — re-runs the AI bench on every change in `src/` + `ai-sim/` |

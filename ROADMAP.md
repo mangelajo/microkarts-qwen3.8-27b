@@ -1,9 +1,9 @@
 # Microkarts roadmap
 
-The old roadmap (Phases 1–4) is **100% shipped** — compressed at the bottom. This
-document is the next arc: feel, world, beyond-the-race, scale. Same rules apply:
-zero assets, deterministic sim, headless-verified (`make sim` / `make netsim`),
-wire backward-compatible, flat tracks stay flat.
+Phases 1–4 (core, 3D, engineering, polish) are complete — see git history.
+Same rules apply to everything below: zero assets, deterministic sim,
+headless-verified (`make sim` / `make netsim`), wire backward-compatible,
+flat tracks stay flat.
 
 ## Current state
 
@@ -11,12 +11,20 @@ wire backward-compatible, flat tracks stay flat.
 - Solo vs AI + 2-player WebRTC (QR pairing, `?join=` deep link), host-authoritative sim
 - 3D elevation: slope speed, crest-launch, wheel-torque tipping, table fall + respawn
 - Drift → boost → pads; sugar hazards; item boxes (turbo / timed rubber / wall)
-- Ghost + top-5 rankings (localStorage); results FX; reactive tabletop props
-- AI bench (`make sim`), wire round-trip + race sims (`make netsim`), tuning
-  playground + watch mode, Playwright render check (`make screens`)
+- Ghost + top-5 rankings; results FX; reactive props; floor-hit explosion FX
 
 ## Phase 5 — Feel
 
+- [x] **Reactive obstacles** ✅ (`src/track.js` `tickHazards`) — a fast kart in a
+  hazard's radius squash-stretches + wobbles the candy (a decaying pulse, like the
+  props); purely cosmetic, headless-safe, `make netsim` covers pulse/decay/slow-crawl
+- [x] **Floor-hit explosion** ✅ (`src/explosion.js` + `audio.js` + `game.js` +
+  `net2p.js`) — a kart that fell off an elevated track bursts on hitting the table:
+  12 pooled particles + smoke + an expanding shockwave ring, plus a synthesized boom
+  (lowpass thump + sub + crackle). Host/solo fire on the `fellOff` transition; the
+  join client fires its own from the fellOff mirror and the remote's from the
+  existing y f32 drop (no wire change). Pool saturates + fully decays; `make netsim`
+  covers spawn/decay/saturation
 - [ ] **Perfect drift** — releasing the drift in a short window (the top of the
   charge curve) pays extra boost + a "PERFECT" callout + chime. The window is a
   constant around `DRIFT_CHARGE_MAX`; the bonus scales the release charge.
@@ -62,11 +70,6 @@ wire backward-compatible, flat tracks stay flat.
   results screen offers REPLAY: re-simulate offline, chase the leader, any
   speed (0.5×/1×/2×). No wire traffic; old peers simply don't offer it.
   `make netsim` validates a record→replay determinism (bit-identical karts).
-- [ ] **Spectator mode** — a third device joins as spectator: the join flow
-  gains a mode bit (old peers decode it as 0 → normal join, backward
-  compatible); the spectator sends no input (the host runs a parked kart for
-  it) and its camera follows the leader with the minimap + live positions.
-  `make netsim` gets a 3-party sim (host + racer + spectator frames).
 - [ ] **Track editor** — sandbox mode: drag control points on the existing
   spline gizmo, place pads, save to localStorage, and share via a short URL
   (base64 of the point/pad/hazard data, like the pairing code — `?track=`
@@ -92,30 +95,8 @@ wire backward-compatible, flat tracks stay flat.
 ## Deliberately not doing (for now)
 
 - **3+ racers** — the state frame is sized for 2 karts; a real n-player mode
-  is a protocol re-design, not an extension (spectator above is the cheap
-  step toward it).
+  is a protocol re-design, not an extension.
 - **Asset-based content** — the zero-asset rule is a feature (instant load,
   no CDN); everything stays procedural.
 - **Server backend / accounts** — localStorage + WebRTC stays the whole stack;
   rankings/ghost are local by design.
-
----
-
-## Shipped (Phases 1–4, complete)
-
-**Core**: 2P WebRTC (pairing code + QR on both sides, `?join=` deep link),
-host-authoritative sim, wire round-trip sims · 6 tracks (3 flat, 3 elevated)
-incl. NEBULA SWIRL · 3D elevation (slope speed, crest-launch, wheel-torque
-tipping, no-magic-lift fall + respawn) · drift → boost → pads · sugar hazards
-· item boxes (turbo / **timed rubber band with HUD countdown** / wall) ·
-ghost + top-5 rankings · day/night cycle (drifting sun/moon, starfield,
-per-theme modes) · results confetti + podium pips · drift sound pitch +
-nitro flames · **reactive tabletop props** (seeded field, drift-band props,
-contact spin/wobble/hop) · multi-page menu (RACE/EXTRAS/CONTROLS/2P) ·
-fully synthesized audio (engine, skids, chiptune per track)
-
-**Engineering**: monolith split (`main.js` → `game.js` + `net2p.js`),
-`config.js` tuning surface (51 live constants) + AI bench + tuning playground
-+ watch mode, headless QR encoder (`src/qr.js`, reference-verified), Playwright
-render check (20 captures, every screen size), `make sim` / `make netsim` /
-`make screens` / `make qrcheck` gates, CI on every push, `make deploy`

@@ -41,6 +41,7 @@ export function createNet2p(ctx) {
   let clientItemSeen = [];   // per-kart: did the last frame carry an item? (pickup mirror)
   let lastClientSp = 0; // own-kart speed from the last applied frame (impact estimate)
   let lastClientY = 0; // own-kart height — detects a fall for the HUD message
+  let prevRemoteY = []; // per-mirrored-kart height from the last frame (floor-hit FX)
 
   const role = () => game.netMode === 2 && net ? net.role : null;
   // "you" per device: host/solo = player kart · client = p2 (its own wire kart)
@@ -296,10 +297,14 @@ export function createNet2p(ctx) {
       k.offRoad = m.offRoad;
       k.posIdx = m.posIdx;
       k.item = m.item ?? 0;   // held item (interpolated frames pass it through intact)
+      // explosion mirror: a remote kart falling to the table (y drops from
+      // the track to 0) bursts — read from the existing y f32, no wire change
+      const my = m.y ?? 0;
+      if (my < 0.5 && prevRemoteY[i] > 2 && k !== ctx.player) ctx.boom(k.pos.x, 0, k.pos.z);
+      prevRemoteY[i] = my;
       // cosmetic tumble mirror: run the same corner-torque dynamics as the
       // local sim so a falling remote kart tips the same way (host stays
       // authoritative for position; the pose is derived, never sent)
-      const my = m.y ?? 0;
       const bi = nearestSampleIdx(m.x, m.z);
       k.trackIdx = bi;
       const ry = samples[bi].y;
@@ -318,6 +323,7 @@ export function createNet2p(ctx) {
     // its own kart's fellOff so the HUD reads the same (y drops from the
     // track to the table, then clears when it respawns back up)
     if (lastClientY > FELL_MIN_HEIGHT && ctx.player.pos.y < 0.3) {
+      if (!ctx.player.fellOff) { ctx.boom(ctx.player.pos.x, 0, ctx.player.pos.z); audio.explode(); }
       ctx.player.fellOff = true;
       ctx.player.fellTimer = FELL_PENALTY;
     }

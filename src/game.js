@@ -6,10 +6,11 @@ import {
   ITEM_TURBO, ITEM_WALL,
 } from './config.js';
 import { renderer, scene, camera, updateDust, dustForKart } from './scene.js';
+import { makeExplosions } from './explosion.js';
 import { initMinimap, setMinimapVisible, updateMinimap, resizeMinimap } from './minimap.js';
 import { Kart } from './kart.js';
 import { aiControl } from './ai.js';
-import { selectTrack, updateItemBoxes, syncWallMeshes, tickProps } from './track.js';
+import { selectTrack, updateItemBoxes, syncWallMeshes, tickProps, tickHazards } from './track.js';
 import { initDayNight, setDayNightFor, updateDayNight } from './daynight.js';
 import { GRID, simulateTick, raceOrder } from './race.js';
 import { setObstaclesOn, getObstaclesOn } from './obstacles.js';
@@ -187,9 +188,15 @@ function keyInput(k, racing) {
  *  hands in the shared context and drives the per-frame host ticks +
  *  client pass in animate().
  * ------------------------------------------------------------------ */
+/* explosion FX (scene-level) — a kart that hits the table after a fall bursts;
+   host/solo fire it on the fellOff transition, the join client via net2p */
+const expFx = makeExplosions(scene);
+let prevFell = [];
+
 const n2 = createNet2p({
   karts, player, p2Ref: () => p2, ensureP2,
   racers, syncRosterVisibility, addShake, snapChaseCam, camSnap,
+  boom: (x, y, z) => expFx.boom(x, y, z),
 });
 
 // QR pairing (P2's phone): a scanned ?join=CODE opens straight into the
@@ -517,6 +524,7 @@ function animate() {
   // reactive props (cosmetic): a kart near a roadside prop spins/wobbles it —
   // runs before the sim step, so contact is one frame behind (imperceptible)
   tickProps(dt, list);
+  tickHazards(dt, list);
   // the pull-joystick only drives while the car may move; it parks on menu/results
   touchSetActive(game.state === 'countdown' || game.state === 'racing');
 
@@ -668,6 +676,17 @@ function animate() {
    }
   updateItemBoxes(dt, now);   // spin + bob the item boxes (hidden while respawning)
   syncWallMeshes();           // point the pooled wall meshes at live projectiles
+  // explosion on floor-hit: every kart that just started its fell-off stun
+  if (role !== 'join') {
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].fellOff && !prevFell[i]) {
+        expFx.boom(list[i].pos.x, list[i].pos.y, list[i].pos.z);
+        audio.explode();
+      }
+      prevFell[i] = !!list[i].fellOff;
+    }
+  }
+  expFx.update(dt);
   renderer.render(scene, camera);
 }
 

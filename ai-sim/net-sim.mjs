@@ -10,7 +10,9 @@
  *  Run:  make netsim   (or: node --import ./ai-sim/stub.js ai-sim/net-sim.mjs)
  * ------------------------------------------------------------------ */
 import * as THREE from 'three';
-import { samples, selectTrack, angDiff, curvatureAt, trackLen, propList, tickProps } from '../src/track.js';
+import { samples, selectTrack, angDiff, curvatureAt, trackLen, propList, tickProps, tickHazards, hazardFx } from '../src/track.js';
+import { makeExplosions } from '../src/explosion.js';
+import { scene } from '../src/scene.js';
 import { TRACKS } from '../src/tracks.js';
 import { N_SAMPLES, SIM_DT, LAPS, AI_SKILL, clamp, ITEM_TURBO, ITEM_RUBBER, ITEM_WALL, ITEM_RESPAWN, RUBBER_DURATION } from '../src/config.js';
 import { Kart } from '../src/kart.js';
@@ -569,6 +571,46 @@ console.log('\n== item boxes: layout + effect models ==');
   slow.pos.set(q.x, q.y, q.z); slow.speed = 1;
   tickProps(1 / 60, [slow]);
   mark(q.spinVel === 0, 'a slow crawl does not spin the prop');
+}
+
+/* ------------------------------------------------------------------ */
+/*  Reactive hazards — a fast kart in a hazard's radius squash-stretches
+ *  the candy (pulse), which decays to rest. Explosions: the floor-hit
+ *  FX pool spawns on demand and fully empties.
+ * ------------------------------------------------------------------ */
+{
+  setObstaclesOn(true);
+  selectTrack(0);   // rebuilds the hazard meshes (obstacles on)
+  mark(hazardFx.length === obstacleList.length, `hazard FX state for every obstacle (${hazardFx.length})`);
+  const o = obstacleList[0];
+  const h = hazardFx[0];
+  const k = new Kart({ isPlayer: true });
+  k.pos.set(o.x, o.y || 0, o.z);
+  k.speed = 15;
+  tickHazards(1 / 60, [k]);
+  mark(h.pulse > 0.5, `fast kart pulses the hazard candy (pulse ${h.pulse.toFixed(2)})`);
+  k.pos.x += 50;
+  for (let i = 0; i < 60 * 2; i++) tickHazards(1 / 60, [k]);
+  mark(h.pulse === 0, 'hazard pulse decays to rest');
+  // the slow-kart case: no pulse
+  const s2 = new Kart({ isPlayer: true });
+  s2.pos.set(o.x, o.y || 0, o.z); s2.speed = 2;
+  tickHazards(1 / 60, [s2]);
+  mark(h.pulse === 0, 'a slow crawl does not pulse the hazard');
+  // explosion pool: spawn on the floor hit, decay to empty
+  const fx = makeExplosions(scene);
+  fx.boom(0, 0, 0);
+  mark(fx.count() === 13, `explosion spawns 12 particles + 1 ring (${fx.count()})`);
+  for (let i = 0; i < 60 * 2.5; i++) fx.update(1 / 60);
+  mark(fx.count() === 0, 'explosion pool fully decays');
+  // pool saturation: many simultaneous booms cap, no unbounded growth
+  for (let i = 0; i < 30; i++) fx.boom(0, 0, 0);
+  mark(fx.count() <= 13 * 8 + 1, `explosion pool saturates (${fx.count()})`);
+  for (let i = 0; i < 60 * 3; i++) fx.update(1 / 60);
+  mark(fx.count() === 0, 'saturated pool fully decays');
+  // restore: the 2P race sections below run with obstacles off
+  setObstaclesOn(false);
+  selectTrack(0);
 }
 
 /* ------------------------------------------------------------------ *

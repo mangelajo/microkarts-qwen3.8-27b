@@ -299,3 +299,11 @@ export function lap() {
   note(ctx, t, 660, 0.1, 'square', 0.14, sfxGain);
   note(ctx, t + 0.1, 990, 0.16, 'square', 0.14, sfxGain);
 }
+
+export function explode() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  noiseHit(ctx, t, 0.5, 0.5, 'lowpass', 700, 1);          // the body of the boom
+  note(ctx, t, 70, 0.35, 'sine', 0.55, sfxGain, 26);      // sub thump
+  noiseHit(ctx, t + 0.06, 0.14, 0.22, 'bandpass', 2400, 0.8);  // the crackle
+}
