@@ -62,8 +62,8 @@ races it alongside you, so you're always chasing your own best lap.
 
 ## Tracks
 
-Six circuits on the same dinner table, each with its own theme palette
-(sky, fog, lighting, table wood, road colour) — four flat loops and two
+Eight circuits on the same dinner table, each with its own theme palette
+(sky, fog, lighting, table wood, road colour) — six flat loops and two
 whose roads rise off the table (up to ~15 u):
 
 | # | Track | Style |
@@ -74,6 +74,8 @@ whose roads rise off the table (up to ~15 u):
 | 4 | SUGAR CANYON | the old loop over a ridge, sunset — climbs to the far crest, fast run back down |
 | 5 | MIDNIGHT RIDGE | teardrop over a ridge, night — climb the bank, drop the long bend |
 | 6 | NEBULA SWIRL | space table — outer ring + two inner hooks (a fast loop with a slow, twisty heart) |
+| 7 | CANDY CAVERN | indoor neon cave — a low ceiling, crystal clusters + hanging candy, a smooth loop with a waved top |
+| 8 | STORM HARBOUR | overcast harbour — the table is a sea, bobbing buoys + a lighthouse with a rotating beacon; wind gusts nudge the AI |
 
 Pick with the chips on the menu (or `←`/`→`); the choice is remembered.
 Adding a track = a new entry in `src/tracks.js` (points + theme) and a
@@ -175,6 +177,13 @@ take in the catalogue. All track shapes are validated headlessly.
   own from the fellOff mirror and the remote's from the existing y f32 drop —
   zero wire change. The pool saturates (8 booms) and fully decays; `make netsim`
   covers spawn/decay/saturation
+- **Two new tracks** — CANDY CAVERN (track 7, indoor neon: a low dark ceiling +
+  seeded crystal clusters + hanging candy, `src/scenery.js`) and STORM HARBOUR
+  (track 8, overcast: the table is a **sea** — `seaTexture()`, bobbing buoys +
+  a lighthouse with a rotating beacon; **wind gusts nudge the AI** via a
+  deterministic spatial field in `ai.js`). Both are flat; day/night is `static`
+  (indoor / overcast). Adding a track = a `src/tracks.js` entry + a `make sim`
+  run — the AI is track-agnostic and the harness runs all 8 tracks
 - **Rain + puddles** — the `T` menu key / EXTRAS chip toggles a fully
   procedural weather: 320 falling rain-streak points (generated streak texture),
   a wet-road retint (glossy dark, `roughness 0.3`), seeded **puddle discs on
@@ -277,12 +286,13 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/corners.js`   | Per-corner timing — curvature-plateau corner field, in-corner time, lap-edge bank (deterministic; deltas are cosmetic) |
 | `src/gamepad.js`   | Gamepad — pure `mapGamepad()` (stick + D-pad + LT/Y drift, RT/X item) with browser connect/poll wiring (no-op headless) |
 | `src/weather.js`   | Rain + puddles — streak field, seeded flat-section puddle discs with ripples, wet retint + light dim (cosmetic, headless-safe) |
+| `src/scenery.js`   | Per-theme scenery — cavern ceiling + neon crystals + hanging candy, storm buoys + lighthouse (seeded, cosmetic, headless-safe) |
 | `src/race.js`     | Headless race core: grid, progress, positions, collisions, `simulateTick()` |
 | `src/pads.js`     | Boost-pad field: seeded straight-aware layout + chain-hit model (pure) |
 | `src/obstacles.js`| Sugar-hazard field: seeded candy layout + per-driver AI dodging (pure) |
 | `src/items.js`    | Item boxes: seeded layout + weighted rolls, pickups, wall projectiles, rubber band (pure) |
 | `src/touch.js`    | Mobile "pull" joystick: first finger seeds a virtual stick, drag = drive vector |
-| `src/textures.js` | Procedural canvas textures (wood table, …) |
+| `src/textures.js` | Procedural canvas textures (wood table, sea, …) |
 | `src/net.js`      | 2P wire protocol (enc/dec) + `NetSession` (pairing, DataChannel routing) |
 | `src/interp.js`   | Client-side interpolation ring + sampler (50 ms delay, angular wrap) |
 | `src/game.js`     | Game state machine: karts, input, race lifecycle, cameras, the `animate()` loop (solo/host sim + client pass) — boots the `net2p` session |

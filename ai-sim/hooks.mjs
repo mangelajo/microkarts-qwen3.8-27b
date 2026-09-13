@@ -14,6 +14,7 @@ const FAKE_TEXTURES = `const t = () => ({ repeat: { set: () => {} }, dispose: ()
 export const woodTexture = t;
 export const checkerTexture = t;
 export const curbTexture = t;
+export const seaTexture = t;
 `;
 
 export async function resolve(specifier, context, next) {

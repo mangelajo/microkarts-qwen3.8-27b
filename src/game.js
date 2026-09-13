@@ -9,11 +9,13 @@ import { renderer, scene, camera, updateDust, dustForKart } from './scene.js';
 import { makeExplosions } from './explosion.js';
 import { initMinimap, setMinimapVisible, updateMinimap, resizeMinimap } from './minimap.js';
 import { Kart } from './kart.js';
-import { aiControl } from './ai.js';
+import { aiControl, setWindOn } from './ai.js';
+import { TRACKS } from './tracks.js';
 import { selectTrack, updateItemBoxes, syncWallMeshes, tickProps, tickHazards } from './track.js';
 import { initDayNight, setDayNightFor, updateDayNight } from './daynight.js';
 import { initGamepad, gamepadPoll } from './gamepad.js';
 import { buildWeather, tickWeather, applyWeatherLights, tickPuddles, puddleRipple, setWeatherRain, getWeatherRain } from './weather.js';
+import { tickScenery } from './scenery.js';
 import { setRoadWet } from './track.js';
 import { GRID, simulateTick, raceOrder } from './race.js';
 import { setObstaclesOn, getObstaclesOn } from './obstacles.js';
@@ -373,7 +375,7 @@ startBtn.addEventListener('click', () => {
 
 // track picker: chips + persistence. Rebuild the scene on selection;
 // track switch = rebuild the track + (re)apply its day/night mode
-function applyTrackVisuals(idx) { selectTrack(idx); setDayNightFor(idx); }
+function applyTrackVisuals(idx) { selectTrack(idx); setDayNightFor(idx); setWindOn(TRACKS[idx].theme === 'storm'); }
 
 // track.js already built TRACKS[0] eagerly at import, so skip a redundant build.
 initTrackPicker(
@@ -555,6 +557,7 @@ function animate() {
   applyWeatherLights();                // dim after daynight's absolute set
   tickPuddles(1 / 60);
   if (getWeatherRain()) puddleRipple(player.pos.x, player.pos.z, player.pos.y);
+  tickScenery(now * 0.001);   // crystals pulse, beacon rotates, buoys bob
   const list = racers();
   const role = n2.role();
   // reactive props (cosmetic): a kart near a roadside prop spins/wobbles it —

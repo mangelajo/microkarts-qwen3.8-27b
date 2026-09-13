@@ -58,10 +58,12 @@ flat tracks stay flat.
   patter. Shipped as **purely cosmetic** — no grip penalty (that would change
   the sim; the flat-track invariant stays bit-identical). No wire; `make
   netsim` covers the puddle field + ripple lifecycle + headless toggle
-- [ ] **Two new tracks** — CANDY CAVERN (indoor, neon glow, low ceiling props,
-  a new "cavern" theme) and STORM HARBOUR (coastal, fog + the rain above,
-  long straight for the wall item). Each = data in `tracks.js` + a theme +
-  bench coverage; `make sim`/`netsim`/`screens` grow by 2 tracks.
+- [x] **Two new tracks** — shipped as CANDY CAVERN (indoor neon: low dark
+  ceiling + seeded crystal clusters + hanging candy) and STORM HARBOUR
+  (overcast harbour: the table is a sea with bobbing buoys + a lighthouse
+  with a rotating beacon; wind gusts nudge the AI). Each = data in
+  `tracks.js` + a theme + `src/scenery.js` scenery; `make sim`/`netsim` run
+  all 8 tracks, screens capture a cavern race.
 - [ ] **Daily challenge** — "today's track" chip: a date hash picks the track
   AND re-seeds the pad/hazard/prop fields (seed = trackIdx ⊕ day), so the
   layout, hazards and boost field differ day-to-day on the same spline.

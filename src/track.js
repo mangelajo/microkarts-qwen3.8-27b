@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { N_SAMPLES, ROAD_HW, CURB_W, MAX_ELEVATION } from './config.js';
 import { scene, sun, hemi, fill } from './scene.js';
-import { woodTexture, checkerTexture, curbTexture } from './textures.js';
+import { woodTexture, checkerTexture, curbTexture, seaTexture } from './textures.js';
 import { TRACKS, trackTheme } from './tracks.js';
 import { retintSky } from './sky.js';
 import { buildObstacles, obstacleList, getObstaclesOn, HAZ_COLOR, mulberry32, KART_R } from './obstacles.js';
@@ -9,6 +9,7 @@ import { buildPads, padList, CELL_LEN, CELL_W, GAP, CELLS } from './pads.js';
 import { buildItems, itemBoxList, walls } from './items.js';
 import { buildCorners } from './corners.js';
 import { buildPuddles } from './weather.js';
+import { buildScenery } from './scenery.js';
 
 /* ------------------------------------------------------------------ *
  *  Track data — filled IN PLACE by buildTrack().
@@ -55,8 +56,8 @@ export function slopeAt(t) { // rise per unit arc-length (±8 u window, like cur
  *  The table — built once; its wood is re-painted per track theme
  * ------------------------------------------------------------------ */
 let table = null;
-function setTableWood(base) {
-  const tex = woodTexture(base);
+function setTableWood(base, sea = false) {
+  const tex = sea ? seaTexture() : woodTexture(base);
   if (!table) {
     table = new THREE.Mesh(
       new THREE.PlaneGeometry(420, 420),
@@ -542,13 +543,14 @@ export function buildTrack(def, index = 0) {
   if (sun) sun.intensity = th.light.sun;
   if (hemi) hemi.intensity = th.light.hemi;
   if (fill) fill.intensity = th.light.fill;
-  setTableWood(th.wood);
+  setTableWood(th.wood, def.theme === 'storm');   // storm: the table is a sea
 
   // --- remember the current track ---
   current.name = def.name;
   current.theme = def.theme;
   buildCorners();   // per-corner timing field (deterministic from the samples)
   buildPuddles(index, group);   // weather: seeded puddles on flat sections (always built; visible only when raining)
+  buildScenery(def.theme, index);   // per-theme scenery (cavern ceiling/crystals, storm buoys/lighthouse)
 
   return { trackLen, name: def.name, points: def.points.length };
 }

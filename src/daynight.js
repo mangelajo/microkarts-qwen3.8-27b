@@ -23,6 +23,8 @@ const CYCLE_BY_THEME = {
   sunset: { mode: 'cycle', base: 0.68 }, // golden afternoon → sunset
   midnight: { mode: 'night' },
   space: { mode: 'static' },
+  cavern: { mode: 'static' },   // indoor — the theme's own dim neon light
+  storm: { mode: 'static' },   // overcast — no sun arc
 };
 
 let starDome = null, sunSprite = null, moonSprite = null, domeMat = null;

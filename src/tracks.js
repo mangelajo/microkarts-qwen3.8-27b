@@ -48,6 +48,21 @@ const THEMES = {
     wood: '#2e2a3e', road: 0x2a2438,
     light: { sun: 1.1, hemi: 0.7, fill: 0.45 },
   },
+  // an indoor candy cave: near-black blue, neon accents (scenery.js adds the
+  // low ceiling + crystals + hanging candy)
+  cavern: {
+    fog: 0x0a0812,
+    sky: [[0.00, 0x05040c], [0.35, 0x0c0a1e], [0.62, 0x141030], [0.82, 0x1c1540], [1.00, 0x241a4e]],
+    wood: '#3a3450', road: 0x2c2838,
+    light: { sun: 0.9, hemi: 0.5, fill: 0.5 },
+  },
+  // a stormy harbour: overcast grey-blue, weathered dock wood
+  storm: {
+    fog: 0x1c2733,
+    sky: [[0.00, 0x2a3a4a], [0.35, 0x3d5266], [0.62, 0x5a7183], [0.82, 0x7a8f9f], [0.93, 0x93a5b2], [1.00, 0xa8b6c2]],
+    wood: '#5a6a72', road: 0x333a42,
+    light: { sun: 1.0, hemi: 0.7, fill: 0.5 },
+  },
 };
 
 export const TRACKS = [
@@ -168,6 +183,40 @@ export const TRACKS = [
       [  -75,    0,  -40],
       [  -35,    0,  -30],
       [  -20,    0,  -75],
+    ],
+  },
+  {
+    name: 'CANDY CAVERN',
+    theme: 'cavern',
+    points: [
+      [   0,    0,    0],
+      [  52,    0,  -14],
+      [  86,    0,   10],
+      [  90,    0,   55],
+      [  58,    0,   88],
+      [   2,    0,   72],
+      [ -45,    0,   90],
+      [ -84,    0,   58],
+      [ -88,    0,    8],
+      [ -52,    0,  -26],
+      [ -18,    0,  -38],
+    ],
+  },
+  {
+    name: 'STORM HARBOUR',
+    theme: 'storm',
+    points: [
+      [   0,    0,    0],
+      [  58,    0,  -22],
+      [ 106,    0,   12],
+      [ 104,    0,   68],
+      [  58,    0,  100],
+      [   4,    0,   66],
+      [ -48,    0,  104],
+      [ -98,    0,   78],
+      [-108,    0,    8],
+      [ -72,    0,  -42],
+      [ -22,    0,  -48],
     ],
   },
 ];

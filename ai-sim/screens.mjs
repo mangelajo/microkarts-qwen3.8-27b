@@ -172,6 +172,30 @@ for (const [name, vp] of Object.entries(VPS)) {
   }
   await nightPage.close();
 
+  // CANDY CAVERN (chip 6) — the indoor neon look (ceiling + crystals)
+  const cavePage = await browser.newPage({ viewport: vp });
+  const caveErrors = [];
+  cavePage.on('pageerror', e => caveErrors.push(String(e)));
+  cavePage.on('console', m => { if (m.type() === 'error') caveErrors.push(m.text()); });
+  await cavePage.goto(`http://localhost:${PORT_ACTUAL}/`, { waitUntil: 'load', timeout: 30000 });
+  await cavePage.waitForSelector('#overlay', { state: 'visible', timeout: 20000 });
+  await cavePage.waitForTimeout(1200);
+  await cavePage.click('#menuTabs [data-tab="race"]');
+  const cchips = cavePage.locator('#trackRow .tchip');
+  if ((await cchips.count()) >= 7) {
+    await cchips.nth(6).click();
+    await cavePage.waitForTimeout(400);
+    await cavePage.locator('#startBtn').scrollIntoViewIfNeeded();
+    await cavePage.click('#startBtn');
+    await cavePage.waitForTimeout(8200);           // GO + ~8 s of cave driving
+    await shot(cavePage, `${name}-race-cavern`);
+  }
+  if (caveErrors.length) {
+    console.error(`[${name}-cave] page errors:\n  ` + caveErrors.join('\n  '));
+    failed = true;
+  }
+  await cavePage.close();
+
   if (errors.length) {
     console.error(`[${name}] page errors:\n  ` + errors.join('\n  '));
     failed = true;

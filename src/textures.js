@@ -47,3 +47,28 @@ export function curbTexture() {
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
+
+// a calm-grey sea (storm harbour table): dark base + soft wave streaks
+export function seaTexture(base = '#3d5a74') {
+  const c = document.createElement('canvas'); c.width = c.height = 512;
+  const g = c.getContext('2d');
+  g.fillStyle = base; g.fillRect(0, 0, 512, 512);
+  for (let y = 0; y < 512; y += 28) {
+    g.strokeStyle = `rgba(190,215,235,${0.05 + Math.random() * 0.1})`;
+    g.lineWidth = 2 + Math.random() * 4;
+    g.beginPath();
+    g.moveTo(0, y);
+    g.bezierCurveTo(128, y + 8 * Math.random() - 4, 384, y + 8 * Math.random() - 4, 512, y);
+    g.stroke();
+  }
+  // a few foam speckles
+  for (let i = 0; i < 60; i++) {
+    g.fillStyle = `rgba(230,240,248,${0.04 + Math.random() * 0.08})`;
+    g.fillRect(Math.random() * 512, Math.random() * 512, 2 + Math.random() * 5, 1.5);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(12, 12);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}

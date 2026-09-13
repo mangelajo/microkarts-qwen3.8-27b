@@ -3,6 +3,10 @@ import { MAX_SPEED, STEER_RATE, ROAD_HW, N_SAMPLES, clamp, turnFactor, SLOPE_BRA
 import { samples, sampleHead, angDiff, curvatureAt, slopeAt, trackLen } from './track.js';
 import { obstacleAvoid, blockingHazard } from './obstacles.js';
 
+// wind gusts (storm harbour) — set per track by game.js
+let windOn = false;
+export function setWindOn(v) { windOn = !!v; }
+
 /* ------------------------------------------------------------------ *
  *  AI driver — pure-pursuit line following + curvature-aware braking
  *
@@ -36,6 +40,7 @@ function cornerCap(K) {
 }
 
 export function aiControl(k, karts) {
+  // storm harbour: wind gusts are ON for this track's sim (set by game.js)
   // per-hazard escape cooldown: prevents the endless clip→escape→re-clip loop
   if ((k._coolUntil || 0) > 0) k._coolUntil--;
   const P = aiParams(k.skill ?? 0.9);
@@ -173,5 +178,8 @@ let vNeed = Infinity;
       if (Math.abs(side) < 1 + fwd * 0.35) { use = true; break; }
     }
   }
+  // storm harbour: wind gusts nudge the driver — a deterministic spatial
+  // field (per-skill phase) so the sim stays deterministic
+  if (windOn) steer += 0.22 * Math.sin(k.pos.x * 0.045 + k.pos.z * 0.06 + (k.skill ?? 0.9) * 3.1);
   return { throttle, steer, use };
 }
