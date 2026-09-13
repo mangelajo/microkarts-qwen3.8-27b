@@ -186,16 +186,14 @@
     <h1 id="title">MICRO KART RACING</h1>
     <div class="sub" id="subtitle">A TINY CIRCUIT ON THE DINNER TABLE</div>
     <div id="menuSections">
+      <div class="trk-row" id="menuTabs" style="margin-bottom:16px">
+        <button type="button" class="tchip sel" data-tab="race">RACE</button>
+        <button type="button" class="tchip" data-tab="extras">EXTRAS</button>
+        <button type="button" class="tchip" data-tab="controls">CONTROLS</button>
+      </div>
+      <div id="pageRace">
       <div class="cols">
         <div class="colL">
-    <div class="keys" id="keys">
-      <div><kbd>W / ↑</kbd>Accelerate</div>
-      <div><kbd>S / ↓</kbd>Brake · Reverse</div>
-      <div><kbd>A D / ← →</kbd>Steer</div>
-      <div><kbd>SPACE</kbd>Drift · release = boost</div>
-      <div><kbd>E</kbd>Use item (turbo · wall)</div>
-      <div><kbd>M</kbd>Music · <kbd>N</kbd> SFX · <kbd>K</kbd> Map</div>
-    </div>
     <div class="trk" id="modeWrap">
       <div class="trk-label">MODE</div>
       <div class="trk-row" id="modeRow">
@@ -233,18 +231,22 @@
       <div class="trk-label">TRACK</div>
       <div class="trk-row" id="trackRow"></div>
     </div>
+        </div>
+      </div>
+      </div>
+      <div id="pageExtras" class="hidden">
     <div class="trk" id="hazardWrap">
       <div class="trk-label">SUGAR HAZARDS <span style="opacity:.6">(Z)</span></div>
       <div class="trk-row" id="hazardRow">
         <button type="button" class="tchip" data-hazard="off">OFF</button>
-        <button type="button" class="tchip" data-hazard="on">ON</button>
+        <button type="button" class="tchip sel" data-hazard="on">ON</button>
       </div>
     </div>
     <div class="trk" id="itemWrap">
       <div class="trk-label">ITEM BOXES <span style="opacity:.6">(I)</span></div>
       <div class="trk-row" id="itemRow">
-        <button type="button" class="tchip sel" data-item="off">OFF</button>
-        <button type="button" class="tchip" data-item="on">ON</button>
+        <button type="button" class="tchip" data-item="off">OFF</button>
+        <button type="button" class="tchip sel" data-item="on">ON</button>
       </div>
     </div>
     <div class="trk" id="rankWrap">
@@ -252,11 +254,20 @@
       <div id="rankRow" style="font-size:12px; letter-spacing:1px; line-height:1.7"></div>
     </div>
       </div>
+      <div id="pageControls" class="hidden">
+    <div class="keys" id="keys">
+      <div><kbd>W / ↑</kbd>Accelerate</div>
+      <div><kbd>S / ↓</kbd>Brake · Reverse</div>
+      <div><kbd>A D / ← →</kbd>Steer</div>
+      <div><kbd>SPACE</kbd>Drift · release = boost</div>
+      <div><kbd>E</kbd>Use item (turbo · wall)</div>
+      <div><kbd>M</kbd>Music · <kbd>N</kbd> SFX · <kbd>K</kbd> Map</div>
     </div>
       </div>
+    </div>
     <div class="result" id="results" style="display:none"></div>
     <button class="btn" id="startBtn">START RACE</button>
-    <div class="sub" id="footnote" style="margin:16px 0 0 0">OR PRESS ENTER &nbsp;·&nbsp; 3 LAPS</div>
+    <div class="sub" id="footnote" style="margin:16px 0 0 0">OR PRESS ENTER &nbsp;·&nbsp; 3 LAPS &nbsp;·&nbsp; 1/2/3 = PAGES</div>
   </div>
 </div>
 

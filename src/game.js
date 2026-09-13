@@ -19,6 +19,7 @@ import {
   initTrackPicker, cycleTrack, getTrackIdx, getMode,
   initHazardPicker, setHazard, getHazardOn, loadHazardPref,
   initItemPicker, setItem, getItemOn, loadItemPref,
+  initMenuTabs, setMenuPage,
   hudRankNudge,
 } from './hud.js';
 import * as audio from './audio.js';
@@ -116,6 +117,12 @@ addEventListener('keydown', e => {
   if (e.target && e.target.isContentEditable) return; // typing a pairing code
   if (e.code === 'Enter' || e.code === 'KeyR') primaryAction();
   if (e.code === 'Escape' && game.state === 'finished') toMenu();
+  // menu pages (menu state only — no conflict with race keys)
+  if (game.state === 'menu' && !e.repeat) {
+    if (e.code === 'Digit1') setMenuPage('race');
+    if (e.code === 'Digit2') setMenuPage('extras');
+    if (e.code === 'Digit3') setMenuPage('controls');
+  }
   if (e.code === 'KeyM') updateMusicMute();
   if (e.code === 'KeyN') updateSfxMute();
   if (e.code === 'KeyK') toggleMap();
@@ -301,8 +308,9 @@ function toMenu() {
   el('pos').textContent = '1';
   el('speed').textContent = '0';
   el('itemSlot').textContent = '—';
+  setMenuPage('race');
   showOverlay('MICRO KART RACING', 'A TINY CIRCUIT ON THE DINNER TABLE',
-    'START RACE', true, 'OR PRESS ENTER \u00a0\u00b7\u00a0 3 LAPS');
+    'START RACE', true, 'OR PRESS ENTER \u00a0\u00b7\u00a0 3 LAPS \u00a0\u00b7\u00a0 1/2/3 = PAGES');
 }
 
 function updateMusicMute() {
@@ -333,6 +341,9 @@ initTrackPicker(
     if (n2.role() === 'host') n2.net().sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn()); // client previews
   },
 );
+
+// menu pages: RACE / EXTRAS / CONTROLS — chips + 1/2/3
+initMenuTabs(p => setMenuPage(p));
 
 // sugar hazards: restore the persisted toggle BEFORE the first rebuild so the
 // boot-up track already has its candy; Z on the menu toggles it too.

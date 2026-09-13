@@ -82,6 +82,18 @@ for (const [name, vp] of Object.entries(VPS)) {
   await page.waitForTimeout(1500);                        // first frames + menu settle
   await shot(page, `${name}-menu`);
 
+  // the EXTRAS + CONTROLS pages
+  if (await page.locator('#menuTabs [data-tab="extras"]').count()) {
+    await page.click('#menuTabs [data-tab="extras"]');
+    await page.waitForTimeout(250);
+    await shot(page, `${name}-menu-extras`);
+    await page.click('#menuTabs [data-tab="controls"]');
+    await page.waitForTimeout(250);
+    await shot(page, `${name}-menu-controls`);
+    await page.click('#menuTabs [data-tab="race"]');
+    await page.waitForTimeout(150);
+  }
+
   // expand the 2P host panel (the biggest menu block) — skip if absent
   if (await page.locator('#modeRow [data-mode="host"]').count()) {
     await page.click('#modeRow [data-mode="host"]');

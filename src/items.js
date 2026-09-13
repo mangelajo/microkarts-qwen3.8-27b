@@ -30,7 +30,7 @@ import {
 export const itemBoxList = [];  // filled IN PLACE by buildItems; empty when off
 export const walls = [];        // live projectiles (host-authoritative, visual mirror elsewhere)
 
-let itemsOn = false;
+let itemsOn = true;
 export const getItemsOn = () => itemsOn;
 export const setItemsOn = v => { itemsOn = !!v; };
 

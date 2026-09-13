@@ -102,6 +102,11 @@ function collide(list) {
 let failures = 0;
 const mark = (ok, why) => { if (!ok) { failures++; console.log(`  !! FAIL: ${why}`); } };
 
+// base scenario: a clean track — the game defaults are now hazards+items ON,
+// so the bench opts out explicitly (the hazard/items scenarios opt back in)
+setObstaclesOn(false);
+setItemsOn(false);
+
 for (let ti = 0; ti < TRACKS.length; ti++) {
   const info = selectTrack(ti);
   console.log(`\n################  ${info.name}  (${info.points} points, ${Math.round(info.trackLen)} u)  ################`);

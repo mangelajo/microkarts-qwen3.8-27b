@@ -91,6 +91,21 @@ function hazardWrapEl() { return el('hazardWrap'); }
 function itemWrapEl() { return el('itemWrap'); }
 
 let hostRoster = '2ai'; // '2ai' | '1v1' — host-owned, broadcast on start
+/* ---------------- menu pages (RACE / EXTRAS / CONTROLS) ---------------- */
+const menuTabs = el('menuTabs');
+export function initMenuTabs(onTab) {
+  for (const c of menuTabs.children) {
+    c.addEventListener('click', () => { onTab(c.dataset.tab); c.blur(); });
+  }
+}
+const PAGES = ['race', 'extras', 'controls'];
+export function setMenuPage(p) {
+  for (const c of menuTabs.children) c.classList.toggle('sel', c.dataset.tab === p);
+  for (const pg of PAGES) {
+    el('page' + pg[0].toUpperCase() + pg.slice(1)).classList.toggle('hidden', pg !== p);
+  }
+}
+
 export function setHostRoster(r) {
   hostRoster = r;
   for (const c of rosterRow.children) c.classList.toggle('sel', c.dataset.roster === r);
@@ -108,7 +123,7 @@ export function initModePicker(onMode, onHostAnswer, onJoinSend, onRoster) {
     c.addEventListener('click', e => { onRoster(c.dataset.roster); e.target.blur(); });
   }
   el('joinInField').addEventListener('input', () => { joinInField.innerText = joinInField.innerText.trimStart(); });
-  // phones have no keyboard — swap the key list for the pull-stick hints
+  // phones have no keyboard — the CONTROLS page shows the pull-stick hints
   if (isTouchDevice()) {
     keysEl.innerHTML =
       '<div><kbd>DRAG</kbd>Drive + steer</div>' +
@@ -249,7 +264,7 @@ export function getHazardOn() {
 }
 
 export function loadHazardPref() {
-  try { return localStorage.getItem('mkr-hazard') === '1'; } catch { return false; }
+  try { return localStorage.getItem('mkr-hazard') !== '0'; } catch { return true; }
 }
 
 /* ------------------------------------------------------------------ *
@@ -282,5 +297,5 @@ export function getItemOn() {
 }
 
 export function loadItemPref() {
-  try { return localStorage.getItem('mkr-items') === '1'; } catch { return false; }
+  try { return localStorage.getItem('mkr-items') !== '0'; } catch { return true; }
 }

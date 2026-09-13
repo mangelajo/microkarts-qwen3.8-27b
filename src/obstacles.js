@@ -16,7 +16,7 @@ import { samples, sampleHead, trackLen } from './track.js';
 import { ROAD_HW } from './config.js';
 
 export const obstacleList = [];   // filled in place by buildObstacles; empty when off
-let obstaclesOn = false;
+let obstaclesOn = true;
 export const getObstaclesOn = () => obstaclesOn;
 export const setObstaclesOn = v => { obstaclesOn = !!v; };
 

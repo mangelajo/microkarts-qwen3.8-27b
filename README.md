@@ -53,6 +53,7 @@ non-zero if a driver can't hold the road or recover.
 | `I`            | Item boxes on/off (menu; join mirrors the host) |
 | `Enter` / `R`  | Start / restart   |
 | `Esc`          | Back to menu (from the results screen) |
+| `1` · `2` · `3` | Menu page — RACE / EXTRAS / CONTROLS (menu only) |
 
 3 laps to finish. Best lap per track is stored locally — a translucent ghost kart
 races it alongside you, so you're always chasing your own best lap.
@@ -133,7 +134,7 @@ take in the catalogue. All track shapes are validated headlessly.
   `race.js` `simulateTick` (solo + host + net-sim), and the AI dodges like a human:
   skill-scaled lane avoidance with per-driver side hysteresis, and a
   reverse-to-unwrap + 6 s per-hazard cooldown when a weak driver gets wedged.
-  Menu toggle: chip or `Z` (persisted)
+  Menu toggle: chip or `Z` (persisted, **ON by default**)
 - **Boost pads** — glowing chevron strips auto-placed on each track's straights;
   crossing the three cells back-to-back chains a bigger and bigger kick, and the
   chain stacks with a drift release (drift-into-the-pads = go). The layout is
@@ -152,18 +153,19 @@ take in the catalogue. All track shapes are validated headlessly.
   rest plain) + a ~180-piece procedural confetti burst; solo, 2P host and join
   client all go through `src/resultsfx.js` (ordering data = `raceOrder()`,
   covered headlessly by `make netsim`)
-- **Menu fits every screen** — the overlay is scroll-safe: `#overlay` scrolls and
-  the `.panel` uses `margin:auto` (centred when it fits, top-aligned when it
-  overflows, so the title is never clipped); a compact media-query layout (2-col
-  key grid, smaller title/chips) under 520 px wide / 1000 px tall; on touch
-  devices the keyboard list is swapped for the pull-stick hints (`hud.js`). The
-  menu is re-structured into **two columns on wide+tall viewports** (left: keys,
-  mode + pairing; right: track, hazards, items, rankings — the whole menu fits
-  1280×900 without scrolling), and the menu controls now **hide on the results
-  screen** (`showOverlay`'s `isMenu` flag toggles `#menuSections`); `Esc` returns
-  to the menu from results (a fresh state: clean HUD, mode/track/toggles
-  editable). Verified by `make screens` — 12 captures (menu / 2P host / 2P join /
-  results / countdown / race on desktop 1280×900 + phone 390×844)
+- **Menu fits every screen** — the menu is **multi-page** (three tabs, chips or `1`/`2`/`3`:
+  **RACE** = mode + 2P pairing + track + START, **EXTRAS** = sugar-hazard/item-box toggles
+  + the top-5 board, **CONTROLS** = the key/touch list) so every page fits a phone without
+  scrolling; the overlay is scroll-safe: `#overlay` scrolls and the `.panel` uses
+  `margin:auto` (centred when it fits, top-aligned when it overflows); a compact
+  media-query layout under 520 px wide / 1000 px tall; on touch devices the key list is
+  swapped for the pull-stick hints (`hud.js`). Two columns on wide+tall viewports
+  (mode + pairing left, track right). The menu controls **hide on the results screen**
+  (`showOverlay`'s `isMenu` flag toggles `#menuSections`); `Esc` returns to the menu from
+  results. **Sugar hazards + item boxes are ON by default** (persisted, `Z`/`I` to opt out;
+  `sim.mjs` opts its base scenario out explicitly, the scenario sections opt back in).
+  Verified by `make screens` — 16 captures (menu + all 3 pages + 2P host/join + results +
+  countdown + race on desktop 1280×900 + phone 390×844)
 - **Playwright render check** — `make screens` (`ai-sim/screens.mjs`) serves
   the game no-cache and boots it in headless Chromium on desktop (1280×900) +
   phone (390×844); captures menu / 2P panel / countdown / live race into
@@ -180,7 +182,7 @@ take in the catalogue. All track shapes are validated headlessly.
   close range; humans fire with `E` (touch: 450 ms auto-fire). Held item rides the state frame
   as one u8 per kart (29-byte karts; pre-item peers decode item = 0), the input frame gains a
   `use` bit (old frames decode use = false), and the track frame grows to 4 bytes (old 3-byte
-  peers keep their local setting). OFF by default — chip or `I` in the menu, persisted, host
+  peers keep their local setting). ON by default — chip or `I` in the menu, persisted, host
   broadcasts; `make sim` runs an items-ON pack per track and `make netsim` covers wire
   round-trips, legacy decodes, layout determinism and the effect models
 
