@@ -11,6 +11,7 @@ export const el = id => document.getElementById(id);
 export const overlay   = el('overlay');
 export const startBtn  = el('startBtn');
 const titleEl   = el('title');
+const menuSections = el('menuSections');
 const subEl     = el('subtitle');
 const keysEl    = el('keys');
 const footEl    = el('footnote');
@@ -24,10 +25,14 @@ export function fmt(t) {
   return m + ':' + ss + '.' + (d % 10);
 }
 
-export function showOverlay(title, subtitle, btn, keysVisible, footnote) {
+export function showOverlay(title, subtitle, btn, isMenu, footnote) {
   titleEl.textContent = title;
   subEl.textContent = subtitle;
-  keysEl.style.display = keysVisible ? '' : 'none';
+  // isMenu (the old "keysVisible"): the whole menu block — keys, mode,
+  // pairing, track, toggles, rankings — only exists on the menu; results
+  // and link-dropped states must not show the controls underneath
+  menuSections.style.display = isMenu ? '' : 'none';
+  keysEl.style.display = isMenu ? '' : 'none';
   footEl.textContent = footnote;
   startBtn.textContent = btn;
   overlay.classList.remove('hidden');

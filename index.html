@@ -66,6 +66,15 @@
   .btn:active { transform:translateY(3px); box-shadow:0 1px 0 #8a5a1e; }
   .trk { margin:0 0 22px 0; }
   .trk-label { font-size:10px; letter-spacing:3px; color:#d8b07f; margin-bottom:8px; }
+
+  /* two-column layout: stack by default (phones), side-by-side when the
+     viewport is wide AND tall enough for the whole menu to fit */
+  .cols { display:grid; grid-template-columns:1fr; gap:0 34px; }
+  .colL, .colR { min-width:0; }
+  @media (min-width:900px) and (min-height:820px) {
+    .cols { grid-template-columns:1fr 1fr; align-items:start; }
+    .panel { max-width:980px; }
+  }
   .trk-row { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
   .tchip { pointer-events:auto; cursor:pointer; font:inherit; font-size:12px; letter-spacing:1px;
     color:#ffe9c9; background:rgba(42,29,18,.85); border:1px solid rgba(255,200,120,.22);
@@ -74,6 +83,7 @@
   .tchip.sel { color:#1a0f06; background:linear-gradient(#ffd07a,#f0a94a); border-color:#f0a94a;
     font-weight:700; box-shadow:0 3px 0 #8a5a1e; }
   .result { font-size:15px; line-height:2.1; margin-bottom:24px; }
+  #netPanel .sub { margin-top:10px; }
   .result b { color:#ffd07a; }
   .net { margin:0 0 22px 0; text-align:center; }
   .ncode { font-size:15px; letter-spacing:1px; word-break:break-all; background:rgba(30,20,12,.85);
@@ -122,6 +132,14 @@
     .tchip { font-size:11px; padding:6px 12px; }
     .btn { font-size:13px; padding:10px 26px; margin-top:10px; }
   }
+  /* the 2-col panel band: the key list goes back to the full single-column
+     stack (the compact 2-col key grid only makes sense in the narrow
+     single-column layout) — this block must stay after the compact one */
+  @media (min-width:900px) and (min-height:820px) {
+    .keys { display:inline-block; grid-template-columns:none; width:auto; max-width:none;
+      font-size:14px; line-height:2.2; margin:0 0 20px; }
+    .keys kbd { font-size:inherit; min-width:34px; padding:2px 8px; }
+  }
   </style>
 </head>
 <body>
@@ -167,6 +185,9 @@
   <div class="panel">
     <h1 id="title">MICRO KART RACING</h1>
     <div class="sub" id="subtitle">A TINY CIRCUIT ON THE DINNER TABLE</div>
+    <div id="menuSections">
+      <div class="cols">
+        <div class="colL">
     <div class="keys" id="keys">
       <div><kbd>W / ↑</kbd>Accelerate</div>
       <div><kbd>S / ↓</kbd>Brake · Reverse</div>
@@ -206,6 +227,8 @@
         <div class="sub" id="joinMsg">…</div>
       </div>
     </div>
+        </div>
+        <div class="colR">
     <div class="trk" id="trackWrap">
       <div class="trk-label">TRACK</div>
       <div class="trk-row" id="trackRow"></div>
@@ -228,8 +251,10 @@
       <div class="trk-label">TOP 5 — <span id="rankTrackName">?</span></div>
       <div id="rankRow" style="font-size:12px; letter-spacing:1px; line-height:1.7"></div>
     </div>
+      </div>
+    </div>
+      </div>
     <div class="result" id="results" style="display:none"></div>
-    <br/>
     <button class="btn" id="startBtn">START RACE</button>
     <div class="sub" id="footnote" style="margin:16px 0 0 0">OR PRESS ENTER &nbsp;·&nbsp; 3 LAPS</div>
   </div>

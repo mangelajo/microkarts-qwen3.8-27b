@@ -47,7 +47,7 @@ const server = createServer(async (req, res) => {
 });
 
 const VPS = {
-  desktop: { width: 1280, height: 800 },
+  desktop: { width: 1280, height: 900 },
   phone: { width: 390, height: 844 },
 };
 
@@ -87,9 +87,39 @@ for (const [name, vp] of Object.entries(VPS)) {
     await page.click('#modeRow [data-mode="host"]');
     await page.waitForTimeout(400);
     await shot(page, `${name}-menu-2p`);
+    await page.click('#modeRow [data-mode="join"]');
+    await page.waitForTimeout(400);
+    await shot(page, `${name}-menu-join`);
     await page.click('#modeRow [data-mode="solo"]');
     await page.waitForTimeout(200);
   }
+
+  // synthetic results state — same elements the real finish uses
+  // (a full 3-lap race is too slow to wait for in a render check)
+  /* eslint-disable no-undef -- page.evaluate() bodies run in the browser */
+  await page.evaluate(() => {
+    document.getElementById('title').textContent = 'RACE COMPLETE';
+    document.getElementById('subtitle').textContent = 'YOU WRECKED EVERYONE AROUND THE TABLE';
+    document.getElementById('menuSections').style.display = 'none';
+    document.getElementById('startBtn').textContent = 'RACE AGAIN';
+    document.getElementById('footnote').textContent = 'OR PRESS R · ESC = MENU';
+    const r = document.getElementById('results');
+    r.style.display = '';
+    r.innerHTML = '<b>TOTAL 2:41.3</b> &nbsp;·&nbsp; BEST LAP <b>52.1</b>' +
+      '<div style="font-size:13px;letter-spacing:1px;margin-top:10px">1. <b>YOU</b> 52.1 &nbsp;&nbsp; 2. BUTTERFLY 54.0 &nbsp;&nbsp; 3. MINT 55.2 &nbsp;&nbsp; 4. GUM 57.8</div>';
+  });
+  await page.waitForTimeout(300);
+  await shot(page, `${name}-results`);
+  // back to the menu for the race captures
+  await page.evaluate(() => {
+    document.getElementById('title').textContent = 'MICRO KART RACING';
+    document.getElementById('subtitle').textContent = 'A TINY CIRCUIT ON THE DINNER TABLE';
+    document.getElementById('menuSections').style.display = '';
+    document.getElementById('startBtn').textContent = 'START RACE';
+    document.getElementById('results').style.display = 'none';
+  });
+  /* eslint-enable no-undef */
+  await page.waitForTimeout(200);
 
   await page.locator('#startBtn').scrollIntoViewIfNeeded();
   await page.click('#startBtn');

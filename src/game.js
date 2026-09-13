@@ -115,6 +115,7 @@ addEventListener('keydown', e => {
   if (k) { keys[k] = true; e.preventDefault(); }
   if (e.target && e.target.isContentEditable) return; // typing a pairing code
   if (e.code === 'Enter' || e.code === 'KeyR') primaryAction();
+  if (e.code === 'Escape' && game.state === 'finished') toMenu();
   if (e.code === 'KeyM') updateMusicMute();
   if (e.code === 'KeyN') updateSfxMute();
   if (e.code === 'KeyK') toggleMap();
@@ -266,7 +267,7 @@ function finishRace() {
     place === 1 ? 'YOU WRECKED EVERYONE AROUND THE TABLE' :
     place === list.length ? 'LAST PLACE ON THE DINNER TABLE' :
     'YOU FINISHED ' + place + ' OF ' + list.length;
-  showOverlay('RACE COMPLETE', placeMsg, 'RACE AGAIN', false, 'OR PRESS R');
+  showOverlay('RACE COMPLETE', placeMsg, 'RACE AGAIN', false, 'OR PRESS R \u00b7 ESC = MENU');
   audio.stopMusicTimer();
   resultsEl.innerHTML = '<b>TOTAL ' + fmt(game.raceTime) + '</b> &nbsp;·&nbsp; BEST LAP <b>' +
     fmt(best) + '</b>' + podiumHtml(order, nameOf) +
@@ -284,6 +285,24 @@ function primaryAction() {
   if (n2.role() === 'join') return;               // the host calls the shots
   if (n2.role() === 'host' && !n2.net().open) return;  // wait for the pairing
   if (game.state === 'menu' || game.state === 'finished') startRace();
+}
+
+// back to the menu from the results screen (Esc): the menu is the full
+// state again — fresh karts, clean HUD, mode/track/toggles all editable
+function toMenu() {
+  if (game.state !== 'finished') return;
+  if (n2.role() === 'join') return;             // the host calls the shots
+  game.state = 'menu';
+  ghostStop();
+  hideCountdown();
+  resultsEl.style.display = 'none';
+  el('lap').textContent = 'LAP 1/' + LAPS;
+  el('time').textContent = '0:00.0';
+  el('pos').textContent = '1';
+  el('speed').textContent = '0';
+  el('itemSlot').textContent = '—';
+  showOverlay('MICRO KART RACING', 'A TINY CIRCUIT ON THE DINNER TABLE',
+    'START RACE', true, 'OR PRESS ENTER \u00a0\u00b7\u00a0 3 LAPS');
 }
 
 function updateMusicMute() {
