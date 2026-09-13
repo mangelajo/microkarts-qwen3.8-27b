@@ -20,8 +20,8 @@ make imports # static import-graph check (browser-only modules included)
 make sim     # AI drivers on every track
 make netsim  # wire round-trips + 2P race sims on every track
 make serve   # local server + playground URL (see Tuning)
-npm run screens  # Playwright render check — boots the game in headless Chromium
-                 # (menu / 2P / countdown / race, desktop + phone viewports)
+make screens # Playwright render check — boots the game in headless Chromium
+             # (menu / 2P / countdown / race, desktop + phone viewports)
 ```
 
 Production deploy (uploads `index.html` + `src/` to ajo.es/microkarts — run the
@@ -156,9 +156,9 @@ take in the catalogue. All track shapes are validated headlessly.
   overflows, so the title is never clipped); a compact media-query layout (2-col
   key grid, smaller title/chips) under 520 px wide / 1000 px tall; on touch
   devices the keyboard list is swapped for the pull-stick hints (`hud.js`).
-  Verified by `npm run screens` (390×844 phone capture shows the whole menu incl.
+  Verified by `make screens` (390×844 phone capture shows the whole menu incl.
   START)
-- **Playwright render check** — `npm run screens` (`ai-sim/screens.mjs`) serves
+- **Playwright render check** — `make screens` (`ai-sim/screens.mjs`) serves
   the game no-cache and boots it in headless Chromium on desktop (1280×800) +
   phone (390×844); captures menu / 2P panel / countdown / live race into
   `screens/` and fails on any page JS error. CI runs it as the `render` job —
@@ -209,7 +209,7 @@ take in the catalogue. All track shapes are validated headlessly.
 | `ai-sim/`         | Node harnesses: `make sim` (AI) · `make netsim` (wire + 2P race sim) |
 | `ai-sim/playground.html` + `.js` | Browser **tuning playground**: the real `simulateTick` + AI on a 2D top-down canvas, runtime `tuneConfig`, telemetry (off % / stalls / laps / best lap) |
 | `ai-sim/watch.mjs`  | `make simwatch` — re-runs the AI bench on every change in `src/` + `ai-sim/` |
-| `ai-sim/screens.mjs` | `npm run screens` — Playwright render check: boots the game in headless Chromium (desktop + phone), captures menu/2P/countdown/race, fails on any page JS error |
+| `ai-sim/screens.mjs` | `make screens` — Playwright render check: boots the game in headless Chromium (desktop + phone), captures menu/2P/countdown/race, fails on any page JS error |
 
 ## Tuning
 

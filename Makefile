@@ -1,6 +1,6 @@
 PORT ?= 8080
 
-.PHONY: install lint imports serve sim simwatch netsim deploy
+.PHONY: install lint imports serve sim simwatch netsim screens deploy
 
 # production deploy target (ajo.es/microkarts) — override to deploy elsewhere
 DEPLOY_HOST ?= ajo@cpanel.optimizacionweb.es
@@ -30,6 +30,12 @@ simwatch: install
 
 netsim: install
 	node --import ./ai-sim/stub.js ai-sim/net-sim.mjs
+
+# Playwright render check: boots the game in headless Chromium (menu / 2P /
+# countdown / race, desktop + phone viewports), captures into screens/ and
+# fails on any page JS error. One-time setup: npx playwright install chromium
+screens: install
+	npm run screens
 
 # upload the game to the live server; run the gates first (`make sim netsim deploy`)
 deploy:

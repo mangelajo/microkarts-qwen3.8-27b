@@ -35,17 +35,17 @@ Re-runs the full AI bench on every change under `src/` or `ai-sim/`
 make simwatch   # or: node ai-sim/watch.mjs
 ```
 
-## Screenshot rig — `npm run screens`
+## Screenshot rig — `make screens`
 
 Boots the game in headless Chromium (Playwright) and captures the menu, the 2P
 host panel, the countdown and a live race on desktop (1280×800) and phone
 (390×844) viewports into `screens/` (gitignored). Serves the project root
 itself (no-cache), waits for the overlay, then drives the page — and **fails
 on any page JS error**, so it doubles as the CI render check (the `render`
-job in `.github/workflows/ci.yml`):
+job in `.github/workflows/ci.yml` runs `npm run screens`):
 
 ```sh
-npm run screens   # or: node ai-sim/screens.mjs [port]  (default 8123)
+make screens    # or: npm run screens / node ai-sim/screens.mjs [port]
 ```
 
 This is how the phone menu-overflow bug was found: Playwright couldn't even
