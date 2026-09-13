@@ -54,8 +54,13 @@ const VPS = {
 const { mkdir } = await import('node:fs/promises');
 await mkdir(OUT, { recursive: true });
 
-await new Promise(r => server.listen(PORT, r));
-console.log(`screens: serving ${ROOT} at http://localhost:${PORT}`);
+const listen = p => new Promise((res, rej) => {
+  server.once('error', rej);
+  server.listen(p, () => { server.removeListener('error', rej); res(); });
+});
+try { await listen(PORT); } catch { await listen(0); }   // PORT busy -> OS picks
+const PORT_ACTUAL = server.address().port;
+console.log(`screens: serving ${ROOT} at http://localhost:${PORT_ACTUAL}`);
 const browser = await chromium.launch();
 
 let failed = false;
@@ -72,7 +77,7 @@ for (const [name, vp] of Object.entries(VPS)) {
   page.on('pageerror', e => errors.push(String(e)));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
 
-  await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'load', timeout: 30000 });
+  await page.goto(`http://localhost:${PORT_ACTUAL}/`, { waitUntil: 'load', timeout: 30000 });
   await page.waitForSelector('#overlay', { state: 'visible', timeout: 20000 });
   await page.waitForTimeout(1500);                        // first frames + menu settle
   await shot(page, `${name}-menu`);
