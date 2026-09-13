@@ -36,10 +36,12 @@ flat tracks stay flat.
   track). Per-kart in-corner time ticked in the shared sim body (client: on the
   interpolated mirror), banked on the lap edge. Pure local timing, no wire;
   `make netsim` covers the field/accumulation/close/bank-reset
-- [ ] **Gamepad support** — `navigator.getGamepads()`: left stick steer/throttle,
-  right stick / triggers for drift + item, connected at boot with the same
-  input struct the keyboard path feeds. Headless check: a fake gamepad object
-  through the input reader; `make screens` adds a gamepad-icon state.
+- [x] **Gamepad support** ✅ (`src/gamepad.js` + `game.js`) — `navigator.getGamepads()`
+  at boot: left stick steer, stick-down = gas / up = brake, LT or Y = drift
+  (release = boost), RT or X = item (edge into the same `itemUseQ` as `E`), D-pad
+  fallback. Pure `mapGamepad()` — a connected, active pad overrides
+  keyboard/touch; browser wiring is guarded (no-op headless); `make netsim` tests
+  the mapping with a fake pad
 - [ ] **Music reactivity** — the per-track chiptune gains a second layer
   (arpeggio density + filter opening) driven by drift charge and boost, so a
   big release audibly "hits". `audio.js` only; headless: assert the layer

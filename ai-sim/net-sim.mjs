@@ -12,6 +12,7 @@
 import * as THREE from 'three';
 import { samples, selectTrack, angDiff, curvatureAt, trackLen, propList, tickProps, tickHazards, hazardFx } from '../src/track.js';
 import { getCornerCount, getCornerIdx, tickCorners } from '../src/corners.js';
+import { mapGamepad } from '../src/gamepad.js';
 import { makeExplosions } from '../src/explosion.js';
 import { scene } from '../src/scene.js';
 import { TRACKS } from '../src/tracks.js';
@@ -600,6 +601,30 @@ console.log('\n== item boxes: layout + effect models ==');
   K.step(1 / 60, 1, 0, 20 * 17, false);
   mark(!K.perfectEdge, 'early release is not perfect');
   mark(K.boost > 0 && K.boost < 1, `early release pays plain charge only (${K.boost.toFixed(2)})`);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Gamepad mapping — fake pad through the pure map function
+ * ------------------------------------------------------------------ */
+{
+  const btns = n => Array.from({ length: n }, () => ({ pressed: false, value: 0 }));
+  const gp = { connected: true, axes: [0.6, -0.8, 0, 0, 0, 0], buttons: btns(18) };
+  gp.buttons[6].pressed = true;   // LT = drift
+  const m = mapGamepad(gp);
+  mark(m && Math.abs(m.steer - 0.6) < 1e-9, 'gamepad: left stick steer');
+  mark(m && m.throttle > 0.7, `gamepad: stick down = forward throttle (${m.throttle.toFixed(2)})`);
+  mark(m && m.drift, 'gamepad: LT = drift');
+  const idle = mapGamepad({ connected: true, axes: [0, 0, 0, 0, 0, 0], buttons: btns(18) });
+  mark(idle === null, 'gamepad idle = no input');
+  mark(mapGamepad(null) === null, 'no gamepad = no input');
+  const gpd = { connected: true, axes: [0.05, 0.08, 0, 0, 0, 0], buttons: btns(18) };
+  gpd.buttons[12].pressed = true;   // D-pad up
+  const m2 = mapGamepad(gpd);
+  mark(m2 && m2.throttle === 1, 'gamepad: D-pad up = full throttle (under deadzone stick)');
+  const gi = { connected: true, axes: [0, 0, 0, 0, 0, 0], buttons: btns(18) };
+  gi.buttons[7].pressed = true;   // RT = item
+  const m3 = mapGamepad(gi);
+  mark(m3 && m3.item, 'gamepad: RT = item');
 }
 
 /* ------------------------------------------------------------------ */

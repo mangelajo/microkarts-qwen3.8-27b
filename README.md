@@ -44,6 +44,7 @@ non-zero if a driver can't hold the road or recover.
 | `S` / `↓`      | Brake / reverse   |
 | `A` `D` / `←` `→` | Steer          |
 | `SPACE` (hold)    | Drift — release for a mini-boost; at the top of the charge curve a **PERFECT** release pays extra boost (touch: drag the stick to full lock) |
+| **Gamepad**       | Left stick steer · stick down = gas · LT / Y = drift (release = boost) · RT / X = item |
 | `←` `→` (menu)  | Pick track        |
 | `M`            | Music on/off      |
 | `N`            | SFX on/off        |
@@ -173,6 +174,12 @@ take in the catalogue. All track shapes are validated headlessly.
   own from the fellOff mirror and the remote's from the existing y f32 drop —
   zero wire change. The pool saturates (8 booms) and fully decays; `make netsim`
   covers spawn/decay/saturation
+- **Gamepad support** — `navigator.getGamepads()` wired at boot (`src/gamepad.js`):
+  left stick steer, stick-down = gas / up = brake, LT or Y = drift (release =
+  boost), RT or X = item (edge-triggered into the same `itemUseQ` as `E`), D-pad
+  fallback. The mapping is a pure `mapGamepad()` — a connected, active pad
+  overrides keyboard/touch in `readDrive`. Headless-safe (the browser wiring is
+  guarded); `make netsim` tests the mapping with a fake pad
 - **Per-corner timing + deltas** — corners are the plateaus of the 2D (xz)
   curvature (min span + min turn angle, adjacent regions merged — deterministic
   from the samples, `src/corners.js`); every kart's in-corner time is ticked in
@@ -251,6 +258,7 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/blastfx.js`  | Exhaust flame/smoke particle pools above the speed threshold + golden nitro flare on boost |
 | `src/explosion.js`| Pooled floor-hit explosion FX (particle burst + smoke + shockwave ring) |
 | `src/corners.js`   | Per-corner timing — curvature-plateau corner field, in-corner time, lap-edge bank (deterministic; deltas are cosmetic) |
+| `src/gamepad.js`   | Gamepad — pure `mapGamepad()` (stick + D-pad + LT/Y drift, RT/X item) with browser connect/poll wiring (no-op headless) |
 | `src/race.js`     | Headless race core: grid, progress, positions, collisions, `simulateTick()` |
 | `src/pads.js`     | Boost-pad field: seeded straight-aware layout + chain-hit model (pure) |
 | `src/obstacles.js`| Sugar-hazard field: seeded candy layout + per-driver AI dodging (pure) |

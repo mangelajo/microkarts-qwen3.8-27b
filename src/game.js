@@ -12,6 +12,7 @@ import { Kart } from './kart.js';
 import { aiControl } from './ai.js';
 import { selectTrack, updateItemBoxes, syncWallMeshes, tickProps, tickHazards } from './track.js';
 import { initDayNight, setDayNightFor, updateDayNight } from './daynight.js';
+import { initGamepad, gamepadPoll } from './gamepad.js';
 import { GRID, simulateTick, raceOrder } from './race.js';
 import { setObstaclesOn, getObstaclesOn } from './obstacles.js';
 import { setItemsOn, getItemsOn } from './items.js';
@@ -110,6 +111,13 @@ function readDrive(racing) {
     drive.steer = inText();
     drive.drift = keys.drift;
    }
+  const g = gamepadPoll();   // a connected, active pad overrides keyboard/touch
+  if (g) {
+    drive.throttle = g.throttle;
+    drive.steer = g.steer;
+    drive.drift = g.drift;
+    if (g.itemEdge) itemUseQ++;   // RT / X — edge-triggered, same as KeyE
+  }
   return drive;
 }
 addEventListener('keydown', e => {
@@ -401,6 +409,7 @@ initItemPicker(
 );
 // day/night: build the starfield + moon, then set the mode for the boot track
 initDayNight();
+initGamepad();   // connect at boot (no-op headless)
 if (getTrackIdx() !== 0 || getObstaclesOn() || getItemsOn()) applyTrackVisuals(getTrackIdx());
 setDayNightFor(getTrackIdx());
 
