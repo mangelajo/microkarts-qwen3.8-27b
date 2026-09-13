@@ -107,7 +107,7 @@ export function initMenuTabs(onTab) {
     c.addEventListener('click', () => { onTab(c.dataset.tab); c.blur(); });
   }
 }
-const PAGES = ['race', 'multi', 'extras', 'controls'];
+const PAGES = ['race', 'multi', 'extras', 'controls', 'edit'];
 export function setMenuPage(p) {
   for (const c of menuTabs.children) c.classList.toggle('sel', c.dataset.tab === p);
   for (const pg of PAGES) {

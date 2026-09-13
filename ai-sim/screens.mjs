@@ -90,6 +90,11 @@ for (const [name, vp] of Object.entries(VPS)) {
     await page.click('#menuTabs [data-tab="controls"]');
     await page.waitForTimeout(250);
     await shot(page, `${name}-menu-controls`);
+    if (await page.locator('#menuTabs [data-tab="edit"]').count()) {
+      await page.click('#menuTabs [data-tab="edit"]');
+      await page.waitForTimeout(350);
+      await shot(page, `${name}-menu-edit`);
+    }
     await page.click('#menuTabs [data-tab="race"]');
     await page.waitForTimeout(150);
   }

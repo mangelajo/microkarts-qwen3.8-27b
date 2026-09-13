@@ -13,6 +13,7 @@ import { aiControl, setWindOn } from './ai.js';
 import { TRACKS } from './tracks.js';
 import { dailyChallenge } from './daily.js';
 import { recordStart, recordFrame, hasRecording, playbackFrame } from './replay.js';
+import { initTrackEditor, setEditorTrackIdx, resetEditor } from './trackedit.js';
 import { selectTrack, updateItemBoxes, syncWallMeshes, tickProps, tickHazards } from './track.js';
 import { initDayNight, setDayNightFor, updateDayNight } from './daynight.js';
 import { initGamepad, gamepadPoll } from './gamepad.js';
@@ -140,6 +141,7 @@ addEventListener('keydown', e => {
     if (e.code === 'Digit2') setMenuPage('multi');
     if (e.code === 'Digit3') setMenuPage('extras');
     if (e.code === 'Digit4') setMenuPage('controls');
+    if (e.code === 'Digit5') setMenuPage('edit');
   }
   if (e.code === 'KeyM') updateMusicMute();
   if (e.code === 'KeyN') updateSfxMute();
@@ -416,6 +418,25 @@ if (replayBtnEl) replayBtnEl.addEventListener('click', () => {
   startRace();
   replayBtnEl.blur();
 });
+// TRACK EDITOR: solo-only (a 2P peer would build the un-edited track)
+function initEditorButtons() {
+  const note = document.getElementById('editNote');
+  initTrackEditor(getTrackIdx(), note);
+  const soloOnly = () => {
+    if (n2.role() === 'host' && n2.net().open && note) note.textContent = 'SOLO ONLY — 2P PAIRING ACTIVE (RESET + RACE FROM THE RACE PAGE)';
+  };
+  const er = document.getElementById('editReset');
+  if (er) er.addEventListener('click', () => { resetEditor(getTrackIdx()); er.blur(); });
+  const ee = document.getElementById('editRace');
+  if (ee) ee.addEventListener('click', () => {
+    audio.ensureAudio();
+    setMenuPage('race');
+    startRace();
+    ee.blur();
+  });
+  soloOnly();
+}
+initEditorButtons();
 
 // track picker: chips + persistence. Rebuild the scene on selection;
 // track switch = rebuild the track + (re)apply its day/night mode
@@ -427,6 +448,7 @@ initTrackPicker(
     applyTrackVisuals(idx);
     ghostSetTrack(idx);   // best laps + ghost timeline are per-track
     rankSetTrack(idx);   // the top-5 board is per-track too
+    setEditorTrackIdx(idx);   // the editor edits the selected track
     if (n2.role() === 'host') n2.net().sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn()); // client previews
   },
 );

@@ -184,6 +184,12 @@ take in the catalogue. All track shapes are validated headlessly.
   deterministic spatial field in `ai.js`). Both are flat; day/night is `static`
   (indoor / overcast). Adding a track = a `src/tracks.js` entry + a `make sim`
   run — the AI is track-agnostic and the harness runs all 8 tracks
+- **Track editor** — a 5th menu tab (EDIT, key `5`): drag the current
+  track's control points on a top-down canvas; the track rebuilds live
+  (same `buildTrack` path — corners, pads, puddles, scenery all follow).
+  `src/trackedit.js` (browser-only); **solo + session-only** (not
+  persisted; a 2P peer would build the un-edited track from the track idx).
+  RESET restores the factory points; RACE IT starts the race on the edit
 - **Replays** — the sim is 100% deterministic from inputs (all game RNG is
   seeded), so a replay is the player's recorded input stream re-fed to a
   fresh race: `src/replay.js` records the drive input each race (capped at
@@ -298,6 +304,7 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/explosion.js`| Pooled floor-hit explosion FX (particle burst + smoke + shockwave ring) |
 | `src/corners.js`   | Per-corner timing — curvature-plateau corner field, in-corner time, lap-edge bank (deterministic; deltas are cosmetic) |
 | `src/gamepad.js`   | Gamepad — pure `mapGamepad()` (stick + D-pad + LT/Y drift, RT/X item) with browser connect/poll wiring (no-op headless) |
+| `src/trackedit.js` | Track editor — drag the control points on a top-down canvas; live rebuild (browser-only, solo, session-only) |
 | `src/replay.js`    | Replays — record the player's input each race; REPLAY re-feeds it (deterministic re-run) |
 | `src/daily.js`     | Daily challenge — `mulberry32(date int)` → track + hazards + items (pure, deterministic) |
 | `src/weather.js`   | Rain + puddles — streak field, seeded flat-section puddle discs with ripples, wet retint + light dim (cosmetic, headless-safe) |

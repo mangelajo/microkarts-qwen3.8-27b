@@ -195,6 +195,7 @@
         <button type="button" class="tchip" data-tab="multi">2P</button>
         <button type="button" class="tchip" data-tab="extras">EXTRAS</button>
         <button type="button" class="tchip" data-tab="controls">CONTROLS</button>
+        <button type="button" class="tchip" data-tab="edit">EDIT</button>
       </div>
       <div id="pageRace">
     <div class="trk" id="trackWrap">
@@ -277,13 +278,24 @@
       <div><kbd>T</kbd> (menu) Rain — wet road + puddles + patter</div>
     </div>
       </div>
+      <div id="pageEdit" class="hidden">
+    <div class="trk" id="editWrap">
+      <div class="trk-label">TRACK EDITOR — DRAG THE POINTS (SOLO · SESSION-ONLY)</div>
+      <canvas id="editCanvas" width="340" height="340" style="display:block; margin:10px auto 0 auto; touch-action:none; cursor:crosshair; max-width:100%"></canvas>
+      <div class="trk-row" id="editRow" style="justify-content:center">
+        <button type="button" class="tchip" id="editReset">RESET</button>
+        <button type="button" class="tchip" id="editRace">RACE IT</button>
+      </div>
+      <div class="sub" id="editNote" style="margin-top:10px; font-size:10px; opacity:.7"></div>
+    </div>
+      </div>
     </div>
     <div class="result" id="results" style="display:none"></div>
     <button class="btn" id="replayBtn" style="display:none; margin-top:10px; font-size:11px; padding:8px 14px; opacity:.9">▶ REPLAY THIS RACE</button>
     <button class="btn" id="startBtn">START RACE</button>
     <button class="btn" id="dailyBtn" style="margin-top:10px; font-size:11px; padding:8px 14px; opacity:.9">DAILY CHALLENGE</button>
     <div class="sub" id="dailyTag" style="margin-top:8px; font-size:10px; opacity:.75"></div>
-    <div class="sub" id="footnote" style="margin:16px 0 0 0">OR PRESS ENTER &nbsp;·&nbsp; 3 LAPS &nbsp;·&nbsp; 1/2/3/4 = PAGES</div>
+    <div class="sub" id="footnote" style="margin:16px 0 0 0">OR PRESS ENTER &nbsp;·&nbsp; 3 LAPS &nbsp;·&nbsp; 1/2/3/4/5 = PAGES</div>
   </div>
 </div>
 

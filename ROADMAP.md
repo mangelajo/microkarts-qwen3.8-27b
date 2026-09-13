@@ -80,12 +80,12 @@ flat tracks stay flat.
   wire traffic). Follow-up: 0.5×/1×/2× playback speed + leader-chase
   camera.
   `make netsim` validates a record→replay determinism (bit-identical karts).
-- [ ] **Track editor** — sandbox mode: drag control points on the existing
-  spline gizmo, place pads, save to localStorage, and share via a short URL
-  (base64 of the point/pad/hazard data, like the pairing code — `?track=`
-  deep link, stripped after load). Geometry validation (min turn radius,
-  min road width) reuses the bench's flat-track invariants. The biggest item
-  in this arc; lands last.
+- [x] **Track editor** — shipped: 5th menu tab (EDIT, key `5`) — drag the
+  current track's control points on a top-down canvas; live rebuild
+  (corners/pads/puddles/scenery follow), RESET to factory points, RACE IT.
+  Solo + session-only (`src/trackedit.js`). Follow-up: pad placement,
+  localStorage save, share via a `?track=` deep link (base64, like the
+  pairing code) + geometry validation.
 
 ## Phase 8 — Scale & polish
 
