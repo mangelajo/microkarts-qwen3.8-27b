@@ -178,14 +178,15 @@ take in the catalogue. All track shapes are validated headlessly.
   client all go through `src/resultsfx.js` (ordering data = `raceOrder()`,
   covered headlessly by `make netsim`)
 - **Menu fits every screen** — the menu is **multi-page** (four tabs, chips or `1`/`2`/`3`/`4`:
-  **RACE** = a compact PLAYER status row (SOLO / 2P HOST / 2P JOIN + a `2P SETUP →` link)
-  + track + START, **2P** = the whole multiplayer setup (mode toggle + pairing codes + the QRs),
+  **RACE** = track + START (2P lives in the 2P tab), **2P** = the whole multiplayer setup
+  (mode toggle + pairing codes + the QRs),
   **EXTRAS** = sugar-hazard/item-box toggles + the top-5 board, **CONTROLS** = the key/touch
   list) so every page fits a phone without scrolling; the overlay is scroll-safe: `#overlay`
   scrolls and the `.panel` uses `margin:auto` (centred when it fits, top-aligned when it
-  overflows); a compact media-query layout under 520 px wide / 1000 px tall; on touch devices
-  the key list is swapped for the pull-stick hints (`hud.js`). Two columns on wide+tall
-  viewports (PLAYER left, track right). The menu controls **hide on the results screen**
+  overflows); a compact media-query layout under 520 px wide / 1000 px tall — the panel
+  is capped at 1020 px (one track-chip row) so ultrawide-short windows get a centred
+  panel instead of a stretched one; on touch devices the key list is swapped for the
+  pull-stick hints (`hud.js`). The menu controls **hide on the results screen**
   (`showOverlay`'s `isMenu` flag toggles `#menuSections`); `Esc` returns to the menu from
   results. **Sugar hazards + item boxes are ON by default** (persisted, `Z`/`I` to opt out;
   `sim.mjs` opts its base scenario out explicitly, the scenario sections opt back in).

@@ -67,24 +67,12 @@
   .trk { margin:0 0 22px 0; }
   .trk-label { font-size:10px; letter-spacing:3px; color:#d8b07f; margin-bottom:8px; }
 
-  /* two-column layout: stack by default (phones), side-by-side when the
-     viewport is wide AND tall enough for the whole menu to fit */
-  .cols { display:grid; grid-template-columns:1fr; gap:0 34px; }
-  .colL, .colR { min-width:0; }
-  @media (min-width:900px) and (min-height:820px) {
-    .cols { grid-template-columns:1fr 1fr; align-items:start; }
-    .panel { max-width:980px; }
-  }
-  .trk-row { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+    .trk-row { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
   .tchip { pointer-events:auto; cursor:pointer; font:inherit; font-size:12px; letter-spacing:1px;
     color:#ffe9c9; background:rgba(42,29,18,.85); border:1px solid rgba(255,200,120,.22);
     border-radius:8px; padding:7px 14px; transition:transform .06s, border-color .12s, color .12s; }
   .tchip:hover { border-color:rgba(255,200,120,.5); }
   .tchip.sel { color:#1a0f06; background:linear-gradient(#ffd07a,#f0a94a); border-color:#f0a94a;
-    font-weight:700; box-shadow:0 3px 0 #8a5a1e; }
-  .mstat { font-size:12px; letter-spacing:1px; color:#ffe9c9; background:rgba(42,29,18,.85);
-    border:1px solid rgba(255,200,120,.22); border-radius:8px; padding:7px 14px; }
-  .mstat.on { color:#1a0f06; background:linear-gradient(#ffd07a,#f0a94a); border-color:#f0a94a;
     font-weight:700; box-shadow:0 3px 0 #8a5a1e; }
   .result { font-size:15px; line-height:2.1; margin-bottom:24px; }
   #netPanel .sub { margin-top:10px; }
@@ -127,7 +115,7 @@
   #overlay { overflow-y:auto; -webkit-overflow-scrolling:touch; }
   @media (max-width:520px), (max-height:1000px) {
     #overlay { padding:12px 10px; }
-    .panel { padding:18px 14px; max-width:100%; border-radius:12px; }
+    .panel { padding:18px 14px; max-width:1020px; border-radius:12px; } /* 1020 px = one track-chip row; phones clamp to viewport via margin:auto */
     .panel h1 { font-size:20px; letter-spacing:4px; margin-bottom:4px; }
     .panel .sub { font-size:9px; letter-spacing:2px; margin-bottom:14px; }
     .keys { display:grid; grid-template-columns:repeat(2,1fr); width:100%; max-width:360px;
@@ -199,23 +187,10 @@
         <button type="button" class="tchip" data-tab="controls">CONTROLS</button>
       </div>
       <div id="pageRace">
-      <div class="cols">
-        <div class="colL">
-    <div class="trk" id="modeStatusWrap">
-      <div class="trk-label">PLAYER</div>
-      <div class="trk-row">
-        <span class="mstat" id="modeStatus">SOLO</span>
-        <button type="button" class="tchip" id="gotoMulti">2P SETUP →</button>
-      </div>
-    </div>
-        </div>
-        <div class="colR">
     <div class="trk" id="trackWrap">
       <div class="trk-label">TRACK</div>
       <div class="trk-row" id="trackRow"></div>
     </div>
-        </div>
-      </div>
       </div>
       <div id="pageMulti" class="hidden">
     <div class="trk" id="modeWrap">

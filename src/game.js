@@ -359,9 +359,8 @@ initTrackPicker(
   },
 );
 
-// menu pages: RACE / EXTRAS / CONTROLS — chips + 1/2/3
+// menu pages: RACE / 2P / EXTRAS / CONTROLS — chips + 1/2/3/4
 initMenuTabs(p => setMenuPage(p));
-el('gotoMulti').addEventListener('click', () => setMenuPage('multi'));
 
 // sugar hazards: restore the persisted toggle BEFORE the first rebuild so the
 // boot-up track already has its candy; Z on the menu toggles it too.
