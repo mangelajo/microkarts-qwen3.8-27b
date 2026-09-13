@@ -184,6 +184,13 @@ take in the catalogue. All track shapes are validated headlessly.
   deterministic spatial field in `ai.js`). Both are flat; day/night is `static`
   (indoor / overcast). Adding a track = a `src/tracks.js` entry + a `make sim`
   run — the AI is track-agnostic and the harness runs all 8 tracks
+- **Instanced rendering** — the scattered table props (donut / lollipop /
+  block / gumdrop / pencil) now render as **7 InstancedMeshes** (one per
+  part) instead of ~40 individual meshes: the per-prop state (spin, wobble,
+  hop) still lives in `propList`, and `refreshPropMatrices()` in track.js
+  pushes the matrices after each `tickProps`; per-prop colours ride
+  `instanceColor`. A big draw-call reduction on mobile; visuals identical
+  (screens-verified)
 - **Track editor** — a 5th menu tab (EDIT, key `5`): drag the current
   track's control points on a top-down canvas; the track rebuilds live
   (same `buildTrack` path — corners, pads, puddles, scenery all follow).

@@ -129,44 +129,17 @@ function scatterProps(parent, idx) {
   propList.length = 0;
   const rng = mulberry32((0x7f4a7c15 ^ Math.imul(idx + 3, 3405733215)) >>> 0);
   const GRAZE_KINDS = [0, 1, 3, 4];   // low enough to graze (no block)
+  // props are rendered INSTANCED (one InstancedMesh per part — ~7 draw
+  // calls instead of ~40 meshes, the mobile draw-call win); the per-prop
+  // STATE (spin/wobble/hop) lives here, the matrices in refreshPropMatrices
   const makeProp = (x, y, z, kind) => {
-    let obj;
-    if (kind === 0) { // donut
-      obj = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.28, 10, 24), propMats[rngIndex++ % propMats.length]);
-      obj.rotation.x = Math.PI / 2;
-      obj.position.set(x, y + 0.3, z);
-    } else if (kind === 1) { // lollipop
-      obj = new THREE.Group();
-      const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.5, 8), stickMat);
-      stick.position.y = 0.75;
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.55, 14, 12), propMats[(rngIndex + 2) % propMats.length]);
-      head.position.y = 1.55;
-      head.castShadow = stick.castShadow = true;
-      obj.add(stick, head);
-      obj.position.set(x, y, z);
-    } else if (kind === 2) { // block
-      obj = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.6, 1.6), propMats[(rngIndex + 1) % propMats.length]);
-      obj.position.set(x, y + 0.8, z);
-      obj.rotation.y = rng() * Math.PI;
-    } else if (kind === 3) { // gumdrop
-      obj = new THREE.Mesh(new THREE.SphereGeometry(0.75, 14, 10), propMats[(rngIndex + 3) % propMats.length]);
-      obj.scale.y = 0.68;
-      obj.position.set(x, y + 0.5, z);
-    } else { // pencil
-      obj = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 2.4, 10), pencilMat);
-      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.5, 10), stickMat);
-      tip.position.y = 1.45;
-      body.castShadow = tip.castShadow = true;
-      obj.add(body, tip);
-      obj.rotation.z = Math.PI / 2;
-      obj.rotation.x = rng() * Math.PI;
-      obj.position.set(x, y + 0.25, z);
-    }
-    obj.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
-    parent.add(obj);
-    return { x, y, z, kind, obj, spinVel: 0, wobble: 0, wobblePh: rng() * 6,
-             hop: 0, hopV: 0, baseRotZ: obj.rotation.z, r: [0.9, 0.8, 1.2, 0.9, 1.0][kind] };
+    const baseRotY = kind === 2 ? rng() * Math.PI : 0;   // block: random heading
+    const baseRotX = kind === 4 ? rng() * Math.PI : 0;   // pencil: random heading (lies down via baseRotZ)
+    return { x, y, z, kind, spinVel: 0, wobble: 0, wobblePh: rng() * 6,
+             hop: 0, hopV: 0, baseRotX, baseRotY,
+             baseRotZ: kind === 4 ? Math.PI / 2 : 0,
+             rotX: baseRotX, rotY: baseRotY, rotZ: kind === 4 ? Math.PI / 2 : 0,
+             colorIdx: rngIndex++ % propMats.length, r: [0.9, 0.8, 1.2, 0.9, 1.0][kind] };
   };
   let rngIndex = 0;
   // drift band: 1.2–3.0 u outside the outer curb, riding the road surface
@@ -191,6 +164,86 @@ function scatterProps(parent, idx) {
     if (Math.sqrt(d) < ROAD_HW + 5) continue;
     propList.push(makeProp(x, 0, z, Math.floor(rng() * 5)));
   }
+  buildPropInstances(parent);
+  refreshPropMatrices();
+}
+
+/* instanced prop rendering — one InstancedMesh per part (7 total) instead
+ * of ~40 individual meshes (the mobile draw-call win). Built per track;
+ * the per-prop matrices are refreshed by refreshPropMatrices (after
+ * tickProps / at build). Colors: the palette pick per prop (stick parts
+ * keep their fixed colour). */
+let propInst = {};   // part name -> InstancedMesh | null
+const _pm4 = new THREE.Matrix4();
+const _pq = new THREE.Quaternion();
+const _pe = new THREE.Euler();
+const _pp = new THREE.Vector3();
+const _ps = new THREE.Vector3();
+const _pv = new THREE.Vector3();
+const _pc = new THREE.Color();
+
+function setInst(im, i, x, y, z, rx, ry, rz, sx = 1, sy = 1, sz = 1) {
+  if (!im) return;
+  _pe.set(rx, ry, rz);
+  _pq.setFromEuler(_pe);
+  _pm4.compose(_pp.set(x, y, z), _pq, _ps.set(sx, sy, sz));
+  im.setMatrixAt(i, _pm4);
+}
+
+function buildPropInstances(parent) {
+  const counts = [0, 0, 0, 0, 0];
+  for (const p of propList) counts[p.kind]++;
+  const M = (name, geo, mat, n) => {
+    if (n <= 0) { propInst[name] = null; return; }
+    const im = new THREE.InstancedMesh(geo, mat, n);
+    im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    im.castShadow = true;
+    im.receiveShadow = true;
+    parent.add(im);
+    propInst[name] = im;
+  };
+  propInst = {};
+  M('donut', new THREE.TorusGeometry(0.7, 0.28, 10, 24), propMats[0], counts[0]);
+  M('lolliStick', new THREE.CylinderGeometry(0.09, 0.09, 1.5, 8), stickMat, counts[1]);
+  M('lolliHead', new THREE.SphereGeometry(0.55, 14, 12), propMats[2], counts[1]);
+  M('block', new THREE.BoxGeometry(1.6, 1.6, 1.6), propMats[1], counts[2]);
+  M('gumdrop', new THREE.SphereGeometry(0.75, 14, 10), propMats[3], counts[3]);
+  M('pencilBody', new THREE.CylinderGeometry(0.2, 0.2, 2.4, 10), pencilMat, counts[4]);
+  M('pencilTip', new THREE.ConeGeometry(0.2, 0.5, 10), stickMat, counts[4]);
+  // per-instance colour: the palette pick (stick parts stay fixed-colour)
+  const tint = (im, i, mat) => { if (im) { _pc.copy(mat.color); im.setColorAt(i, _pc); if (im.instanceColor) im.instanceColor.needsUpdate = true; } };
+  const ci = [0, 0, 0, 0, 0];
+  for (const p of propList) {
+    const i = ci[p.kind]++;
+    const pal = propMats[(p.colorIdx + [0, 2, 1, 3, 0][p.kind]) % propMats.length];
+    if (p.kind === 0) tint(propInst.donut, i, pal);
+    else if (p.kind === 1) { tint(propInst.lolliHead, i, pal); tint(propInst.lolliStick, i, stickMat); }
+    else if (p.kind === 2) tint(propInst.block, i, pal);
+    else if (p.kind === 3) tint(propInst.gumdrop, i, pal);
+  }
+}
+
+const HOP_OFF = [0.3, 0, 0.8, 0.5, 0.25];
+function refreshPropMatrices() {
+  const ci = [0, 0, 0, 0, 0];
+  for (const p of propList) {
+    const i = ci[p.kind]++;
+    const y = p.y + HOP_OFF[p.kind] + p.hop;
+    if (p.kind === 0) setInst(propInst.donut, i, p.x, y, p.z, Math.PI / 2, p.rotY, p.rotZ);
+    else if (p.kind === 1) {
+      setInst(propInst.lolliStick, i, p.x, y + 0.75, p.z, 0, p.rotY, p.rotZ);
+      setInst(propInst.lolliHead, i, p.x, y + 1.55, p.z, 0, p.rotY, p.rotZ);
+    } else if (p.kind === 2) setInst(propInst.block, i, p.x, y, p.z, p.rotX, p.rotY, p.rotZ);
+    else if (p.kind === 3) setInst(propInst.gumdrop, i, p.x, y, p.z, 0, p.rotY, p.rotZ, 1, 0.68, 1);
+    else {
+      setInst(propInst.pencilBody, i, p.x, y, p.z, p.rotX, 0, p.rotZ);
+      _pe.set(p.rotX, 0, p.rotZ);
+      _pq.setFromEuler(_pe);
+      _pv.set(0, 1.45, 0).applyQuaternion(_pq);
+      setInst(propInst.pencilTip, i, p.x + _pv.x, y + _pv.y, p.z + _pv.z, p.rotX, 0, p.rotZ);
+    }
+  }
+  for (const im of Object.values(propInst)) if (im && im.instanceMatrix) im.instanceMatrix.needsUpdate = true;
 }
 
 /* reactive props (cosmetic, never touches kart physics): a kart within a
@@ -213,24 +266,24 @@ export function tickProps(dt, karts) {
       }
     }
     if (p.spinVel > 0.01) {
-      if (p.kind === 2 || p.kind === 4) p.obj.rotation.x += p.spinVel * dt;   // roll
-      else p.obj.rotation.y += p.spinVel * dt * 1.4;                          // spin like a top
+      if (p.kind === 2 || p.kind === 4) p.rotX += p.spinVel * dt;   // roll
+      else p.rotY += p.spinVel * dt * 1.4;                          // spin like a top
       p.spinVel *= Math.exp(-1.6 * dt);
       if (p.spinVel < 0.01) p.spinVel = 0;
     }
     if (p.wobble > 0.01) {
       p.wobblePh += 16 * dt;
-      p.obj.rotation.z = p.baseRotZ + p.wobble * Math.sin(p.wobblePh) * 0.35;
+      p.rotZ = p.baseRotZ + p.wobble * Math.sin(p.wobblePh) * 0.35;
       p.wobble *= Math.exp(-2.4 * dt);
-      if (p.wobble < 0.01) { p.wobble = 0; p.obj.rotation.z = p.baseRotZ; }
+      if (p.wobble < 0.01) { p.wobble = 0; p.rotZ = p.baseRotZ; }
     }
     if (p.hopV !== 0 || p.hop > 0) {
       p.hopV -= 9.8 * dt;
       p.hop += p.hopV * dt;
       if (p.hop <= 0) { p.hop = 0; p.hopV = 0; }
-      p.obj.position.y = p.y + (p.kind === 2 ? 0.8 : p.kind === 0 ? 0.3 : p.kind === 1 ? 0 : p.kind === 3 ? 0.5 : 0.25) + p.hop;
     }
   }
+  refreshPropMatrices();   // the instanced matrices follow the state
 }
 
 /* ------------------------------------------------------------------ *
@@ -487,7 +540,12 @@ export function buildTrack(def, index = 0) {
   hazardFx.length = 0;
   while (group.children.length) {
     const c = group.children.pop();
-    c.traverse(n => { if (n.isMesh) n.geometry.dispose(); });
+    c.traverse(n => {
+      if (n.isMesh || n.isInstancedMesh) {
+        n.geometry.dispose();
+        if (n.isInstancedMesh) n.dispose();
+      }
+    });
   }
   if (!propMats.length) {
     propMats = [0xf48fb1, 0xffcc80, 0x80d8ff, 0xc5e1a5, 0xfff176, 0xce93d8]

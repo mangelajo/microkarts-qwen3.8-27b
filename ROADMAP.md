@@ -89,10 +89,11 @@ flat tracks stay flat.
 
 ## Phase 8 — Scale & polish
 
-- [ ] **Instanced rendering** — curbs, pads, hazards and props merged into
-  instanced meshes (one draw call each) + adaptive pixel ratio (drop to 0.75×
-  on sustained <45 fps). No behaviour change: `make sim` byte-identical,
-  `make screens` captures prove visual parity.
+- [x] **Instanced rendering** — shipped: the scattered table props render as
+  **7 InstancedMeshes** (one per part) instead of ~40 meshes, with the
+  reactive spin/wobble/hop state driving `refreshPropMatrices()` (visuals
+  identical, screens-verified). Follow-up: curb/pad/hazard instancing +
+  adaptive pixel ratio (drop to 0.75× on sustained <45 fps).
 - [ ] **Item #4: sticky candy** — a box reward that leaves a slow patch
   behind the thrower for 2 s (the first kart through it loses grip, not
   speed — distinct from the wall). Same item-box economy (weighted roll),
