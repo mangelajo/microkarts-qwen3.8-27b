@@ -120,8 +120,9 @@ addEventListener('keydown', e => {
   // menu pages (menu state only — no conflict with race keys)
   if (game.state === 'menu' && !e.repeat) {
     if (e.code === 'Digit1') setMenuPage('race');
-    if (e.code === 'Digit2') setMenuPage('extras');
-    if (e.code === 'Digit3') setMenuPage('controls');
+    if (e.code === 'Digit2') setMenuPage('multi');
+    if (e.code === 'Digit3') setMenuPage('extras');
+    if (e.code === 'Digit4') setMenuPage('controls');
   }
   if (e.code === 'KeyM') updateMusicMute();
   if (e.code === 'KeyN') updateSfxMute();
@@ -198,6 +199,7 @@ try {
   if (joinParam) {
     history.replaceState('', '', location.pathname); // drop ?join= so a reload doesn't re-fire the handshake
     n2.joinAuto(joinParam);
+    setMenuPage('multi'); // show the pairing UI (code pre-filled, connect in flight)
   }
 } catch { /* non-URL host (file://) */ }
 
@@ -321,7 +323,7 @@ function toMenu() {
   el('itemSlot').textContent = '—';
   setMenuPage('race');
   showOverlay('MICRO KART RACING', 'A TINY CIRCUIT ON THE DINNER TABLE',
-    'START RACE', true, 'OR PRESS ENTER \u00a0\u00b7\u00a0 3 LAPS \u00a0\u00b7\u00a0 1/2/3 = PAGES');
+    'START RACE', true, 'OR PRESS ENTER \u00a0\u00b7\u00a0 3 LAPS \u00a0\u00b7\u00a0 1/2/3/4 = PAGES');
 }
 
 function updateMusicMute() {
@@ -355,6 +357,7 @@ initTrackPicker(
 
 // menu pages: RACE / EXTRAS / CONTROLS — chips + 1/2/3
 initMenuTabs(p => setMenuPage(p));
+el('gotoMulti').addEventListener('click', () => setMenuPage('multi'));
 
 // sugar hazards: restore the persisted toggle BEFORE the first rebuild so the
 // boot-up track already has its candy; Z on the menu toggles it too.

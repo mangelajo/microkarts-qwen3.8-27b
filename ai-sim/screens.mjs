@@ -94,6 +94,13 @@ for (const [name, vp] of Object.entries(VPS)) {
     await page.waitForTimeout(150);
   }
 
+  // the 2P page (solo state = the pick-a-mode hint)
+  if (await page.locator('#menuTabs [data-tab="multi"]').count()) {
+    await page.click('#menuTabs [data-tab="multi"]');
+    await page.waitForTimeout(250);
+    await shot(page, `${name}-menu-multi`);
+  }
+
   // expand the 2P host panel (the biggest menu block) — skip if absent
   if (await page.locator('#modeRow [data-mode="host"]').count()) {
     await page.click('#modeRow [data-mode="host"]');

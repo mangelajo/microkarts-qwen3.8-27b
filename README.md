@@ -119,11 +119,11 @@ take in the catalogue. All track shapes are validated headlessly.
   The host runs the authoritative fixed-step sim and streams state frames at
   60 Hz; the joiner renders with 50 ms interpolation and sends input at 60 Hz.
   Protocol + simulation are verified headlessly (`make netsim`)
-- **QR pairing** — the pairing codes can be scanned instead of pasted: the host's
-  screen shows a QR encoding the join URL (`…?join=CODE`), the joiner's screen
-  shows a QR encoding their code, and opening the join URL on any device
-  auto-fills the code and pre-arms the connection (`?join=` is stripped from the
-  address bar after boot). The QR is drawn on a canvas by a self-contained
+- **QR pairing** — the pairing codes can be scanned instead of pasted: the 2P menu
+  tab shows a big canvas QR (280 px) encoding the join URL (`…?join=CODE`), the joiner's
+  screen shows a QR encoding their code, and opening the join URL on any device
+  auto-fills the code, pre-arms the connection and jumps to the 2P tab (`?join=` is
+  stripped from the address bar after boot). The QR is drawn by a self-contained
   encoder (`src/qr.js`, ~290 lines, zero assets / zero dependencies): auto
   version 1–40, byte mode, level-M Reed-Solomon (16- or 18-bit generator),
   block interleave, all 8 masks with penalty selection, format + version info.
@@ -166,18 +166,19 @@ take in the catalogue. All track shapes are validated headlessly.
   rest plain) + a ~180-piece procedural confetti burst; solo, 2P host and join
   client all go through `src/resultsfx.js` (ordering data = `raceOrder()`,
   covered headlessly by `make netsim`)
-- **Menu fits every screen** — the menu is **multi-page** (three tabs, chips or `1`/`2`/`3`:
-  **RACE** = mode + 2P pairing + track + START, **EXTRAS** = sugar-hazard/item-box toggles
-  + the top-5 board, **CONTROLS** = the key/touch list) so every page fits a phone without
-  scrolling; the overlay is scroll-safe: `#overlay` scrolls and the `.panel` uses
-  `margin:auto` (centred when it fits, top-aligned when it overflows); a compact
-  media-query layout under 520 px wide / 1000 px tall; on touch devices the key list is
-  swapped for the pull-stick hints (`hud.js`). Two columns on wide+tall viewports
-  (mode + pairing left, track right). The menu controls **hide on the results screen**
+- **Menu fits every screen** — the menu is **multi-page** (four tabs, chips or `1`/`2`/`3`/`4`:
+  **RACE** = a compact PLAYER status row (SOLO / 2P HOST / 2P JOIN + a `2P SETUP →` link)
+  + track + START, **2P** = the whole multiplayer setup (mode toggle + pairing codes + the QRs),
+  **EXTRAS** = sugar-hazard/item-box toggles + the top-5 board, **CONTROLS** = the key/touch
+  list) so every page fits a phone without scrolling; the overlay is scroll-safe: `#overlay`
+  scrolls and the `.panel` uses `margin:auto` (centred when it fits, top-aligned when it
+  overflows); a compact media-query layout under 520 px wide / 1000 px tall; on touch devices
+  the key list is swapped for the pull-stick hints (`hud.js`). Two columns on wide+tall
+  viewports (PLAYER left, track right). The menu controls **hide on the results screen**
   (`showOverlay`'s `isMenu` flag toggles `#menuSections`); `Esc` returns to the menu from
   results. **Sugar hazards + item boxes are ON by default** (persisted, `Z`/`I` to opt out;
   `sim.mjs` opts its base scenario out explicitly, the scenario sections opt back in).
-  Verified by `make screens` — 16 captures (menu + all 3 pages + 2P host/join + results +
+  Verified by `make screens` — 18 captures (menu + all 4 pages + 2P host/join + results +
   countdown + race on desktop 1280×900 + phone 390×844)
 - **Playwright render check** — `make screens` (`ai-sim/screens.mjs`) serves
   the game no-cache and boots it in headless Chromium on desktop (1280×900) +

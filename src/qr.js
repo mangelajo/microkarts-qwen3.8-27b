@@ -315,7 +315,7 @@ export function qrEncode(text) {
 export function drawQr(canvas, text) {
   const q = qrEncode(text);
   const scale = Math.max(3, Math.floor(320 / q.size));
-  const px = (scale + 2) * q.size;
+  const px = (q.size + 4) * scale; // matrix + 2-module quiet zone each side
   canvas.width = px; canvas.height = px;
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#f6ead2';

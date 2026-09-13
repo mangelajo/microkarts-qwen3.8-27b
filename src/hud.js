@@ -75,6 +75,10 @@ export function setMode(m) {
   }
   if (m !== 'host') el('hostCodeQr').classList.add('hidden');
   netPanel.classList.toggle('hidden', m === 'solo');
+  el('multiHint').style.display = m === 'solo' ? '' : 'none';
+  const ms = el('modeStatus');
+  ms.textContent = m === 'solo' ? 'SOLO' : m === 'host' ? '2P HOST' : '2P JOIN';
+  ms.classList.toggle('on', m !== 'solo');
   trackWrapEl().style.display = m === 'join' ? 'none' : '';
   hazardWrapEl().style.display = m === 'join' ? 'none' : ''; // join mirrors the host's pick
   itemWrapEl().style.display = m === 'join' ? 'none' : '';   // ditto for item boxes
@@ -100,7 +104,7 @@ export function initMenuTabs(onTab) {
     c.addEventListener('click', () => { onTab(c.dataset.tab); c.blur(); });
   }
 }
-const PAGES = ['race', 'extras', 'controls'];
+const PAGES = ['race', 'multi', 'extras', 'controls'];
 export function setMenuPage(p) {
   for (const c of menuTabs.children) c.classList.toggle('sel', c.dataset.tab === p);
   for (const pg of PAGES) {
