@@ -11,6 +11,7 @@ import { initMinimap, setMinimapVisible, updateMinimap, resizeMinimap } from './
 import { Kart } from './kart.js';
 import { aiControl, setWindOn } from './ai.js';
 import { TRACKS } from './tracks.js';
+import { dailyChallenge } from './daily.js';
 import { selectTrack, updateItemBoxes, syncWallMeshes, tickProps, tickHazards } from './track.js';
 import { initDayNight, setDayNightFor, updateDayNight } from './daynight.js';
 import { initGamepad, gamepadPoll } from './gamepad.js';
@@ -372,6 +373,27 @@ startBtn.addEventListener('click', () => {
   primaryAction();
   startBtn.blur();
 });
+
+// DAILY CHALLENGE: the same UTC day always yields the same track + setup.
+// Applying it sets the hazard/item config + selects the track (persisted,
+// like a normal selection — the challenge is "today's" every boot).
+const applyDaily = () => {
+  const dc = dailyChallenge();
+  setHazard(dc.hazards);
+  setItem(dc.items);
+  const tag = document.getElementById('dailyTag');
+  if (tag) tag.textContent = `${dc.label} — ${dc.trackName} · ${dc.hazards ? 'hazards' : 'no hazards'} · ${dc.items ? 'items' : 'no items'}`;
+  // route the selection through the picker so the chip + persistence update
+  const chips = document.querySelectorAll('#trackRow .tchip');
+  if (chips[dc.track]) chips[dc.track].click();
+};
+const dailyBtn = document.getElementById('dailyBtn');
+if (dailyBtn) {
+  dailyBtn.addEventListener('click', () => { audio.ensureAudio(); applyDaily(); dailyBtn.blur(); });
+  const dc0 = dailyChallenge();
+  const tag0 = document.getElementById('dailyTag');
+  if (tag0) tag0.textContent = `${dc0.label} — ${dc0.trackName} · ${dc0.hazards ? 'hazards' : 'no hazards'} · ${dc0.items ? 'items' : 'no items'}`;
+}
 
 // track picker: chips + persistence. Rebuild the scene on selection;
 // track switch = rebuild the track + (re)apply its day/night mode

@@ -184,6 +184,12 @@ take in the catalogue. All track shapes are validated headlessly.
   deterministic spatial field in `ai.js`). Both are flat; day/night is `static`
   (indoor / overcast). Adding a track = a `src/tracks.js` entry + a `make sim`
   run — the AI is track-agnostic and the harness runs all 8 tracks
+- **Daily challenge** — a DAILY CHALLENGE button on the menu picks today's
+  (UTC) fixed track + setup: `src/daily.js` derives the selection from the
+  date int via `mulberry32` (same day → same track/hazards/items, every
+  boot). The button applies the config + selects the track through the
+  normal picker, so persistence + the 2P wire flow are unchanged
+  (net-sim: daily determinism + range)
 - **Rain + puddles** — the `T` menu key / EXTRAS chip toggles a fully
   procedural weather: 320 falling rain-streak points (generated streak texture),
   a wet-road retint (glossy dark, `roughness 0.3`), seeded **puddle discs on
@@ -285,6 +291,7 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/explosion.js`| Pooled floor-hit explosion FX (particle burst + smoke + shockwave ring) |
 | `src/corners.js`   | Per-corner timing — curvature-plateau corner field, in-corner time, lap-edge bank (deterministic; deltas are cosmetic) |
 | `src/gamepad.js`   | Gamepad — pure `mapGamepad()` (stick + D-pad + LT/Y drift, RT/X item) with browser connect/poll wiring (no-op headless) |
+| `src/daily.js`     | Daily challenge — `mulberry32(date int)` → track + hazards + items (pure, deterministic) |
 | `src/weather.js`   | Rain + puddles — streak field, seeded flat-section puddle discs with ripples, wet retint + light dim (cosmetic, headless-safe) |
 | `src/scenery.js`   | Per-theme scenery — cavern ceiling + neon crystals + hanging candy, storm buoys + lighthouse (seeded, cosmetic, headless-safe) |
 | `src/race.js`     | Headless race core: grid, progress, positions, collisions, `simulateTick()` |

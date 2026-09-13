@@ -835,3 +835,17 @@ setItemsOn(false);
 console.log(failures === 0 ? `\n== NET-SIM PASS (${TRACKS.length} tracks, wire OK) ==`
                            : `\n== ${failures} NET-SIM FAILURE(S) ==`);
 process.exitCode = failures === 0 ? 0 : 1;
+
+// ---------------- daily challenge ----------------
+console.log('--- daily challenge (deterministic per UTC day) ---');
+import { dailyChallengeFor, dailyChallenge } from '../src/daily.js';
+const d1 = dailyChallengeFor(20260913), d2 = dailyChallengeFor(20260913);
+mark(d1.track === d2.track && d1.hazards === d2.hazards && d1.items === d2.items, 'daily is stable within a day');
+const d3 = dailyChallengeFor(20260914);
+mark(d3.track >= 0 && d3.track < TRACKS.length && d1.track >= 0 && d1.track < TRACKS.length, 'daily track in range');
+mark(typeof d1.hazards === 'boolean' && typeof d1.items === 'boolean', 'daily booleans');
+mark(/^\d{4}-\d{2}-\d{2}$/.test(d1.label.slice(6)), 'daily label format');
+mark(d1.track !== d3.track || d1.hazards !== d3.hazards || d1.items !== d3.hazards, 'different days differ (very likely)');
+const dnow = dailyChallenge();
+mark(dnow.track >= 0 && dnow.track < TRACKS.length, 'dailyChallenge() in range');
+console.log(`daily 2026-09-13 → track ${d1.track} (${TRACKS[d1.track].name}), hazards=${d1.hazards}, items=${d1.items}`);

@@ -64,12 +64,12 @@ flat tracks stay flat.
   with a rotating beacon; wind gusts nudge the AI). Each = data in
   `tracks.js` + a theme + `src/scenery.js` scenery; `make sim`/`netsim` run
   all 8 tracks, screens capture a cavern race.
-- [ ] **Daily challenge** — "today's track" chip: a date hash picks the track
-  AND re-seeds the pad/hazard/prop fields (seed = trackIdx ⊕ day), so the
-  layout, hazards and boost field differ day-to-day on the same spline.
-  Headless: assert the seed changes the pad layout and the date mapping is
-  stable; wire note: the track frame already carries the track idx — the day
-  seed is computed locally from the date (no protocol change).
+- [x] **Daily challenge** — shipped as a DAILY CHALLENGE button (menu, RACE
+  page): `src/daily.js` = `mulberry32(date int)` → track + hazards + items
+  (the same UTC day always yields the same challenge, every boot; the button
+  applies the config + selects the track through the normal picker). Follow-up
+  for a future pass: re-seed the pad/hazard/prop fields from the day (seed =
+  trackIdx ⊕ day) so the layout differs day-to-day on the same spline.
 
 ## Phase 7 — Beyond the race
 
