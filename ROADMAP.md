@@ -73,11 +73,12 @@ flat tracks stay flat.
 
 ## Phase 7 — Beyond the race
 
-- [ ] **Replays** — the sim is 100% deterministic from inputs, so a replay is a
-  *recorded input sequence* (host input + client input + AI seed), ~100 B/s:
-  the host keeps the last race's input log (capped, memory-only) and the
-  results screen offers REPLAY: re-simulate offline, chase the leader, any
-  speed (0.5×/1×/2×). No wire traffic; old peers simply don't offer it.
+- [x] **Replays** — shipped: the sim is 100% deterministic from inputs (all
+  game RNG is seeded), so a replay is the player's recorded input stream
+  re-fed to a fresh race on the same track + config (`src/replay.js`;
+  REPLAY THIS RACE button on the results screen; memory-only, capped, no
+  wire traffic). Follow-up: 0.5×/1×/2× playback speed + leader-chase
+  camera.
   `make netsim` validates a record→replay determinism (bit-identical karts).
 - [ ] **Track editor** — sandbox mode: drag control points on the existing
   spline gizmo, place pads, save to localStorage, and share via a short URL

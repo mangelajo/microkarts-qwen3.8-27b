@@ -849,3 +849,30 @@ mark(d1.track !== d3.track || d1.hazards !== d3.hazards || d1.items !== d3.hazar
 const dnow = dailyChallenge();
 mark(dnow.track >= 0 && dnow.track < TRACKS.length, 'dailyChallenge() in range');
 console.log(`daily 2026-09-13 → track ${d1.track} (${TRACKS[d1.track].name}), hazards=${d1.hazards}, items=${d1.items}`);
+
+// ---------------- replays (deterministic re-run) ----------------
+console.log('--- replays ---');
+import * as Replay from '../src/replay.js';
+Replay.recordStart();
+Replay.recordFrame(1, 0.3, false, false);
+Replay.recordFrame(0.8, -0.2, true, true);
+Replay.recordStop();
+mark(Replay.hasRecording() === false, 'too-short recording rejected');
+mark(Replay.playbackFrame(1).th === 0.8 && Replay.playbackFrame(1).it === true, 'playback frame 1 round-trips');
+mark(Replay.playbackFrame(99) === null, 'playback past end is null');
+// full re-run determinism: scripted input → run → record → re-run with the
+// recorded stream → the kart ends at the identical spot
+selectTrack(0);
+const scripted = t => ({ throttle: 1, steer: 0.15 * Math.sin(t / 30) });
+const runA = new Kart({ isPlayer: true });
+for (let t = 0; t < 480; t++) simulateTick([runA], k => (k.isPlayer ? scripted(t) : { throttle: 0, steer: 0 }), 1 / 120, t * (1000 / 120), { racing: true });
+Replay.recordStart();
+Replay.recordFrame(scripted(0).throttle, scripted(0).steer, false, false);
+for (let t = 1; t < 480; t++) Replay.recordFrame(scripted(t).throttle, scripted(t).steer, false, false);
+Replay.recordStop();
+const runB = new Kart({ isPlayer: true });
+for (let t = 0; t < 480; t++) {
+  const f = Replay.playbackFrame(t);
+  simulateTick([runB], k => (k.isPlayer ? { throttle: f.th, steer: f.st, use: f.it } : { throttle: 0, steer: 0 }), 1 / 120, t * (1000 / 120), { racing: true });
+}
+mark(Math.abs(runA.pos.distanceTo(runB.pos)) < 1e-6, 'replayed input reproduces the identical trajectory');

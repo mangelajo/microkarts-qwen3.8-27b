@@ -12,6 +12,7 @@ import { Kart } from './kart.js';
 import { aiControl, setWindOn } from './ai.js';
 import { TRACKS } from './tracks.js';
 import { dailyChallenge } from './daily.js';
+import { recordStart, recordFrame, hasRecording, playbackFrame } from './replay.js';
 import { selectTrack, updateItemBoxes, syncWallMeshes, tickProps, tickHazards } from './track.js';
 import { initDayNight, setDayNightFor, updateDayNight } from './daynight.js';
 import { initGamepad, gamepadPoll } from './gamepad.js';
@@ -196,10 +197,18 @@ function tryConsumeItemUse(now) {
 
 function keyInput(k, racing) {
   if (!k.isPlayer || !racing) return { throttle: 0, steer: 0 };
+  // replay mode: feed the recorded input stream (deterministic re-run)
+  if (replayMode) {
+    const f = playbackFrame(replayIdx++);
+    if (!f) return { throttle: 0, steer: 0 };   // stream done — coast out
+    return { throttle: f.th, steer: f.st, drift: f.df, use: !!f.it };
+  }
   const c = readDrive(racing);
   if (tryConsumeItemUse(performance.now())) {
+    recordFrame(c.throttle, c.steer, c.drift, true);
     return { throttle: c.throttle, steer: c.steer, drift: c.drift, use: true }; // spread: drive is shared
   }
+  recordFrame(c.throttle, c.steer, c.drift, false);
   return c;
 }
 
@@ -257,6 +266,9 @@ function startRace() {
   game.laps = LAPS;
   resetKarts();
   itemUseQ = 0; autoUseAt = 0; lastPlayerItem = 0;   // fresh item state each race
+  recordStart();                                     // fresh input recording each race
+  if (replayQueued) { replayQueued = false; replayMode = true; replayIdx = 0; }
+  const rb = el('replayBtn'); if (rb) rb.style.display = 'none';
   bestCornerLapMs = 0; bestCornerTimes = null;        // fresh corner-delta reference
   n2.resetClientItems();
   ghostStop();          // fresh race: the ghost restarts at GO
@@ -324,6 +336,8 @@ function finishRace() {
     '<div style="font-size:13px;letter-spacing:1px;margin-top:10px">' +
     rows.join(' &nbsp;&nbsp; ') + '</div>';
   resultsEl.style.display = '';
+  const replayBtn = el('replayBtn');
+  replayBtn.style.display = (n2.role() !== 'join' && hasRecording()) ? '' : 'none';
   celebrate();   // confetti burst (resultsfx.js)
   if (n2.role() === 'host') {
     n2.net().sendFinish(encFinish(order.map(k => list.indexOf(k)),
@@ -394,6 +408,14 @@ if (dailyBtn) {
   const tag0 = document.getElementById('dailyTag');
   if (tag0) tag0.textContent = `${dc0.label} — ${dc0.trackName} · ${dc0.hazards ? 'hazards' : 'no hazards'} · ${dc0.items ? 'items' : 'no items'}`;
 }
+// REPLAY: re-run this race with the recorded input stream
+const replayBtnEl = document.getElementById('replayBtn');
+if (replayBtnEl) replayBtnEl.addEventListener('click', () => {
+  audio.ensureAudio();
+  replayQueued = true;
+  startRace();
+  replayBtnEl.blur();
+});
 
 // track picker: chips + persistence. Rebuild the scene on selection;
 // track switch = rebuild the track + (re)apply its day/night mode
@@ -535,6 +557,9 @@ function hostInputFor(k, racing) {
  * ------------------------------------------------------------------ */
 let camShake = 0; // collision camera shake, decays
 function addShake(v) { camShake = Math.min(1, camShake + v); }
+
+// replay: record the player's input each race; REPLAY re-runs it
+let replayMode = false, replayIdx = 0, replayQueued = false;
 
 function snapChaseCam(dt) {
   const p = n2.selfKart();
