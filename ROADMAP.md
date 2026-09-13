@@ -1,141 +1,121 @@
-# Roadmap
+# Microkarts roadmap
 
-Ideas for continuing to improve Micro Kart Racing, rough-ordered by value-per-effort.
-Check items off as they land.
+The old roadmap (Phases 1–4) is **100% shipped** — compressed at the bottom. This
+document is the next arc: feel, world, beyond-the-race, scale. Same rules apply:
+zero assets, deterministic sim, headless-verified (`make sim` / `make netsim`),
+wire backward-compatible, flat tracks stay flat.
 
-## Current state (what's already solid)
+## Current state
 
-- Arcade physics with off-road handling; lap/checkpoint counting with midpoint gate
-- **3D track elevation** — two 3D tracks (roads up to ~15 u above the table): stick-to-road with slope-driven speed, crest-launch jump physics, wheel-level torque tipping (direction of exit = direction of tilt), real-gravity falls with FELL OFF penalty + respawn, no magic lift; flat tracks bit-identical (`efd2b03` + `a1829d0`)
-- **2-player LAN over WebRTC** — serverless code-paste pairing, host-authoritative fixed-step sim,
-  60 Hz state stream + 50 ms client interpolation, 2 humans + 2 AI or 1 v 1 (`plans/2_player_lan.md`)
-- **QR pairing** — scan-to-pair: host/join screens show canvas QRs (join URL / answer code), `?join=` auto-connect; self-contained encoder (`src/qr.js`, zero assets/dependencies), `make qrcheck` RS-decode gate
-- **Day/night cycle** — 6-min day drift on the daylight themes (sun/moon arc, fading-in starfield, phase-following lights/tint/fog; each track boots on its established golden look and slides into a starlit night); midnight tracks gain moon + stars; space untouched (`src/daynight.js`, pure visuals — `make sim` byte-identical)
-- 3 distinct AI drivers + headless test bench (`make sim` AI · `make netsim` wire + 2P race, `ai-sim/`)
-- **Modular browser code** — `src/game.js` (state machine: karts, input, race lifecycle, cameras, `animate()`) drives `src/net2p.js` (2P host/join orchestration: session lifecycle, code pairing, client render mirror); one-way dependency, split verified behavior-preserving (`make sim` output byte-identical pre/post)
-- **ai-sim tuning playground** — browser port (`ai-sim/playground.html`: the real `simulateTick` + AI on a 2D top-down canvas, runtime tuning via `config.js` `tuneConfig` live `let` bindings, per-kart telemetry = the bench's numbers) + `make simwatch` watch mode (bench re-runs on every `src/`/`ai-sim/` change)
-- **Item boxes** — 3 seeded candy boxes per track (turbo / rubber band / wall, fixed per-box rolls); pickups, fires and wall hits live in the shared `simulateTick`, host-authoritative projectiles; the rubber band is timed (8 s) with a live HUD countdown, then frees the slot; ON by default, chip or `I` (`src/items.js`)
-- Fully procedural scene: wood table, tabletop props (that react when grazed — spin/wobble/hop), day/night sky + mountains — no assets
-- Shadows, chase camera, HUD, countdown/results flow
+- 6 procedural tracks (3 flat, 3 elevated), day/night sky, fully synthesized audio
+- Solo vs AI + 2-player WebRTC (QR pairing, `?join=` deep link), host-authoritative sim
+- 3D elevation: slope speed, crest-launch, wheel-torque tipping, table fall + respawn
+- Drift → boost → pads; sugar hazards; item boxes (turbo / timed rubber / wall)
+- Ghost + top-5 rankings (localStorage); results FX; reactive tabletop props
+- AI bench (`make sim`), wire round-trip + race sims (`make netsim`), tuning
+  playground + watch mode, Playwright render check (`make screens`)
 
-## What's missing
+## Phase 5 — Feel
 
-- **Phase 2 tail**: ~~QR pairing (v1.5)~~ ✅ done; local-prediction polish if the join client's own kart feels laggy
-- **Phase 4 (pick by mood)**: day/night cycle · reactive props (spinning lollipop on contact)
+- [ ] **Perfect drift** — releasing the drift in a short window (the top of the
+  charge curve) pays extra boost + a "PERFECT" callout + chime. The window is a
+  constant around `DRIFT_CHARGE_MAX`; the bonus scales the release charge.
+  `make sim` asserts the window/bonus; flat tracks unchanged (it only adds boost
+  currency, which exists today).
+- [ ] **Corner deltas** — per-corner timing vs your session-best lap: the HUD
+  flashes `+0.21` / `-0.04` as you clear each corner (corner = a curvature
+  plateau in the samples, indexed the same way the AI reads it). Pure local
+  timing, no wire; results screen gains a per-corner breakdown.
+- [ ] **Gamepad support** — `navigator.getGamepads()`: left stick steer/throttle,
+  right stick / triggers for drift + item, connected at boot with the same
+  input struct the keyboard path feeds. Headless check: a fake gamepad object
+  through the input reader; `make screens` adds a gamepad-icon state.
+- [ ] **Music reactivity** — the per-track chiptune gains a second layer
+  (arpeggio density + filter opening) driven by drift charge and boost, so a
+  big release audibly "hits". `audio.js` only; headless: assert the layer
+  gain tracks the charge curve with fake karts.
 
----
+## Phase 6 — World
 
-## Phase 1 — *Feel* (weekend-scale, no architecture changes)
+- [ ] **Rain + puddles** — procedural rain (line-segment pool, no assets) on
+  the two coastal/midnight themes, plus a deterministic field of wet patches
+  (seeded per track like pads): grip/speed penalty inside a patch. The patch
+  field rides the track index (never streamed — old peers just see dry).
+  `make sim` gets the grip-penalty scenario; flat tracks stay bit-identical
+  when the field is empty.
+- [ ] **Two new tracks** — CANDY CAVERN (indoor, neon glow, low ceiling props,
+  a new "cavern" theme) and STORM HARBOUR (coastal, fog + the rain above,
+  long straight for the wall item). Each = data in `tracks.js` + a theme +
+  bench coverage; `make sim`/`netsim`/`screens` grow by 2 tracks.
+- [ ] **Daily challenge** — "today's track" chip: a date hash picks the track
+  AND re-seeds the pad/hazard/prop fields (seed = trackIdx ⊕ day), so the
+  layout, hazards and boost field differ day-to-day on the same spline.
+  Headless: assert the seed changes the pad layout and the date mapping is
+  stable; wire note: the track frame already carries the track idx — the day
+  seed is computed locally from the date (no protocol change).
 
-- [x] **Procedural audio** (`src/audio.js`, keeps the no-assets policy)
-  - WebAudio engine oscillator, pitch tied to speed, gear-like stepping ✅
-  - Skid noise when |steer| high & speed high; thud on collision; lap chime; countdown beeps ✅
-  - One chiptune per track (drive / pop / wave; sequenced on the audio clock) ✅
-  - `M` key / HUD button toggles mute (persisted in localStorage) ✅
-- [x] **Speed feel** — FOV widens 55 → 70 with speed (smoothed); collision camera shake + per-kart jolt kick (damped roll/pitch in `sync()`) ✅
-- [x] **Particle dust** — `THREE.Points` pool (90 puffs) puffs behind karts off-road at speed (`dustForKart` in `scene.js`) ✅
-- [x] **Minimap** — 2D canvas HUD overlay; whole track outline (rebuilt per track) + a coloured dot per racer + the local kart's heading arrow; fits the current loop each track, `K` toggles it (`src/minimap.js`)
-- [x] **Collision juice** — collisions live in the shared `race.js` (host + solo + net-sim); **fixed the reverse-collision bug** (constant position shove + 0.58 restitution pinned/shoved the driver forward; now speed-weighted soft separation + restitution 0.3 — "the driver wins"). Regression test in `make netsim` (old code: 72/180 oscillating contact; fixed: 180/180 smooth) ✅
+## Phase 7 — Beyond the race
 
-## Phase 2 — *Depth* ("why do I want to play again")
+- [ ] **Replays** — the sim is 100% deterministic from inputs, so a replay is a
+  *recorded input sequence* (host input + client input + AI seed), ~100 B/s:
+  the host keeps the last race's input log (capped, memory-only) and the
+  results screen offers REPLAY: re-simulate offline, chase the leader, any
+  speed (0.5×/1×/2×). No wire traffic; old peers simply don't offer it.
+  `make netsim` validates a record→replay determinism (bit-identical karts).
+- [ ] **Spectator mode** — a third device joins as spectator: the join flow
+  gains a mode bit (old peers decode it as 0 → normal join, backward
+  compatible); the spectator sends no input (the host runs a parked kart for
+  it) and its camera follows the leader with the minimap + live positions.
+  `make netsim` gets a 3-party sim (host + racer + spectator frames).
+- [ ] **Track editor** — sandbox mode: drag control points on the existing
+  spline gizmo, place pads, save to localStorage, and share via a short URL
+  (base64 of the point/pad/hazard data, like the pairing code — `?track=`
+  deep link, stripped after load). Geometry validation (min turn radius,
+  min road width) reuses the bench's flat-track invariants. The biggest item
+  in this arc; lands last.
 
-- [x] **More tracks** (`src/tracks.js`, done in `test-micro`) — 3 named tracks, each with its own control-point set **and theme palette** (sky gradient, fog, light levels, table wood tint, road colour):
-  - **BUTTERFINGO LOOP** (dusk, the original), **CANDY TANGLE** (19-point S-chicane hairpin, candy theme), **MIDNIGHT TEARDROP** (9-point flowing bank, midnight theme)
-  - `track.js` now exposes `buildTrack(def)` / `selectTrack(idx)`: refills `samples`/`sampleHead`/`trackLen` **in place** so the kart physics + AI + sim keep working untouched, and swaps a `THREE.Group` of road/curbs/props with old geometries+materials disposed
-  - menu picks a track via chips or `←`/`→` (persisted in `localStorage mkr-track`); HUD shows the current track name
-  - **`make sim` now runs the full AI suite against every track** — a broken control-point set fails the harness instead of the browser (exit code 1)
-  - AI stays track-agnostic: it only reads `samples`/`curvatureAt`. Adding a track = add an entry to `TRACKS` and run `make sim`
-  - Later extended to **5 tracks**: the 3D elevation feature added SUGAR CANYON + MIDNIGHT RIDGE (catalogue now 3 flat + 2 elevated)
-- [x] **Sugar-hazard road obstacles** (`src/obstacles.js`, pure + headless) — candy (gumdrop / dice / gumball / jawbreaker / lolly / bean) scattered on the asphalt on a **seed-per-track RNG**, so the **host and every LAN client build the identical layout from the track index alone** — nothing is streamed over the wire, and the 100%-deterministic-race property the net-sim relies on holds. Start-menu toggle (chip + `Z`, persisted in `localStorage mkr-hazard`), client mirrors the host's pick in join mode. `collideObstacles` (karts pop clear + decel + `obJuice` jolt / camera shake / crash sfx) lives in `race.js` simulateTick (solo + host + net-sim all run the same code).
-  - **AI dodges like a human, not a physics bug**: `obstacleAvoid` (primary defense) steers the pursuit lane around the nearest in-lane hazard — strength scales with skill (strong drivers clear it clean; weak ones under-steer and clip it, which is the point) + per-driver hysteresis so they hold a side instead of weaving. If a driver *does* end up wedged against a candy at crawl speed (turnFactor → ~0, can't steer out), they **reverse ~8u to make room** then the avoidance re-approaches it — with a **per-hazard 6s cooldown** that kills the endless clip→reverse→re-clip loop. `make sim` checks all tracks × 3 skill levels (observed off-road <1%, 0 stalls); `make netsim` checks the seeded-layout determinism + a 4-kart hazard host race (4/4 finish)
-- [x] **Boost pads** (`src/pads.js`, pure + headless) — chevron strips auto-placed on
-  each track's straights: the field is DERIVED (scan sample headings for straight runs,
-  place a 3-cell strip by a track-index-seeded PRNG, keep grid/finish clear, never pave
-  over candy) so host + every client build it identically with zero wire traffic — the
-  same trick as the hazard field. Crossing cells back-to-back chains the boost
-  (0.4 → 0.7 → 1.05, 0.9 s window; writes `kart.boost`/`boostEdge` — the drift-boost
-  vocabulary, so exhaust flare + whoosh + headroom all reuse it; drift-into-the-pads
-  combo falls out free). Hits fire from `race.js` `simulateTick` → solo + host +
-  `make netsim` share it; chevrons drawn by `track.js`. 7 new `make netsim` assertions
-  (strip layout / determinism / on-asphalt / chain up / debounce / window expiry /
-  re-arm). The AI rides the pads passively — best laps already ~1 s faster.
-- [x] **3D track elevation** (`src/kart.js` + `src/tracks.js`, SUGAR CANYON + MIDNIGHT RIDGE) — the road itself has height (y up to ~15 u). Karts stick to the road surface while on it; the slope drives speed (`speed += -slope * GRAVITY * dt` — climbs bleed, drops feed). Crest-launch: flat out over a crest, a kart launches when `v²·curvature > gravity` and flies a short parabola until the road holds it again (speed-gated, off-by-one-frame crest check). Wheel-level torque tipping: the 4 wheel corners are projected against the ribbon each frame; per-corner support (the lip is the OUTER curb edge — the red/white border is road, deadzone spans a full curb-width past it — then fade as the wheel clears the face) → per-corner gap weighted by corner position → pitch/roll torques; angular velocity ramps from the torques (capped) and persists as momentum, so the tilt matches the exit direction (nose in → nose down, side → roll, one corner → diagonal flip) and the spin starts slow then speeds up. Off the edge: real-gravity fall to the table; landing off an elevated track = ~2.5 s stun ("FELL OFF") + respawn onto the racing line; a kart on the table under the track is never lifted (no magic lift). Height is pure track data — host and clients compute it locally, wire carries one f32 per kart (y, old peers decode y = 0); the AI brakes climbs off the slope field, camera/pitch/ghost ride the road. Flat tracks bit-identical; verified by `make sim` / `make netsim` + headless tilt matrices
-- [x] **Item boxes** ✅ (`src/items.js`) — three candy boxes per track (seeded layout + per-box
-  seeded PRNG, exactly like pads/hazards: host and clients build the identical field from the track
-  index, nothing streamed, races stay 100% deterministic). Each box holds a fixed weighted roll —
-  turbo (45%) / rubber band (30%) / wall (25%) — and re-grants the same item after an 8 s respawn.
-  Turbo is the drift/pad boost currency (full charge); the rubber band is passive MK8-style (a
-  trailing holder gets a push scaled to the gap; `E` does nothing while holding it) and is now
-  **timed** — it lasts `RUBBER_DURATION` (8 s, config) and then frees the slot, so a held rubber
-  no longer blocks other pickups indefinitely; a live countdown (`#itemTimer` in the item HUD)
-  runs a local clock from the item-id transition (the wire still carries only the item u8 — no
-  protocol change); `make netsim` gained the expiry + slot-free assertions; the wall is a
-  host-authoritative projectile that slams the first rival it touches (speed ×0.4 + jolt). Pickups,
-  fires and hits all live inside `simulateTick`, so solo / host / `make netsim` share one model;
-  the AI fires turbo on pickup and throws the wall only at close range (beyond ~10 u the
-  projectile can't outrun a kart inside its 2.8 s life). `E` fires (touch: 450 ms auto-fire on
-  pickup); HUD item slot with per-item colours. Wire: one u8 item per kart in the state frame
-  (29-byte karts; old 28/24-byte peers decode item = 0), a `use` bit in the 6-byte input frame
-  (old frames decode use = false), and the track frame grows to 4 bytes (items byte; old 3-byte
-  peers keep the local setting). OFF by default like hazards — menu chip or `I`, persisted,
-  host broadcasts. Gated by `make sim` (items-ON pack per track) + `make netsim` (wire
-  round-trips, legacy decodes, layout determinism, effect models, 2P races with items ON)
-- [x] **Skid-to-drift** ✅ (`src/kart.js` + config block) — hold `Space` (touch: stick to full lock)
-    above `DRIFT_MIN_KMH` on asphalt: heading steers in ×`DRIFT_STEER` while the motion direction
-    follows at `DRIFT_GRIP` with a hard `DRIFT_MAX_SLIP` cap → a real, controllable slide; slides
-    keep momentum (`DRIFT_DRAG` < `DRAG`), charge builds and release fires `BOOST_ACCEL` scaled by
-    charge with `BOOST_HEADROOM` over top speed. Off-road / slow / race-over never drift.
-    Body leans into the slide, exhaust flares on boost, skid audio howls, whoosh on release.
-    Wire: drift flag byte in the input frame (`encInput` v2, old frames decode drift=false);
-    state frames unchanged — remote karts already SHOW the slide because heading and motion are
-    both on the wire. AI doesn't drift → `make sim` stays a no-regression gate; 13 assertions
-    in `make netsim` (gate / engage / slip cap / charge / boost / headroom / wire)
-- [x] **2-player** (superseded the local plan — went LAN instead): WebRTC DataChannel P2P, manual code pairing (no server), host runs the authoritative fixed-step sim, client interpolates. Headless safety net: `make netsim` (wire round-trips, interp unit checks, full 2P races on every track). Remaining: ~~QR pairing (v1.5)~~ ✅ done; local-prediction polish if the peer's own kart feels laggy
+## Phase 8 — Scale & polish
 
-## Phase 3 — *Structure* (keep the project sustainable)
+- [ ] **Instanced rendering** — curbs, pads, hazards and props merged into
+  instanced meshes (one draw call each) + adaptive pixel ratio (drop to 0.75×
+  on sustained <45 fps). No behaviour change: `make sim` byte-identical,
+  `make screens` captures prove visual parity.
+- [ ] **Item #4: sticky candy** — a box reward that leaves a slow patch
+  behind the thrower for 2 s (the first kart through it loses grip, not
+  speed — distinct from the wall). Same item-box economy (weighted roll),
+  one more u8 value (old peers decode as ITEM_NONE… they'd see a blank slot,
+  which is safe). `make netsim` covers the patch field + grip model.
+- [ ] **Controller-free mobile polish** — on-screen drift/boost buttons with
+  haptic pulses on charge milestones (already partially there — the auto-fire
+  path), plus a 9:16 portrait layout pass for the chase camera.
 
-- [x] **Split monoliths** — `aiControl` → `src/ai.js`, exhaust FX → `src/blastfx.js` (`kart.js` 551 → 301 lines; since regrown to ~600 with the 3D elevation physics); the duplicated solo/host sim bodies in `animate()` merged into one shared loop (only the time base differs — also fixed the host re-running `finishRace()` + re-sending finish frames every frame after the flag dropped); **`main.js` (994 lines) → `src/game.js` (state machine: karts, input, race lifecycle, cameras, `animate()`) + `src/net2p.js` (host/join orchestration: `NetSession` lifecycle, code pairing, client render mirror)** — one-way dependency (game.js drives net2p via a context object; no import cycle), `COUNTDOWN_MS` moved to `config.js`, the duplicated grid camera-snap deduped into `camSnap()`. Verified behavior-preserving: `make sim` output byte-identical to the pre-split tree, `make netsim` pass, and a per-function body diff of all 40 moved functions
-- [x] **`ai-sim/` as tuning playground** ✅ — shipped both halves: the **browser port** (`ai-sim/playground.html` + `playground.js`) runs the real `simulateTick` + `aiControl` (the exact `sim.mjs` items-scenario call) on a 2D top-down canvas — road shaded by elevation, pads/hazards/item boxes drawn, per-kart telemetry (laps, km/h, off %, stall %, best lap) + a finish report; and **`--watch` mode** (`ai-sim/watch.mjs`, `make simwatch`) re-runs the full bench on every change in `src/` + `ai-sim/` (debounced, mid-run changes re-trigger). The enabling change: `config.js`'s 51 tuning constants are now live `let` exports + `tuneConfig()` (setter map; `N_SAMPLES` excluded — track.js bakes it into module-scope arrays), so the playground writes physics values in place and the next sim tick runs them — no reload. `make sim` output unchanged (bit-identical), lint/imports/netsim green, playground init + full race + tuning validated via a headless DOM-shim smoke test
-- [x] **Rankings** ✅ (`src/rankings.js`) — the ghost phase's remnant: a **top-5 best-lap board per track** in its own `localStorage` key (`mkr-rank`, separate from the ghost's `mkr-ghost` — the ghost key format is untouched) — `rankLapDone(lapMs)` slots a finished lap in (ms + short `YYMMDD` date, no timeline, so entries are tens of bytes) and returns the rank 1..5 for the nudge; a tie with the worst slot is rejected so the board stays stable. Local-only like the ghost (solo + host, the join-client gate is the same `role !== 'join'` block; nothing goes over the wire). The **menu shows the current track's board** (refreshes on track change) and a lap that cracks the top 5 flashes **"NEW RECORD — #N"** (a new #1 keeps the existing chime). `make netsim` covers insert/sort/cap/reject/reload + key separation
-- [x] **localStorage best laps + ghost** ✅ (`src/ghost.js`) — best lap per track + a ~10 Hz
-  position timeline (flat rounded JSON, ~1.7 KB / 30 s lap) in `localStorage mkr-ghost`;
-  a translucent ghost kart plays it back aligned to YOUR current lap (starts when you
-  start; you always race the best that existed before this lap). Solo + host only — the
-  join client's lap events are host-clock-mirrored, recording there would store garbage.
-  HUD BEST shows the stored record from lap 1; new records chime. Headless coverage in
-  `make netsim` (store / overwrite / per-track / reload / sample-rate)
-- [x] **Mobile / touch** — `src/touch.js`, a floating "pull" joystick: the **first finger down anywhere on the canvas seeds a virtual stick at that point** and the live **drag delta = the drive vector** (`pull up → throttle, down → brake/reverse, sideways → steer`), each axis clamped to [-1,1] on a 74 px spring with a 12 px dead-zone. It feeds the *same* `{throttle, steer}` channel as the keyboard via `readDrive()` (a live drag wins so the two never fight), so solo + host + client are all covered; the client streams it over the LAN. The `i8` input fields now carry the ±1 range ×127, so an analog drag survives the wire while keyboard's ±1/0 stay exact (`decInput(encInput(-1,1)) === {-1,1}`). Headless-safe (`initTouch` is a no-op without a DOM; `ai-sim` never imports it), so `make netsim` still passes (wire + all 3 races). A "PULL FROM ANYWHERE TO DRIVE" cue flashes at GO on touch devices. Steer sign is `INVERT_STEER` one-liner if a phone test flips it.
+## Deliberately not doing (for now)
 
-## Phase 4 — *Polish* (endless, pick by mood)
-
-- [x] **Results confetti + podium pips** ✅ (`src/resultsfx.js`) — the finish screen now opens with a **podium block** (top 3 as gold/silver/bronze pips in the classic 2-1-3 layout, 1st biggest, the rest as plain numbered pips) and a **confetti burst** (~180 procedurally-animated coloured rects on an overlay canvas, 6 s, self-clearing, zero assets). Solo, 2P host AND the join client all call the same two functions; the ordering data is the headless-tested `raceOrder()`, so `make netsim` still covers what the pips display
-- [x] **New track theme** ✅ — **NEBULA SWIRL** (space table, `src/tracks.js`): a flat 12-point swirl — the outer ring runs the table while two inner hooks cut back through the middle (a fast loop with a slow, twisty heart, 654 u) — with a deep-indigo sky, magenta nebula horizon, dark-slate table and dark-indigo road. Pure data (points + a `space` theme entry in `TRACKS`), so the full AI suite + hazard/items/2P races now run against it automatically (`make sim` + `make netsim` = 6/6 tracks); its remainder (the day/night cycle) shipped as its own item above
-- [x] **Day/night cycle** ✅ (`src/daynight.js` + `game.js` + `sky.js` + `ai-sim/screens.mjs`) — the remainder of the theme item: the three daylight themes (dusk/candy/sunset) drift through a full day in 6 min — sun arc (rise → noon → set), a moon antipode, a dedicated starfield dome that fades in after dark, and lights/sky-tint/fog following the phase; each track boots on a low golden sun (its established look) and slides into a starlit night over the race. The two midnight tracks stay night but gain the moon + starfield (theme light values unchanged); space is untouched. Pure visuals — `make sim` + `make netsim` byte-identical; `make screens` grows to 20 captures (adds a night-track race: moon + starfield)
-- [x] **Drift sound pitch + nitro flame on boost** ✅ (`audio.js` + `blastfx.js`) — the skid howl's pitch rises as the drift charge builds (bandpass 950 → 3350 Hz); a dedicated boost whoosh (2.6 kHz bandpass) decays with `k.boost`, so a drift release OR a pad boost sounds like an engine hit; `blastfx.update()` now takes `k.boost` and flares a **golden nitro exhaust** (0xffc23f, distinct from the speed-gated orange flame) at any speed — a release works while slowing down. All visuals/audio only: physics untouched, `make sim` unchanged
-- [x] **Props that react** ✅ (`src/track.js` `scatterProps`/`tickProps`) — the last ROADMAP item: the prop field is now **deterministic per track** (seeded like pads/hazards, so host + every client build the identical field), and **seven props sit in the drift band** just outside the curb (low kinds only — grazeable by a kart that leaves the road). A fast kart in a prop's radius spins it (scaled to speed), wobbles it, and a hard graze (>14 u/s) makes it hop; spin/wobble decay exponentially to rest. Purely cosmetic — never touches kart physics, runs one frame behind the sim (imperceptible), state lives in `propList` so `tickProps` is headless-safe; `make netsim` gained field-count, drift-band, determinism, contact-spin, decay-to-rest and slow-crawl assertions
-- [ ] ~~Results confetti + podium pips~~ ✅ done
-- [x] **Multi-page menu + features ON by default** ✅ (`index.html` + `hud.js` + `game.js`) — the one long menu is now **three tabs** (chips or `1`/`2`/`3`): **RACE** (mode + 2P pairing + track + START — the first thing you see, fits a phone in the top half, no scroll), **EXTRAS** (sugar-hazard + item-box toggles + the top-5 board), **CONTROLS** (key list / touch hints). `hud.js` gains `initMenuTabs`/`setMenuPage`; `toMenu()` resets to the RACE page. **Sugar hazards and item boxes are now ON by default** (module defaults + `loadHazardPref`/`loadItemPref` flipped — `!== '0'`, so a stored `0` still opts out); `sim.mjs` opts its base scenario out explicitly (`setObstaclesOn(false)`/`setItemsOn(false)` before the track loop) so the bench stays a clean deterministic baseline — gates unchanged, all 16 `make screens` captures verified
-- [x] **Menu restructure — fits every screen, all variants** ✅ (`index.html` + `hud.js` + `game.js`) — the audit (`make screens`, 12 captures) found three real problems: the menu overflowed every viewport < ~1000 px tall, the **results screen showed all the menu controls** underneath (nothing ever hid `#modeWrap`/`#trackWrap`/… — only `#keys`), and **there was no way back to the menu** (no menu-return key existed). Fixed: the menu-only sections live in `#menuSections`, toggled by `showOverlay`'s `isMenu` flag (results / link-dropped states now show only the results); a two-column layout on wide+tall viewports (keys+mode+pairing left, track+hazards+items+rankings right — the whole menu, even with the 2P host panel expanded, fits 1280×900 without scrolling); `Esc` from the results screen returns to a clean menu (fresh HUD, all pickers editable, join clients guarded out); the 2P hint text got proper spacing. Physics untouched — `make sim` unchanged
-- [x] **`package.json` scripts + Playwright screenshot test** ✅ (`ai-sim/screens.mjs` + CI `render` job) — `npm run screens` serves the game no-cache and boots it in headless Chromium (Playwright) on desktop (1280×800) and phone (390×844) viewports; it captures the menu, the 2P host panel, the countdown and a live race into `screens/` (gitignored) and **fails on any page JS error** — the first check that sees what the browser actually renders (the headless benches can't). Along the way it exposed the real bug it was built to catch: the 6-track menu overflowed every viewport below ~1000 px tall (phone included — the START button sat below the fold, Playwright couldn't even click it). Fix: the overlay is now scroll-safe (`#overlay {overflow-y:auto}` + `.panel {margin:auto}` = centred when it fits, top-aligned when it overflows), a compact media-query layout (2-col key grid, smaller title/chips) under 520 px / 1000 px, and touch devices get pull-stick hints instead of the keyboard list
-- [x] **Bigger QR + dedicated 2P menu tab** ✅ (`index.html` + `hud.js` + `game.js` + `src/qr.js` + `ai-sim/screens.mjs`) — the QR canvas grew 150 → 280 px (and the quiet-zone sizing bug that left dead space on big codes was fixed: `(scale+2)*size` → `(size+4)*scale`), and the whole multiplayer setup (mode toggle + pairing + QRs) moved out of RACE into its own **2P** tab (4th menu page, key `2`); RACE keeps a compact PLAYER status row (SOLO / 2P HOST / 2P JOIN + `2P SETUP →`) + track + START; a scanned `?join=` now also jumps to the 2P tab so the pairing UI is visible. `make screens` grows to 18 captures (adds the 2P page, desktop + phone)
-- [x] **RACE page slim-down** ✅ (`index.html` + `hud.js` + `game.js`) — the PLAYER status row (SOLO / `2P SETUP →`) left the RACE page: 2P is one tab chip away, so RACE is now just track + START; the two-column wide+tall layout (and its `.cols`/`.colL`/`.mstat` scaffolding, the `gotoMulti` link + `#modeStatus` mirror) was removed with it. The same audit found the compact media query (short viewports — e.g. a 3006×614 window) set `.panel { max-width:100% }`, stretching the panel edge-to-edge on ultrawide windows; it's now capped at 1020 px (one track-chip row) and stays centred via `margin:auto` (phones still clamp to the viewport). Verified with an ultrawide-short Playwright capture + the standard 20-capture suite; physics untouched — `make sim` unchanged
-- [x] **QR pairing (v1.5)** ✅ (`src/qr.js` + `ai-sim/qr-check.mjs` + `index.html` + `src/net2p.js` + `src/game.js`) — pairing by scan instead of paste: the host screen shows a QR encoding the join URL (`…?join=CODE`), the joiner's screen shows a QR encoding their code, and opening the join URL auto-fills + pre-arms the connection (`?join=` stripped from the address bar after boot). The QR is drawn on a canvas by a **self-contained encoder** (~290 lines, zero assets / zero dependencies): auto version 1–40, byte mode, level-M Reed-Solomon, block interleave, all 8 masks with penalty selection, format + version info. Writing it forced a full QR-spec dive; seven encoder bugs were found and fixed via cross-validation against the `qrcode` npm reference (24/24 matrix parity v1–v40, jsQR round-trips, genPoly + BCH format/version code checks), then locked in by `ai-sim/qr-check.mjs` (`make qrcheck`, now in CI): structural checks (finders, timing, alignment, dark module, format/version codes) + a full zigzag read-back with un-masking, block de-interleave and RS syndrome check (zero remainder, **independently computed generator polynomial**) on 7 version cases × all 8 masks, over-capacity rejection, and an exact-matrix fixture. Zero wire / physics change — `make sim` + `make netsim` unchanged
-- [ ] ~~`package.json` scripts + Playwright screenshot test (CI-able render check)~~ ✅ done — see checked item above
+- **3+ racers** — the state frame is sized for 2 karts; a real n-player mode
+  is a protocol re-design, not an extension (spectator above is the cheap
+  step toward it).
+- **Asset-based content** — the zero-asset rule is a feature (instant load,
+  no CDN); everything stays procedural.
+- **Server backend / accounts** — localStorage + WebRTC stays the whole stack;
+  rankings/ghost are local by design.
 
 ---
 
-## Suggested sequence / milestones
+## Shipped (Phases 1–4, complete)
 
-```
-Phase 1 (audio → feel)        →  "playable demo"
-Phase 2.1 (3 tracks)          →  ✅ done — "variety demo"
-Phase 2.4 (2-player)          →  ✅ done (LAN, not local) — "party demo"
-Phase 2.1 + Phase 3.1         →  ✅ done — content milestone: add tracks (Phase 2.1 ✅ done) + split code (Phase 3.1 ✅ done)
-Phase 3.3 (ghost)             →  "comeback" milestone
-```
+**Core**: 2P WebRTC (pairing code + QR on both sides, `?join=` deep link),
+host-authoritative sim, wire round-trip sims · 6 tracks (3 flat, 3 elevated)
+incl. NEBULA SWIRL · 3D elevation (slope speed, crest-launch, wheel-torque
+tipping, no-magic-lift fall + respawn) · drift → boost → pads · sugar hazards
+· item boxes (turbo / **timed rubber band with HUD countdown** / wall) ·
+ghost + top-5 rankings · day/night cycle (drifting sun/moon, starfield,
+per-theme modes) · results confetti + podium pips · drift sound pitch +
+nitro flames · **reactive tabletop props** (seeded field, drift-band props,
+contact spin/wobble/hop) · multi-page menu (RACE/EXTRAS/CONTROLS/2P) ·
+fully synthesized audio (engine, skids, chiptune per track)
 
-**Top-3 picks if only doing three:**
-
-1. ~~Phase 1.1 — **audio**~~ ✅ done
-2. ~~Phase 2.4 — **2-player**~~ ✅ done — LAN/WebRTC with `make netsim` safety net (transforms the audience)
-3. ~~Phase 2.1 — **more tracks**~~ ✅ done (3 tracks + themes; catalogue now 5 with the 3D pair)
+**Engineering**: monolith split (`main.js` → `game.js` + `net2p.js`),
+`config.js` tuning surface (51 live constants) + AI bench + tuning playground
++ watch mode, headless QR encoder (`src/qr.js`, reference-verified), Playwright
+render check (20 captures, every screen size), `make sim` / `make netsim` /
+`make screens` / `make qrcheck` gates, CI on every push, `make deploy`
