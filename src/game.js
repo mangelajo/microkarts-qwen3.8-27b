@@ -10,6 +10,7 @@ import { initMinimap, setMinimapVisible, updateMinimap, resizeMinimap } from './
 import { Kart } from './kart.js';
 import { aiControl } from './ai.js';
 import { selectTrack, updateItemBoxes, syncWallMeshes } from './track.js';
+import { initDayNight, setDayNightFor, updateDayNight } from './daynight.js';
 import { GRID, simulateTick, raceOrder } from './race.js';
 import { setObstaclesOn, getObstaclesOn } from './obstacles.js';
 import { setItemsOn, getItemsOn } from './items.js';
@@ -345,10 +346,13 @@ startBtn.addEventListener('click', () => {
 });
 
 // track picker: chips + persistence. Rebuild the scene on selection;
+// track switch = rebuild the track + (re)apply its day/night mode
+function applyTrackVisuals(idx) { selectTrack(idx); setDayNightFor(idx); }
+
 // track.js already built TRACKS[0] eagerly at import, so skip a redundant build.
 initTrackPicker(
   idx => {
-    selectTrack(idx);
+    applyTrackVisuals(idx);
     ghostSetTrack(idx);   // best laps + ghost timeline are per-track
     rankSetTrack(idx);   // the top-5 board is per-track too
     if (n2.role() === 'host') n2.net().sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn()); // client previews
@@ -366,7 +370,7 @@ setObstaclesOn(loadHazardPref());
 initHazardPicker(
   on => {
     setObstaclesOn(on);
-    selectTrack(getTrackIdx());
+    applyTrackVisuals(getTrackIdx());
     if (n2.role() === 'host') n2.net().sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn()); // client mirrors
   },
   getObstaclesOn(),
@@ -379,12 +383,15 @@ setItemsOn(loadItemPref());
 initItemPicker(
   on => {
     setItemsOn(on);
-    selectTrack(getTrackIdx());
+    applyTrackVisuals(getTrackIdx());
     if (n2.role() === 'host') n2.net().sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn()); // client mirrors
   },
   getItemsOn(),
 );
-if (getTrackIdx() !== 0 || getObstaclesOn() || getItemsOn()) selectTrack(getTrackIdx());
+// day/night: build the starfield + moon, then set the mode for the boot track
+initDayNight();
+if (getTrackIdx() !== 0 || getObstaclesOn() || getItemsOn()) applyTrackVisuals(getTrackIdx());
+setDayNightFor(getTrackIdx());
 
 // restore mute preferences
 try {
@@ -505,6 +512,7 @@ function animate() {
   game.dt = Math.min(clock.getDelta(), 0.05);
   const dt = game.dt;
   const now = performance.now();
+  updateDayNight(now * 0.001); // the sky drifts (menu included — the orbit view shows it too)
   const list = racers();
   const role = n2.role();
   // the pull-joystick only drives while the car may move; it parks on menu/results

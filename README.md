@@ -132,6 +132,17 @@ take in the catalogue. All track shapes are validated headlessly.
   back with un-masking + block de-interleave + RS syndrome check (zero
   remainder, independently computed generator) on 7 version cases × all 8 masks
   (v1 → v40), over-capacity rejection, and an exact-matrix fixture
+- **Day/night cycle** — the procedural sky is no longer a fixed per-track
+  palette (`src/daynight.js`, pure visuals, zero physics/wire): the three
+  daylight themes (**dusk / candy / sunset**) drift through a full day in 6 min —
+  a sun rises, sets and a moon takes over while stars fade in on a dedicated
+  starfield dome; lights, sky tint and fog follow the phase (boot is a low
+  golden sun, so each track opens with its established look and slides into a
+  starlit night over the race). The two **midnight** tracks stay night but
+  gain the moon + starfield; **space** is untouched. Headless-safe (only the
+  faked scene objects at import; canvas work in `initDayNight()`, called from
+  browser-only `game.js`); `make sim` + `make netsim` unchanged; `make screens`
+  adds a night-track race capture (moon + starfield)
 - **Skid-to-drift** — hold `Space` above ~95 km/h on asphalt: the nose steers in
   faster than the motion follows (real slip angle, capped + controllable), charge
   builds, releasing fires a mini-boost scaled by the slide. The skid howl's pitch
@@ -178,8 +189,8 @@ take in the catalogue. All track shapes are validated headlessly.
   (`showOverlay`'s `isMenu` flag toggles `#menuSections`); `Esc` returns to the menu from
   results. **Sugar hazards + item boxes are ON by default** (persisted, `Z`/`I` to opt out;
   `sim.mjs` opts its base scenario out explicitly, the scenario sections opt back in).
-  Verified by `make screens` — 18 captures (menu + all 4 pages + 2P host/join + results +
-  countdown + race on desktop 1280×900 + phone 390×844)
+  Verified by `make screens` — 20 captures (menu + all 4 pages + 2P host/join + results +
+  countdown + race on desktop 1280×900 + phone 390×844, plus a night-track race)
 - **Playwright render check** — `make screens` (`ai-sim/screens.mjs`) serves
   the game no-cache and boots it in headless Chromium on desktop (1280×900) +
   phone (390×844); captures menu / 2P panel / countdown / live race into
@@ -228,11 +239,12 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/rankings.js` | Per-track top-5 best-lap board (separate `localStorage` key) + `rankLapDone()` rank |
 | `src/qr.js`       | Self-contained QR encoder (auto v1–40, byte mode, level-M RS, 8-mask penalty selection) + canvas `drawQr()` |
 | `src/resultsfx.js`| Results juice: podium pips (`podiumHtml`) + procedural confetti burst (`celebrate`) |
+| `src/daynight.js` | Day/night cycle: 6-min day drift (sun/moon arc, starfield dome, light/tint/fog phase) per theme — cycle / night / static |
 | `src/audio.js`    | WebAudio SFX + music sequencer (skid pitch follows drift charge, boost whoosh decays with `k.boost`) |
 | `ai-sim/`         | Node harnesses: `make sim` (AI) · `make netsim` (wire + 2P race sim) |
 | `ai-sim/playground.html` + `.js` | Browser **tuning playground**: the real `simulateTick` + AI on a 2D top-down canvas, runtime `tuneConfig`, telemetry (off % / stalls / laps / best lap) |
 | `ai-sim/watch.mjs`  | `make simwatch` — re-runs the AI bench on every change in `src/` + `ai-sim/` |
-| `ai-sim/screens.mjs` | `make screens` — Playwright render check: boots the game in headless Chromium (desktop + phone), captures menu/2P/countdown/race, fails on any page JS error |
+| `ai-sim/screens.mjs` | `make screens` — Playwright render check: boots the game in headless Chromium (desktop + phone), captures menu/2P/countdown/race + a night-track race, fails on any page JS error |
 | `ai-sim/qr-check.mjs` | `make qrcheck` — QR encoder gate: structural checks + full zigzag/RS decode (7 versions × 8 masks) + exact-matrix fixture |
 
 ## Tuning

@@ -112,6 +112,7 @@ export function addSky(scene, sunDir = new THREE.Vector3(60, 90, -35), stops = D
 
   // hold a reference so later track themes can repaint the gradient
   scene.userData.skyDome = dome;
+  scene.userData.sunSprite = sun; // day/night driver re-aims it
 }
 
 /** repaint the sky dome of a scene with a new gradient (array of [offset, hex]) */

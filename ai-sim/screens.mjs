@@ -147,6 +147,31 @@ for (const [name, vp] of Object.entries(VPS)) {
   await page.waitForTimeout(3000);                     // after GO, live race
   await shot(page, `${name}-race`);
 
+  // night track (MIDNIGHT TEARDROP) in the race view — the moon + starfield
+  // need a second page: there is no menu-return mid-race.
+  const nightPage = await browser.newPage({ viewport: vp });
+  const nightErrors = [];
+  nightPage.on('pageerror', e => nightErrors.push(String(e)));
+  nightPage.on('console', m => { if (m.type() === 'error') nightErrors.push(m.text()); });
+  await nightPage.goto(`http://localhost:${PORT_ACTUAL}/`, { waitUntil: 'load', timeout: 30000 });
+  await nightPage.waitForSelector('#overlay', { state: 'visible', timeout: 20000 });
+  await nightPage.waitForTimeout(1200);
+  await nightPage.click('#menuTabs [data-tab="race"]');
+  const nchips = nightPage.locator('#trackRow .tchip');
+  if ((await nchips.count()) >= 3) {
+    await nchips.nth(2).click();
+    await nightPage.waitForTimeout(400);
+    await nightPage.locator('#startBtn').scrollIntoViewIfNeeded();
+    await nightPage.click('#startBtn');
+    await nightPage.waitForTimeout(8200);           // GO + ~8 s of night driving (kart heading varies)
+    await shot(nightPage, `${name}-race-night`);
+  }
+  if (nightErrors.length) {
+    console.error(`[${name}-night] page errors:\n  ` + nightErrors.join('\n  '));
+    failed = true;
+  }
+  await nightPage.close();
+
   if (errors.length) {
     console.error(`[${name}] page errors:\n  ` + errors.join('\n  '));
     failed = true;
