@@ -25,11 +25,11 @@ flat tracks stay flat.
   join client fires its own from the fellOff mirror and the remote's from the
   existing y f32 drop (no wire change). Pool saturates + fully decays; `make netsim`
   covers spawn/decay/saturation
-- [ ] **Perfect drift** — releasing the drift in a short window (the top of the
-  charge curve) pays extra boost + a "PERFECT" callout + chime. The window is a
-  constant around `DRIFT_CHARGE_MAX`; the bonus scales the release charge.
-  `make sim` asserts the window/bonus; flat tracks unchanged (it only adds boost
-  currency, which exists today).
+- [x] **Perfect drift** ✅ (`src/kart.js` + `src/config.js` + `game.js` + `audio.js`) —
+  releasing at the top of the charge curve (≥`PERFECT_CHARGE` = 94% of max) pays
+  `PERFECT_BONUS` (0.3) boost on top of full — the decaying boost model handles >1
+  without new state — plus a "PERFECT" callout + chime. The AI omits drift (unchanged);
+  `make netsim` covers window/flag/bonus + early-release
 - [ ] **Corner deltas** — per-corner timing vs your session-best lap: the HUD
   flashes `+0.21` / `-0.04` as you clear each corner (corner = a curvature
   plateau in the samples, indexed the same way the AI reads it). Pure local

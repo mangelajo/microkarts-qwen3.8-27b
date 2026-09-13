@@ -166,6 +166,7 @@ initTouch(renderer.domElement);
 let itemUseQ = 0;
 let autoUseAt = 0;
 let lastPlayerItem = 0;   // pickup sfx + touch auto-fire arming
+let perfectT = 0;         // PERFECT callout hide timer
 function tryConsumeItemUse(now) {
   const touchFire = isTouchDevice() && now >= autoUseAt
     && (player.item === ITEM_TURBO || player.item === ITEM_WALL);
@@ -619,6 +620,14 @@ function animate() {
     if (player.boostEdge) {   // drift released with charge — whoosh (louder = more charge)
       player.boostEdge = false;
       if (player.boost > 0.2) audio.beep(430 + 640 * player.boost);
+    }
+    if (player.perfectEdge) {  // PERFECT release — callout + chime
+      player.perfectEdge = false;
+      audio.perfect();
+      const pc = el('perfectCallout');
+      pc.classList.remove('hidden');
+      clearTimeout(perfectT);
+      perfectT = setTimeout(() => pc.classList.add('hidden'), 1200);
     }
     if (racing && player.item !== lastPlayerItem) {   // pickup chime + touch auto-fire arming
       if (player.item !== 0) {

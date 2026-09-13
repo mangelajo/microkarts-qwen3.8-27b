@@ -43,7 +43,7 @@ non-zero if a driver can't hold the road or recover.
 | `W` / `↑`      | Accelerate        |
 | `S` / `↓`      | Brake / reverse   |
 | `A` `D` / `←` `→` | Steer          |
-| `SPACE` (hold)    | Drift — release for a mini-boost (touch: drag the stick to full lock) |
+| `SPACE` (hold)    | Drift — release for a mini-boost; at the top of the charge curve a **PERFECT** release pays extra boost (touch: drag the stick to full lock) |
 | `←` `→` (menu)  | Pick track        |
 | `M`            | Music on/off      |
 | `N`            | SFX on/off        |
@@ -147,7 +147,11 @@ take in the catalogue. All track shapes are validated headlessly.
   adds a night-track race capture (moon + starfield)
 - **Skid-to-drift** — hold `Space` above ~95 km/h on asphalt: the nose steers in
   faster than the motion follows (real slip angle, capped + controllable), charge
-  builds, releasing fires a mini-boost scaled by the slide. The skid howl's pitch
+  builds, releasing fires a mini-boost scaled by the slide. **Perfect drift**: release
+  at the top of the charge curve (≥94% of max, `PERFECT_CHARGE`) pays extra boost on
+  top of full (`PERFECT_BONUS`, the decaying boost model handles >1 without new state)
+  with a "PERFECT" callout + chime (`kart.js` + `game.js`, `make netsim` covers
+  window/flag/bonus + early-release). The skid howl's pitch
   rises as the charge builds, the boost whoosh decays with `k.boost` (drift release
   OR pad, `audio.js`), and any boost flares a **golden nitro exhaust** at any speed
   (`blastfx.js`). Touch: drag to full lock. Wire-compatible (flag byte in the input

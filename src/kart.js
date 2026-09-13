@@ -5,6 +5,7 @@ import {
   FALL_G, FELL_MIN_HEIGHT, FELL_PENALTY, JUMP_MIN_SPEED, TUMBLE_RATE,
   DRIFT_MIN_KMH, DRIFT_STEER, DRIFT_GRIP, DRIFT_MAX_SLIP, DRIFT_DRAG,
   DRIFT_CHARGE_MAX, DRIFT_CHARGE_MIN, BOOST_ACCEL, BOOST_HEADROOM,
+  PERFECT_CHARGE, PERFECT_BONUS,
 } from './config.js';
 import { scene } from './scene.js';
 import { samples, trackLen, sampleHead } from './track.js';
@@ -232,6 +233,7 @@ export class Kart {
     this.charge = 0;      // 0..DRIFT_CHARGE_MAX seconds of held slide
     this.boost = 0;       // 0..1 decaying mini-boost — drift release OR boost pads (pads.js)
     this.boostEdge = false; // true for one frame after a boost fires (main.js sfx)
+    this.perfectEdge = false; // true for one frame after a PERFECT drift release (callout + chime)
     // boost-pad chain bookkeeping (pads.js hitPads)
     this.padT = 0; this.padChain = 0; this.padStrip = -1; this.padPrevCell = -1; this.padLast = -1;
     // item-box state (items.js): held power-up id (0 = empty) + pickup cooldown
@@ -278,6 +280,7 @@ export class Kart {
     this.charge = 0;
     this.boost = 0;
     this.boostEdge = false;
+    this.perfectEdge = false;
     this.padT = 0; this.padChain = 0; this.padStrip = -1; this.padPrevCell = -1; this.padLast = -1;
     this.item = 0; this.itemT = 0; this.itemLife = 0;
     this.mesh.root.position.copy(this.pos);
@@ -441,8 +444,15 @@ export class Kart {
     else if (this.drifting) {
       this.drifting = false;
       if (this.charge >= DRIFT_CHARGE_MIN) {
-        this.boost = Math.min(this.charge / DRIFT_CHARGE_MAX, 1);
+        const c = this.charge / DRIFT_CHARGE_MAX;
+        this.boost = Math.min(c, 1);
         this.boostEdge = true;              // main.js plays the whoosh once
+        // PERFECT: released at the top of the charge curve — extra boost on
+        // top of full (the decaying boost model handles >1 without new state)
+        if (c >= PERFECT_CHARGE) {
+          this.boost = Math.min(1 + PERFECT_BONUS, this.boost + PERFECT_BONUS);
+          this.perfectEdge = true;
+        }
       }
       this.charge = 0;
     }

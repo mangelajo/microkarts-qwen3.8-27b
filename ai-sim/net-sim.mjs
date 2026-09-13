@@ -16,7 +16,7 @@ import { scene } from '../src/scene.js';
 import { TRACKS } from '../src/tracks.js';
 import { N_SAMPLES, SIM_DT, LAPS, AI_SKILL, clamp, ITEM_TURBO, ITEM_RUBBER, ITEM_WALL, ITEM_RESPAWN, RUBBER_DURATION } from '../src/config.js';
 import { Kart } from '../src/kart.js';
-import { DRIFT_MAX_SLIP, DRIFT_CHARGE_MAX, ROAD_HW, CURB_W } from '../src/config.js';
+import { DRIFT_MAX_SLIP, DRIFT_CHARGE_MAX, ROAD_HW, CURB_W, PERFECT_CHARGE, PERFECT_BONUS } from '../src/config.js';
 import { buildPads, hitPads, padList, PAD_STRENGTH } from '../src/pads.js';
 import { aiControl } from '../src/ai.js';
 import { GRID, simulateTick, raceOrder, progress, collideKarts } from '../src/race.js';
@@ -571,6 +571,34 @@ console.log('\n== item boxes: layout + effect models ==');
   slow.pos.set(q.x, q.y, q.z); slow.speed = 1;
   tickProps(1 / 60, [slow]);
   mark(q.spinVel === 0, 'a slow crawl does not spin the prop');
+}
+
+/* ------------------------------------------------------------------ */
+/*  Perfect drift — releasing at the top of the charge curve pays extra
+ *  boost; an early release pays the plain charge only
+ * ------------------------------------------------------------------ */
+{
+  selectTrack(0);
+  const K = new Kart({ isPlayer: true });
+  K.placeAt(0.25, 0);
+  K.speed = 22; K.velDir = K.heading;
+  const P0 = K.pos.clone();
+  const rail = () => { K.pos.copy(P0); K.offRoad = false; K.speed = Math.max(K.speed, 20); };
+  // build the charge to the top of the curve, then release
+  K.step(1 / 60, 1, 0, 0, true);
+  for (let i = 0; i < 90; i++) { K.step(1 / 60, 1, 1, i * 17, true); rail(); }
+  mark(K.charge >= PERFECT_CHARGE * DRIFT_CHARGE_MAX, `charge reached the perfect window (${(K.charge / DRIFT_CHARGE_MAX * 100).toFixed(0)}%)`);
+  K.step(1 / 60, 1, 0, 90 * 17, false);   // release
+  mark(K.perfectEdge, 'perfect release flagged');
+  mark(K.boost > 1 && K.boost <= 1 + PERFECT_BONUS, `perfect pays full + bonus boost (${K.boost.toFixed(2)})`);
+  // early release (mid charge): plain charge only, no flag
+  K.placeAt(0.25, 0);
+  K.speed = 22; K.velDir = K.heading; K.boost = 0; K.perfectEdge = false;
+  K.step(1 / 60, 1, 0, 0, true);
+  for (let i = 0; i < 20; i++) { K.step(1 / 60, 1, 1, i * 17, true); rail(); }
+  K.step(1 / 60, 1, 0, 20 * 17, false);
+  mark(!K.perfectEdge, 'early release is not perfect');
+  mark(K.boost > 0 && K.boost < 1, `early release pays plain charge only (${K.boost.toFixed(2)})`);
 }
 
 /* ------------------------------------------------------------------ */

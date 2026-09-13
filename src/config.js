@@ -41,6 +41,8 @@ export let DRIFT_MAX_SLIP   = 0.7;   // max nose-vs-motion angle while sliding (
 export let DRIFT_DRAG       = 0.35;  // drag while sliding (lower than grip = faster lines)
 export let DRIFT_CHARGE_MAX = 1.5;   // seconds of slide for a full-charge boost
 export let DRIFT_CHARGE_MIN = 0.4;   // shorter slides release nothing
+export let PERFECT_CHARGE   = 0.94;  // release at 94%+ of max charge = the PERFECT window
+export let PERFECT_BONUS    = 0.3;   // a perfect release pays this much boost on top of full
 export let BOOST_ACCEL      = 26;    // boost kick acceleration (u/s^2)
 export let BOOST_HEADROOM   = 0.28;  // top-speed extension at full boost
 
@@ -151,6 +153,8 @@ const _tune = {
   DRIFT_DRAG: v => DRIFT_DRAG = v,
   DRIFT_CHARGE_MAX: v => DRIFT_CHARGE_MAX = v,
   DRIFT_CHARGE_MIN: v => DRIFT_CHARGE_MIN = v,
+  PERFECT_CHARGE: v => PERFECT_CHARGE = v,
+  PERFECT_BONUS: v => PERFECT_BONUS = v,
   BOOST_ACCEL: v => BOOST_ACCEL = v,
   BOOST_HEADROOM: v => BOOST_HEADROOM = v,
   // items
