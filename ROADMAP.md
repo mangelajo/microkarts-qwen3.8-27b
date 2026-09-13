@@ -30,10 +30,12 @@ flat tracks stay flat.
   `PERFECT_BONUS` (0.3) boost on top of full — the decaying boost model handles >1
   without new state — plus a "PERFECT" callout + chime. The AI omits drift (unchanged);
   `make netsim` covers window/flag/bonus + early-release
-- [ ] **Corner deltas** — per-corner timing vs your session-best lap: the HUD
-  flashes `+0.21` / `-0.04` as you clear each corner (corner = a curvature
-  plateau in the samples, indexed the same way the AI reads it). Pure local
-  timing, no wire; results screen gains a per-corner breakdown.
+- [x] **Corner deltas** ✅ (`src/corners.js` + `race.js` + `game.js` + `net2p.js`) —
+  per-corner timing vs your session-best lap: the HUD flashes `+0.21` / `-0.04`
+  as you clear each corner (corner = a curvature plateau in the samples, 5–9 per
+  track). Per-kart in-corner time ticked in the shared sim body (client: on the
+  interpolated mirror), banked on the lap edge. Pure local timing, no wire;
+  `make netsim` covers the field/accumulation/close/bank-reset
 - [ ] **Gamepad support** — `navigator.getGamepads()`: left stick steer/throttle,
   right stick / triggers for drift + item, connected at boot with the same
   input struct the keyboard path feeds. Headless check: a fake gamepad object

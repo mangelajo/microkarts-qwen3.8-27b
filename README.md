@@ -173,6 +173,14 @@ take in the catalogue. All track shapes are validated headlessly.
   own from the fellOff mirror and the remote's from the existing y f32 drop —
   zero wire change. The pool saturates (8 booms) and fully decays; `make netsim`
   covers spawn/decay/saturation
+- **Per-corner timing + deltas** — corners are the plateaus of the 2D (xz)
+  curvature (min span + min turn angle, adjacent regions merged — deterministic
+  from the samples, `src/corners.js`); every kart's in-corner time is ticked in
+  the shared sim body (the join client runs it on the interpolated mirror) and
+  banked on the lap edge. The HUD flashes the just-closed corner vs the
+  session-best lap's per-corner time (+0.21 red / −0.04 green; neutral raw time
+  on the first lap). Cosmetic only — nothing new rides the wire. `make netsim`
+  covers the corner field, in-corner accumulation, close + lap-edge bank/reset
   Menu toggle: chip or `Z` (persisted, **ON by default**)
 - **Boost pads** — glowing chevron strips auto-placed on each track's straights;
   crossing the three cells back-to-back chains a bigger and bigger kick, and the
@@ -242,6 +250,7 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/ai.js`       | AI driver: pure-pursuit line following, curvature-aware braking, recovery |
 | `src/blastfx.js`  | Exhaust flame/smoke particle pools above the speed threshold + golden nitro flare on boost |
 | `src/explosion.js`| Pooled floor-hit explosion FX (particle burst + smoke + shockwave ring) |
+| `src/corners.js`   | Per-corner timing — curvature-plateau corner field, in-corner time, lap-edge bank (deterministic; deltas are cosmetic) |
 | `src/race.js`     | Headless race core: grid, progress, positions, collisions, `simulateTick()` |
 | `src/pads.js`     | Boost-pad field: seeded straight-aware layout + chain-hit model (pure) |
 | `src/obstacles.js`| Sugar-hazard field: seeded candy layout + per-driver AI dodging (pure) |

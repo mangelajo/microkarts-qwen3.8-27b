@@ -30,6 +30,8 @@
   #speed-hud .unit { font-size:12px; letter-spacing:3px; color:#e8c493; }
   #perfectCallout { bottom:120px; left:50%; transform:translateX(-50%); font-size:30px; font-weight:800;
     color:#9be36a; letter-spacing:4px; text-shadow:0 0 18px rgba(155,227,106,.8); animation:perfectPop 1.2s ease-out; }
+  #cornerDelta { bottom:168px; left:50%; transform:translateX(-50%); font-size:24px; font-weight:800;
+    letter-spacing:2px; text-shadow:0 2px 8px rgba(0,0,0,.5); }
   @keyframes perfectPop { 0% { transform:translateX(-50%) scale(.4); opacity:0; } 18% { transform:translateX(-50%) scale(1.18); opacity:1; } 30% { transform:translateX(-50%) scale(1); } 82% { opacity:1; } 100% { opacity:0; } }
   #warn { bottom:96px; left:50%; transform:translateX(-50%); font-size:14px; letter-spacing:4px;
     color:#ff9d6b; opacity:0; transition:opacity .12s; }
@@ -161,6 +163,7 @@
   <div class="unit">KM/H</div>
 </div>
 <div class="hud hidden" id="perfectCallout">PERFECT</div>
+<div class="hud hidden" id="cornerDelta"></div>
 <div class="hud hudbox" id="item-hud" style="bottom:118px; right:14px; text-align:center; padding:6px 10px">
   <div class="lbl">ITEM · <kbd style="font-size:9px">E</kbd></div>
   <div style="display:flex; align-items:baseline; justify-content:center; gap:7px">

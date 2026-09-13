@@ -167,6 +167,9 @@ let itemUseQ = 0;
 let autoUseAt = 0;
 let lastPlayerItem = 0;   // pickup sfx + touch auto-fire arming
 let perfectT = 0;         // PERFECT callout hide timer
+let cornerT = 0;          // corner-delta flash hide timer
+let bestCornerLapMs = 0;  // session-best lap (ms) — the corner-delta reference
+let bestCornerTimes = null; // its per-corner times (s)
 function tryConsumeItemUse(now) {
   const touchFire = isTouchDevice() && now >= autoUseAt
     && (player.item === ITEM_TURBO || player.item === ITEM_WALL);
@@ -237,6 +240,7 @@ function startRace() {
   game.laps = LAPS;
   resetKarts();
   itemUseQ = 0; autoUseAt = 0; lastPlayerItem = 0;   // fresh item state each race
+  bestCornerLapMs = 0; bestCornerTimes = null;        // fresh corner-delta reference
   n2.resetClientItems();
   ghostStop();          // fresh race: the ghost restarts at GO
   game.raceTime = 0;
@@ -629,6 +633,18 @@ function animate() {
       clearTimeout(perfectT);
       perfectT = setTimeout(() => pc.classList.add('hidden'), 1200);
     }
+    // corner-delta flash: +/- vs the session-best lap's per-corner time
+    const cc = player.cornerClosedNow;
+    const cd = el('cornerDelta');
+    if (cc && now - cc.t < 1500 && player.cornerTimes && player.cornerTimes[cc.idx] !== undefined) {
+      const t = player.cornerTimes[cc.idx];
+      const d = bestCornerTimes ? t - bestCornerTimes[cc.idx] : 0;
+      cd.textContent = bestCornerTimes ? (d >= 0 ? '+' : '\u2212') + Math.abs(d).toFixed(2) : t.toFixed(2);
+      cd.style.color = !bestCornerTimes ? '#c9d4e8' : (d > 0.02 ? '#ff9d8a' : d < -0.02 ? '#9be36a' : '#c9d4e8');
+      cd.classList.remove('hidden');
+      clearTimeout(cornerT);
+      cornerT = setTimeout(() => cd.classList.add('hidden'), 1500);
+    } else cd.classList.add('hidden');
     if (racing && player.item !== lastPlayerItem) {   // pickup chime + touch auto-fire arming
       if (player.item !== 0) {
         audio.beep(660 + 220 * player.item);
@@ -648,6 +664,11 @@ function animate() {
           if (ghostLapDone(lapMs)) audio.beep(990);   // new track record chime
           const rk = rankLapDone(lapMs);              // top-5 board (same local-only gate)
           if (rk > 0) hudRankNudge(rk);              // "NEW RECORD — #N" flash
+          // corner-delta reference: bank the session-best lap's per-corner times
+          if (player.lapCorners && player.lapCorners.length && (!bestCornerLapMs || lapMs < bestCornerLapMs)) {
+            bestCornerLapMs = lapMs;
+            bestCornerTimes = player.lapCorners.slice();
+          }
           if (!player.raceDone) ghostLapStart();
         }
       }

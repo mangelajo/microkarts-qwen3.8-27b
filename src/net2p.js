@@ -5,6 +5,7 @@ import {
 import { NetSession } from './net.js';
 import { FrameRing, sampleState } from './interp.js';
 import { selectTrack, samples, trackLen } from './track.js';
+import { tickCorners, closeCorners, resetCorners } from './corners.js';
 import { setObstaclesOn, getObstaclesOn } from './obstacles.js';
 import { setItemsOn, getItemsOn, itemBoxList } from './items.js';
 import {
@@ -307,6 +308,15 @@ export function createNet2p(ctx) {
       // authoritative for position; the pose is derived, never sent)
       const bi = nearestSampleIdx(m.x, m.z);
       k.trackIdx = bi;
+      // per-corner timing on the interpolated mirror (cosmetic delta)
+      if (m.lapDone !== k._cl) {
+        k._cl = m.lapDone;
+        closeCorners(k, performance.now());
+        k.lapCorners = k.cornerTimes.slice();
+        resetCorners(k);
+      }
+      const cc = tickCorners(k, performance.now());
+      if (cc >= 0) k.cornerClosedNow = { idx: cc, t: performance.now() };
       const ry = samples[bi].y;
       if (my > 0.3 && my < ry - 1) {
         k.tumbling = true;

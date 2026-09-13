@@ -7,6 +7,7 @@ import { retintSky } from './sky.js';
 import { buildObstacles, obstacleList, getObstaclesOn, HAZ_COLOR, mulberry32, KART_R } from './obstacles.js';
 import { buildPads, padList, CELL_LEN, CELL_W, GAP, CELLS } from './pads.js';
 import { buildItems, itemBoxList, walls } from './items.js';
+import { buildCorners } from './corners.js';
 
 /* ------------------------------------------------------------------ *
  *  Track data — filled IN PLACE by buildTrack().
@@ -533,6 +534,7 @@ export function buildTrack(def, index = 0) {
   // --- remember the current track ---
   current.name = def.name;
   current.theme = def.theme;
+  buildCorners();   // per-corner timing field (deterministic from the samples)
 
   return { trackLen, name: def.name, points: def.points.length };
 }

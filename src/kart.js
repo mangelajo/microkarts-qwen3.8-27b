@@ -10,6 +10,7 @@ import {
 import { scene } from './scene.js';
 import { samples, trackLen, sampleHead } from './track.js';
 import { makeBlastFx } from './blastfx.js';
+import { initCornerState } from './corners.js';
 
 // The physical lip is the OUTER curb edge: the red/white border is still
 // road — wheels on it are fully supported and never tip. (offRoad handling
@@ -241,6 +242,7 @@ export class Kart {
     this.item = 0;
     this.itemT = 0;
     this.itemLife = 0;
+    initCornerState(this);   // per-corner lap timing (corners.js)
   }
 
   placeAt(t, offset) {
@@ -283,6 +285,7 @@ export class Kart {
     this.perfectEdge = false;
     this.padT = 0; this.padChain = 0; this.padStrip = -1; this.padPrevCell = -1; this.padLast = -1;
     this.item = 0; this.itemT = 0; this.itemLife = 0;
+    initCornerState(this);
     this.mesh.root.position.copy(this.pos);
     this.pitch = -Math.atan(this.slope);
     this.setOrientation();

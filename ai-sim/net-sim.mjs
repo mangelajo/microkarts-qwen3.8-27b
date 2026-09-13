@@ -11,6 +11,7 @@
  * ------------------------------------------------------------------ */
 import * as THREE from 'three';
 import { samples, selectTrack, angDiff, curvatureAt, trackLen, propList, tickProps, tickHazards, hazardFx } from '../src/track.js';
+import { getCornerCount, getCornerIdx, tickCorners } from '../src/corners.js';
 import { makeExplosions } from '../src/explosion.js';
 import { scene } from '../src/scene.js';
 import { TRACKS } from '../src/tracks.js';
@@ -599,6 +600,41 @@ console.log('\n== item boxes: layout + effect models ==');
   K.step(1 / 60, 1, 0, 20 * 17, false);
   mark(!K.perfectEdge, 'early release is not perfect');
   mark(K.boost > 0 && K.boost < 1, `early release pays plain charge only (${K.boost.toFixed(2)})`);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Per-corner timing — corner field + in-corner time + lap-edge bank
+ * ------------------------------------------------------------------ */
+{
+  selectTrack(0);
+  const K = new Kart({ isPlayer: true });
+  const nC = getCornerCount();
+  mark(nC >= 4, `track 0 has ${nC} corners (>= 4)`);
+  let inI = -1, outI = -1;
+  for (let i = 0; i < N_SAMPLES; i++) {
+    const ci = getCornerIdx(i);
+    if (ci === 0 && inI < 0) inI = i;
+    if (ci === -1 && inI >= 0) { outI = i; break; }
+  }
+  mark(inI >= 0 && outI >= 0, 'corner map has inside + outside samples');
+  K.placeAt(0, 0);
+  K.trackIdx = inI;
+  let t = 1000;
+  tickCorners(K, t);
+  for (let i = 0; i < 60; i++) { t += 16; tickCorners(K, t); }
+  K.trackIdx = outI;
+  const closed = tickCorners(K, t + 16);   // leave the corner -> it closes
+  mark(closed === 0, 'leaving the corner closes it');
+  mark(K.cornerTimes[0] > 0.8 && K.cornerTimes[0] < 1.2, `time accumulates across the corner (${K.cornerTimes[0].toFixed(2)}s)`);
+  tickCorners(K, t + 32);
+  mark(K.cornerTimes[0] > 0.9, 'closed corner keeps its time');
+  // lap edge (via the shared sim body): bank + reset
+  K.placeAt(0.1, 0); K.speed = 10;
+  K._cl = 0;
+  K.lapDone = 1;   // (after placeAt — it resets lapDone)
+  simulateTick([K], () => ({ throttle: 1, steer: 0, use: false }), 1 / 60, t + 100, { racing: true, positions: false });
+  mark(K.lapCorners && K.lapCorners.length === nC, 'lap edge banks per-corner times');
+  mark(K.cornerTimes.every(v => v === 0), 'lap edge resets the per-corner times');
 }
 
 /* ------------------------------------------------------------------ */

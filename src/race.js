@@ -2,6 +2,7 @@ import { clamp, MAX_SPEED, MAX_REV } from './config.js';
 import { collideObstacles } from './obstacles.js';
 import { hitPads } from './pads.js';
 import { tickItems, tickRubber, useItem } from './items.js';
+import { tickCorners, closeCorners, resetCorners } from './corners.js';
 
 /* ------------------------------------------------------------------ *
  *  Race core — pure, headless-safe (no DOM / WebGL). Shared by the
@@ -86,5 +87,16 @@ export function simulateTick(karts, inputFor, dt, now, { racing, positions = tru
   hitPads(karts, dt);               // boost-pad strips — no-op before tracks build them
   tickRubber(karts, dt);            // passive rubber band — no-op when nobody holds one
   tickItems(karts, dt, wallFor);    // pickups + walls — no-op when items are off
+  if (racing) for (const k of karts) {
+    // per-corner timing: lap edge banks the lap's per-corner times, then resets
+    if (k._cl !== k.lapDone) {
+      k._cl = k.lapDone;
+      closeCorners(k, now);
+      k.lapCorners = k.cornerTimes.slice();   // delta reference (HUD)
+      resetCorners(k);
+    }
+    const closed = tickCorners(k, now);
+    if (closed >= 0) k.cornerClosedNow = { idx: closed, t: now };   // HUD flash hook
+  }
   if (positions && racing) refreshPositions(karts);
 }
