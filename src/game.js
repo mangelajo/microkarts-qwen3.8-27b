@@ -9,7 +9,7 @@ import { renderer, scene, camera, updateDust, dustForKart } from './scene.js';
 import { initMinimap, setMinimapVisible, updateMinimap, resizeMinimap } from './minimap.js';
 import { Kart } from './kart.js';
 import { aiControl } from './ai.js';
-import { selectTrack, updateItemBoxes, syncWallMeshes } from './track.js';
+import { selectTrack, updateItemBoxes, syncWallMeshes, tickProps } from './track.js';
 import { initDayNight, setDayNightFor, updateDayNight } from './daynight.js';
 import { GRID, simulateTick, raceOrder } from './race.js';
 import { setObstaclesOn, getObstaclesOn } from './obstacles.js';
@@ -514,6 +514,9 @@ function animate() {
   updateDayNight(now * 0.001); // the sky drifts (menu included — the orbit view shows it too)
   const list = racers();
   const role = n2.role();
+  // reactive props (cosmetic): a kart near a roadside prop spins/wobbles it —
+  // runs before the sim step, so contact is one frame behind (imperceptible)
+  tickProps(dt, list);
   // the pull-joystick only drives while the car may move; it parks on menu/results
   touchSetActive(game.state === 'countdown' || game.state === 'racing');
 

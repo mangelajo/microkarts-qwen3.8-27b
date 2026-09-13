@@ -111,7 +111,9 @@ take in the catalogue. All track shapes are validated headlessly.
   canvas and writes straight into `config.js`'s live bindings via `tuneConfig`;
   `make simwatch` re-runs the bench on every save)
 - Procedural dusk scene: canvas-painted sky dome with stars + mountains + sun glow,
-  wood-textured table, scattered tabletop props (donuts, lollipops, pencil, …)
+  wood-textured table, scattered tabletop props (donuts, lollipops, pencil, …) that
+  **react to contact** — a kart that grazes one spins it (scaled to speed), wobbles it,
+  and a hard graze makes it hop (cosmetic only, `src/track.js` `tickProps`, verified in `make netsim`)
 - Fully synthesized audio (`src/audio.js`): engine, tire skids, crashes, lap &
   countdown SFX, one chiptune per track (108–152 BPM depending on track)
 - **2-player LAN** over WebRTC DataChannel (no server): host or join from the
@@ -220,7 +222,7 @@ take in the catalogue. All track shapes are validated headlessly.
 |--------------------|--------------|
 | `src/config.js`   | Tunable constants (speed, steering, track, AI skill levels) |
 | `src/tracks.js`   | Track catalogue: control points + name + theme palette per track |
-| `src/track.js`    | `buildTrack()`: spline → samples → ribbon road, curbs, table, props |
+| `src/track.js`    | `buildTrack()`: spline → samples → ribbon road, curbs, table, reactive props (`tickProps`) |
 | `src/scene.js`    | Renderer, lights, fog, sky |
 | `src/sky.js`      | Procedural sky dome + sun (re-paintable gradient per theme) |
 | `src/kart.js`     | Kart mesh + physics `step()` |

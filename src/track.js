@@ -4,7 +4,7 @@ import { scene, sun, hemi, fill } from './scene.js';
 import { woodTexture, checkerTexture, curbTexture } from './textures.js';
 import { TRACKS, trackTheme } from './tracks.js';
 import { retintSky } from './sky.js';
-import { buildObstacles, obstacleList, getObstaclesOn, HAZ_COLOR } from './obstacles.js';
+import { buildObstacles, obstacleList, getObstaclesOn, HAZ_COLOR, mulberry32 } from './obstacles.js';
 import { buildPads, padList, CELL_LEN, CELL_W, GAP, CELLS } from './pads.js';
 import { buildItems, itemBoxList, walls } from './items.js';
 
@@ -108,41 +108,37 @@ function buildRibbon(parent, c, inner, outer, y, material) {
   return m;
 }
 
-function scatterProps(parent) {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const x = (Math.random() * 2 - 1) * 95;
-    const z = (Math.random() * 2 - 1) * 85;
-    let d = Infinity;
-    for (let j = 0; j < N_SAMPLES; j += 3) {
-      const dx = samples[j].x - x, dz = samples[j].z - z;
-      const dd = dx * dx + dz * dz;
-      if (dd < d) d = dd;
-    }
-    if (Math.sqrt(d) < ROAD_HW + 5) continue;
-
-    const kind = Math.floor(Math.random() * 5);
+function scatterProps(parent, idx) {
+  // deterministic per track (like pads/hazards): host + every client build the
+  // identical field from the track index, so a graze looks the same for all.
+  // Seven props sit in the DRIFT BAND just outside the curb (grazeable by a
+  // kart that leaves the road), the rest scatter the table as before.
+  propList.length = 0;
+  const rng = mulberry32((0x7f4a7c15 ^ Math.imul(idx + 3, 3405733215)) >>> 0);
+  const GRAZE_KINDS = [0, 1, 3, 4];   // low enough to graze (no block)
+  const makeProp = (x, y, z, kind) => {
     let obj;
     if (kind === 0) { // donut
-      obj = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.28, 10, 24), propMats[attempt % propMats.length]);
+      obj = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.28, 10, 24), propMats[rngIndex++ % propMats.length]);
       obj.rotation.x = Math.PI / 2;
-      obj.position.set(x, 0.3, z);
+      obj.position.set(x, y + 0.3, z);
     } else if (kind === 1) { // lollipop
       obj = new THREE.Group();
       const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.5, 8), stickMat);
       stick.position.y = 0.75;
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.55, 14, 12), propMats[(attempt + 2) % propMats.length]);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.55, 14, 12), propMats[(rngIndex + 2) % propMats.length]);
       head.position.y = 1.55;
       head.castShadow = stick.castShadow = true;
       obj.add(stick, head);
-      obj.position.set(x, 0, z);
+      obj.position.set(x, y, z);
     } else if (kind === 2) { // block
-      obj = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.6, 1.6), propMats[(attempt + 1) % propMats.length]);
-      obj.position.set(x, 0.8, z);
-      obj.rotation.y = Math.random() * Math.PI;
+      obj = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.6, 1.6), propMats[(rngIndex + 1) % propMats.length]);
+      obj.position.set(x, y + 0.8, z);
+      obj.rotation.y = rng() * Math.PI;
     } else if (kind === 3) { // gumdrop
-      obj = new THREE.Mesh(new THREE.SphereGeometry(0.75, 14, 10), propMats[(attempt + 3) % propMats.length]);
+      obj = new THREE.Mesh(new THREE.SphereGeometry(0.75, 14, 10), propMats[(rngIndex + 3) % propMats.length]);
       obj.scale.y = 0.68;
-      obj.position.set(x, 0.5, z);
+      obj.position.set(x, y + 0.5, z);
     } else { // pencil
       obj = new THREE.Group();
       const body = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 2.4, 10), pencilMat);
@@ -151,11 +147,76 @@ function scatterProps(parent) {
       body.castShadow = tip.castShadow = true;
       obj.add(body, tip);
       obj.rotation.z = Math.PI / 2;
-      obj.rotation.x = Math.random() * Math.PI;
-      obj.position.set(x, 0.25, z);
+      obj.rotation.x = rng() * Math.PI;
+      obj.position.set(x, y + 0.25, z);
     }
     obj.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
     parent.add(obj);
+    return { x, y, z, kind, obj, spinVel: 0, wobble: 0, wobblePh: rng() * 6,
+             hop: 0, hopV: 0, baseRotZ: obj.rotation.z, r: [0.9, 0.8, 1.2, 0.9, 1.0][kind] };
+  };
+  let rngIndex = 0;
+  // drift band: 1.2–3.0 u outside the outer curb, riding the road surface
+  for (let i = 0; i < 7; i++) {
+    const s = Math.floor(rng() * N_SAMPLES);
+    const off = ROAD_HW + CURB_W + 1.2 + rng() * 1.8;
+    const h = sampleHead[s];                 // heading → xz normal (cos h, -sin h)
+    const x = samples[s].x + Math.cos(h) * off;
+    const z = samples[s].z - Math.sin(h) * off;
+    propList.push(makeProp(x, samples[s].y, z, GRAZE_KINDS[Math.floor(rng() * GRAZE_KINDS.length)]));
+  }
+  // table scatter (far from the road, as before)
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const x = (rng() * 2 - 1) * 95;
+    const z = (rng() * 2 - 1) * 85;
+    let d = Infinity;
+    for (let j = 0; j < N_SAMPLES; j += 3) {
+      const dx = samples[j].x - x, dz = samples[j].z - z;
+      const dd = dx * dx + dz * dz;
+      if (dd < d) d = dd;
+    }
+    if (Math.sqrt(d) < ROAD_HW + 5) continue;
+    propList.push(makeProp(x, 0, z, Math.floor(rng() * 5)));
+  }
+}
+
+/* reactive props (cosmetic, never touches kart physics): a kart within a
+ * prop's radius spins it (scaled to speed), wobbles it, and a hard graze
+ * hops it. Spin/wobble decay exponentially; state lives in propList so the
+ * function is headless-safe (ai-sim can tick it on fake karts). */
+export const propList = [];
+export function tickProps(dt, karts) {
+  for (const p of propList) {
+    const R = p.r + 1.0;
+    for (const k of karts) {
+      const dy = Math.abs(k.pos.y - p.y);
+      if (dy > 2.2) continue;   // a table kart under an elevated road doesn't touch road-side props
+      const dx = k.pos.x - p.x, dz = k.pos.z - p.z;
+      const sp = Math.abs(k.speed);
+      if (dx * dx + dz * dz < R * R && sp > 2) {
+        p.spinVel = Math.max(p.spinVel, sp * 0.55);
+        p.wobble = Math.min(1, p.wobble + sp * 0.05);
+        if (p.hop === 0 && sp > 14) p.hopV = 3.2;   // hard graze: little bounce
+      }
+    }
+    if (p.spinVel > 0.01) {
+      if (p.kind === 2 || p.kind === 4) p.obj.rotation.x += p.spinVel * dt;   // roll
+      else p.obj.rotation.y += p.spinVel * dt * 1.4;                          // spin like a top
+      p.spinVel *= Math.exp(-1.6 * dt);
+      if (p.spinVel < 0.01) p.spinVel = 0;
+    }
+    if (p.wobble > 0.01) {
+      p.wobblePh += 16 * dt;
+      p.obj.rotation.z = p.baseRotZ + p.wobble * Math.sin(p.wobblePh) * 0.35;
+      p.wobble *= Math.exp(-2.4 * dt);
+      if (p.wobble < 0.01) { p.wobble = 0; p.obj.rotation.z = p.baseRotZ; }
+    }
+    if (p.hopV !== 0 || p.hop > 0) {
+      p.hopV -= 9.8 * dt;
+      p.hop += p.hopV * dt;
+      if (p.hop <= 0) { p.hop = 0; p.hopV = 0; }
+      p.obj.position.y = p.y + (p.kind === 2 ? 0.8 : p.kind === 0 ? 0.3 : p.kind === 1 ? 0 : p.kind === 3 ? 0.5 : 0.25) + p.hop;
+    }
   }
 }
 
@@ -416,7 +477,7 @@ export function buildTrack(def, index = 0) {
   line.receiveShadow = true;
   group.add(line);
 
-  scatterProps(group);
+  scatterProps(group, index);
   buildObstacles(index);          // deterministic hazard field for sim + AI (per track)
   if (getObstaclesOn()) scatterHazardMeshes(group);   // visuals only when hazards are on
   buildPads(index);               // boost-pad strips (deterministic; pads.js holds the hits)

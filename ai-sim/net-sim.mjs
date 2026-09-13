@@ -10,11 +10,11 @@
  *  Run:  make netsim   (or: node --import ./ai-sim/stub.js ai-sim/net-sim.mjs)
  * ------------------------------------------------------------------ */
 import * as THREE from 'three';
-import { samples, selectTrack, angDiff, curvatureAt, trackLen } from '../src/track.js';
+import { samples, selectTrack, angDiff, curvatureAt, trackLen, propList, tickProps } from '../src/track.js';
 import { TRACKS } from '../src/tracks.js';
 import { N_SAMPLES, SIM_DT, LAPS, AI_SKILL, clamp, ITEM_TURBO, ITEM_RUBBER, ITEM_WALL, ITEM_RESPAWN, RUBBER_DURATION } from '../src/config.js';
 import { Kart } from '../src/kart.js';
-import { DRIFT_MAX_SLIP, DRIFT_CHARGE_MAX, ROAD_HW } from '../src/config.js';
+import { DRIFT_MAX_SLIP, DRIFT_CHARGE_MAX, ROAD_HW, CURB_W } from '../src/config.js';
 import { buildPads, hitPads, padList, PAD_STRENGTH } from '../src/pads.js';
 import { aiControl } from '../src/ai.js';
 import { GRID, simulateTick, raceOrder, progress, collideKarts } from '../src/race.js';
@@ -534,6 +534,41 @@ console.log('\n== item boxes: layout + effect models ==');
   for (let i = 0; i < 60 * (ITEM_RESPAWN + 1); i++) tickItems([A, B], 1 / 60);
   mark(box.respawnT === 0, 'box back after the cooldown');
   setItemsOn(true);   // the 2P race loop below wants them on
+}
+
+/* ------------------------------------------------------------------ *
+ *  Reactive props — the field is deterministic per track (like pads/
+ *  hazards), grazable props sit in the drift band, and a fast kart in
+ *  contact spins + wobbles the prop, then it decays
+ * ------------------------------------------------------------------ */
+{
+  mark(propList.length >= 7, `prop field built (${propList.length} props)`);
+  const nearestRoadD = (x, z) => { let d = Infinity; for (let j = 0; j < N_SAMPLES; j += 3) { const dx = samples[j].x - x, dz = samples[j].z - z; const dd = dx * dx + dz * dz; if (dd < d) d = dd; } return Math.sqrt(d); };
+  const graze = propList.filter(p => nearestRoadD(p.x, p.z) < ROAD_HW + CURB_W + 3.2);
+  mark(graze.length === 7, `7 grazable props in the drift band (${graze.length})`);
+  mark(graze.every(p => nearestRoadD(p.x, p.z) >= ROAD_HW + CURB_W + 1.1), 'graze props sit just outside the curb (never on the road)');
+  // determinism: rebuild the same track, field is identical
+  const before = propList.map(p => [p.x.toFixed(3), p.z.toFixed(3), p.kind, p.r]);
+  selectTrack(0);
+  mark(propList.length === before.length && before.every((b, i) => b[0] === propList[i].x.toFixed(3) && b[1] === propList[i].z.toFixed(3) && b[2] === propList[i].kind && b[3] === propList[i].r), 'props are deterministic per track (rebuild identical)');
+  // contact: a fast kart in the prop's radius spins + wobbles it
+  const p = propList.find(q => q.kind === 1) || propList[0];
+  const k = new Kart({ isPlayer: true });
+  k.pos.set(p.x, p.y, p.z);
+  k.speed = 16;
+  tickProps(1 / 60, [k]);
+  mark(p.spinVel > 5, `graze spins the prop (spinVel ${p.spinVel.toFixed(1)})`);
+  mark(p.wobble > 0.5, `graze wobbles the prop (${p.wobble.toFixed(2)})`);
+  // then it decays to rest once the kart moves on (spin floor is ~4.3 s at 16 u/s)
+  k.pos.x += 50;
+  for (let i = 0; i < 60 * 6; i++) tickProps(1 / 60, [k]);
+  mark(p.spinVel === 0 && p.wobble === 0, 'spin + wobble decay to rest');
+  // a slow crawl (and a table kart under an elevated road) does not spin it
+  const q = propList[0];
+  const slow = new Kart({ isPlayer: true });
+  slow.pos.set(q.x, q.y, q.z); slow.speed = 1;
+  tickProps(1 / 60, [slow]);
+  mark(q.spinVel === 0, 'a slow crawl does not spin the prop');
 }
 
 /* ------------------------------------------------------------------ *
