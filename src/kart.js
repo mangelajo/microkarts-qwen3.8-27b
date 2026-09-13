@@ -235,8 +235,10 @@ export class Kart {
     // boost-pad chain bookkeeping (pads.js hitPads)
     this.padT = 0; this.padChain = 0; this.padStrip = -1; this.padPrevCell = -1; this.padLast = -1;
     // item-box state (items.js): held power-up id (0 = empty) + pickup cooldown
+    // + held-item life (s remaining; >0 only for the timed rubber band, 0 = held until used)
     this.item = 0;
     this.itemT = 0;
+    this.itemLife = 0;
   }
 
   placeAt(t, offset) {
@@ -277,7 +279,7 @@ export class Kart {
     this.boost = 0;
     this.boostEdge = false;
     this.padT = 0; this.padChain = 0; this.padStrip = -1; this.padPrevCell = -1; this.padLast = -1;
-    this.item = 0; this.itemT = 0;
+    this.item = 0; this.itemT = 0; this.itemLife = 0;
     this.mesh.root.position.copy(this.pos);
     this.pitch = -Math.atan(this.slope);
     this.setOrientation();

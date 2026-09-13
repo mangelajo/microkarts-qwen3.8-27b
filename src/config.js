@@ -61,6 +61,7 @@ export let ITEM_RESPAWN   = 8;     // s: a picked-up box reappears after this
 export let ITEM_COOLDOWN  = 0.25;  // s: per-kart pickup debounce
 export let ITEM_PICKUP_R  = 2.0;   // u: distance to box centre that counts
 export let RUBBER_ACCEL   = 9;     // u/s²: max push for the trailing holder
+export let RUBBER_DURATION = 8;    // s: the rubber-band push lasts this long, then the slot frees up
 export let WALL_SPEED     = 32;    // u/s (beats kart top speed so close shots land)
 export let WALL_LIFE      = 2.8;   // s
 export let WALL_HIT_R     = 2.0;   // u: combined wall+kart hit radius
@@ -159,6 +160,7 @@ const _tune = {
   ITEM_COOLDOWN: v => ITEM_COOLDOWN = v,
   ITEM_PICKUP_R: v => ITEM_PICKUP_R = v,
   RUBBER_ACCEL: v => RUBBER_ACCEL = v,
+  RUBBER_DURATION: v => RUBBER_DURATION = v,
   WALL_SPEED: v => WALL_SPEED = v,
   WALL_LIFE: v => WALL_LIFE = v,
   WALL_HIT_R: v => WALL_HIT_R = v,

@@ -23,7 +23,7 @@ import { progress } from './race.js';
 import {
   ITEM_NONE, ITEM_TURBO, ITEM_RUBBER, ITEM_WALL, ITEM_WEIGHTS,
   N_ITEM_BOXES, ITEM_RESPAWN, ITEM_COOLDOWN, ITEM_PICKUP_R,
-  RUBBER_ACCEL, WALL_SPEED, WALL_LIFE, WALL_HIT_R, WALL_HIT_KILL,
+  RUBBER_ACCEL, RUBBER_DURATION, WALL_SPEED, WALL_LIFE, WALL_HIT_R, WALL_HIT_KILL,
   MAX_SPEED,
 } from './config.js';
 
@@ -105,6 +105,10 @@ function nearestRoadIdx(w, last) {
 export function tickItems(karts, dt, hitWall) {
   for (const k of karts) {
     if ((k.itemT || 0) > 0) { k.itemT -= dt; if (k.itemT < 0) k.itemT = 0; }
+    if ((k.itemLife || 0) > 0) {            // timed items (rubber band) tick down
+      k.itemLife -= dt;
+      if (k.itemLife <= 0) { k.itemLife = 0; k.item = ITEM_NONE; } // the slot frees up
+    }
   }
   for (const b of itemBoxList) {
     if (b.respawnT > 0) { b.respawnT -= dt; if (b.respawnT <= 0) b.respawnT = 0; }
@@ -122,6 +126,7 @@ export function tickItems(karts, dt, hitWall) {
     if (best) {
       k.item = best.item;
       k.itemT = ITEM_COOLDOWN;
+      k.itemLife = best.item === ITEM_RUBBER ? RUBBER_DURATION : 0;
       best.respawnT = ITEM_RESPAWN;
     }
   }

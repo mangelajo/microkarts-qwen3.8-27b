@@ -159,7 +159,10 @@
 </div>
 <div class="hud hudbox" id="item-hud" style="bottom:118px; right:14px; text-align:center; padding:6px 10px">
   <div class="lbl">ITEM · <kbd style="font-size:9px">E</kbd></div>
-  <div class="big" id="itemSlot" style="font-size:15px; letter-spacing:2px">—</div>
+  <div style="display:flex; align-items:baseline; justify-content:center; gap:7px">
+    <div class="big" id="itemSlot" style="font-size:15px; letter-spacing:2px">—</div>
+    <span id="itemTimer" class="hidden" style="font-size:12px; letter-spacing:1px; color:#9be36a"></span>
+  </div>
 </div>
 <style>
   #itemSlot[data-item="1"] { color:#ffd23f; text-shadow:0 0 8px rgba(255,190,40,.8); }

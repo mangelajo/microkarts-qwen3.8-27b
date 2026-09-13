@@ -14,7 +14,7 @@ Check items off as they land.
 - 3 distinct AI drivers + headless test bench (`make sim` AI · `make netsim` wire + 2P race, `ai-sim/`)
 - **Modular browser code** — `src/game.js` (state machine: karts, input, race lifecycle, cameras, `animate()`) drives `src/net2p.js` (2P host/join orchestration: session lifecycle, code pairing, client render mirror); one-way dependency, split verified behavior-preserving (`make sim` output byte-identical pre/post)
 - **ai-sim tuning playground** — browser port (`ai-sim/playground.html`: the real `simulateTick` + AI on a 2D top-down canvas, runtime tuning via `config.js` `tuneConfig` live `let` bindings, per-kart telemetry = the bench's numbers) + `make simwatch` watch mode (bench re-runs on every `src/`/`ai-sim/` change)
-- **Item boxes** — 3 seeded candy boxes per track (turbo / rubber band / wall, fixed per-box rolls); pickups, fires and wall hits live in the shared `simulateTick`, host-authoritative projectiles; ON by default, chip or `I` (`src/items.js`)
+- **Item boxes** — 3 seeded candy boxes per track (turbo / rubber band / wall, fixed per-box rolls); pickups, fires and wall hits live in the shared `simulateTick`, host-authoritative projectiles; the rubber band is timed (8 s) with a live HUD countdown, then frees the slot; ON by default, chip or `I` (`src/items.js`)
 - Fully procedural scene: wood table, tabletop props, day/night sky + mountains — no assets
 - Shadows, chase camera, HUD, countdown/results flow
 
@@ -65,7 +65,11 @@ Check items off as they land.
   index, nothing streamed, races stay 100% deterministic). Each box holds a fixed weighted roll —
   turbo (45%) / rubber band (30%) / wall (25%) — and re-grants the same item after an 8 s respawn.
   Turbo is the drift/pad boost currency (full charge); the rubber band is passive MK8-style (a
-  trailing holder gets a push scaled to the gap; `E` does nothing while holding it); the wall is a
+  trailing holder gets a push scaled to the gap; `E` does nothing while holding it) and is now
+  **timed** — it lasts `RUBBER_DURATION` (8 s, config) and then frees the slot, so a held rubber
+  no longer blocks other pickups indefinitely; a live countdown (`#itemTimer` in the item HUD)
+  runs a local clock from the item-id transition (the wire still carries only the item u8 — no
+  protocol change); `make netsim` gained the expiry + slot-free assertions; the wall is a
   host-authoritative projectile that slams the first rival it touches (speed ×0.4 + jolt). Pickups,
   fires and hits all live inside `simulateTick`, so solo / host / `make netsim` share one model;
   the AI fires turbo on pickup and throws the wall only at close range (beyond ~10 u the

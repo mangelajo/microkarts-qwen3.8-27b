@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { samples, selectTrack, angDiff, curvatureAt, trackLen } from '../src/track.js';
 import { TRACKS } from '../src/tracks.js';
-import { N_SAMPLES, SIM_DT, LAPS, AI_SKILL, clamp, ITEM_TURBO, ITEM_RUBBER, ITEM_WALL, ITEM_RESPAWN } from '../src/config.js';
+import { N_SAMPLES, SIM_DT, LAPS, AI_SKILL, clamp, ITEM_TURBO, ITEM_RUBBER, ITEM_WALL, ITEM_RESPAWN, RUBBER_DURATION } from '../src/config.js';
 import { Kart } from '../src/kart.js';
 import { DRIFT_MAX_SLIP, DRIFT_CHARGE_MAX, ROAD_HW } from '../src/config.js';
 import { buildPads, hitPads, padList, PAD_STRENGTH } from '../src/pads.js';
@@ -516,15 +516,21 @@ console.log('\n== item boxes: layout + effect models ==');
   A.item = ITEM_WALL; useItem(A);
   for (let i = 0; i < 60 * 4; i++) tickItems([A, B], 1 / 60);
   mark(walls.length === 0, 'wall expires after its lifetime when it hits nothing');
+  // rubber band: timed — the push lasts RUBBER_DURATION, then the slot frees up
+  A.item = ITEM_RUBBER; A.itemLife = RUBBER_DURATION;
+  A.pos.x += 40; A.pos.z += 40;   // clear of every box so the freed slot can't re-pick
+  for (let i = 0; i < 60 * (RUBBER_DURATION + 0.5); i++) tickItems([A, B], 1 / 60);
+  mark(A.item === 0, 'rubber band expires after its duration, freeing the slot');
   // pickup: a kart over a live box grabs the box's (fixed) item; the box
   // goes into its cooldown and comes back
   buildItems(0);
   const box = itemBoxList[0];
-  A.item = 0; A.itemT = 0;
+  A.item = 0; A.itemT = 0; A.itemLife = 0;
   A.pos.x = box.x; A.pos.y = box.y; A.pos.z = box.z;
   tickItems([A, B], 1 / 60);
   mark(A.item === box.item, `pickup grants the box item (${A.item})`);
   mark(Math.abs(box.respawnT - ITEM_RESPAWN) < 1e-9, 'picked box enters its respawn cooldown');
+  A.pos.x += 5;   // step off the box so a timed expiry can't re-pick it mid-countdown
   for (let i = 0; i < 60 * (ITEM_RESPAWN + 1); i++) tickItems([A, B], 1 / 60);
   mark(box.respawnT === 0, 'box back after the cooldown');
   setItemsOn(true);   // the 2P race loop below wants them on

@@ -202,7 +202,9 @@ take in the catalogue. All track shapes are validated headlessly.
   index alone, nothing streamed). Each box's own seeded PRNG fixes its reward — turbo (45%),
   rubber band (30%), wall (25%) — and it re-grants the same item after an 8 s respawn. Turbo is
   the drift/pad boost currency; the rubber band passively pushes a trailing holder (MK8-style:
-  `E` does nothing while holding it); the wall flies as a host-authoritative projectile and
+  `E` does nothing while holding it), lasts `RUBBER_DURATION` (8 s) and then frees the slot —
+  a live countdown ticks down in the item HUD (`#itemTimer`, a local clock from the item-id
+  transition, so no wire change); the wall flies as a host-authoritative projectile and
   slams the first rival it touches. Pickups / fires / hits all run inside `simulateTick` (solo +
   host + net-sim share the model); the AI fires turbo on pickup and throws the wall only at
   close range; humans fire with `E` (touch: 450 ms auto-fire). Held item rides the state frame

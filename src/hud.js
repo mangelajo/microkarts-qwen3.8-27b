@@ -1,4 +1,4 @@
-import { LAPS, game, KMH_PER_U, BLAST_KMH, ITEM_NAMES } from './config.js';
+import { LAPS, game, KMH_PER_U, BLAST_KMH, ITEM_NAMES, ITEM_RUBBER, RUBBER_DURATION } from './config.js';
 import { TRACKS } from './tracks.js';
 import { getBestMs } from './ghost.js';
 import { getTop } from './rankings.js';
@@ -8,6 +8,12 @@ import { isTouchDevice } from './touch.js';
  *  HUD
  * ------------------------------------------------------------------ */
 export const el = id => document.getElementById(id);
+
+/* rubber-band countdown clock (display only): the wire carries the item id,
+   not remaining time, so a local clock runs from the id transition — the
+   sim's itemLife is authoritative for the local kart; the remote mirror
+   matches within interpolation error */
+let rubberStartT = 0;
 export const overlay   = el('overlay');
 export const startBtn  = el('startBtn');
 const titleEl   = el('title');
@@ -163,6 +169,16 @@ export function updateHud(r, l, karts) {
   const it = p.item || 0;
   el('itemSlot').textContent = it ? ITEM_NAMES[it] : '—';
   el('itemSlot').dataset.item = it;
+  // the rubber band's expiry counter (it frees the slot when it hits 0)
+  const timer = el('itemTimer');
+  if (it === ITEM_RUBBER) {
+    if (rubberStartT === 0) rubberStartT = performance.now();
+    timer.textContent = Math.max(0, RUBBER_DURATION - (performance.now() - rubberStartT) / 1000).toFixed(1);
+    timer.classList.remove('hidden');
+  } else {
+    rubberStartT = 0;
+    timer.classList.add('hidden');
+  }
 }
 
 /* ------------------------------------------------------------------ *
