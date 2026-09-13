@@ -1,6 +1,6 @@
 PORT ?= 8080
 
-.PHONY: install lint imports serve sim simwatch netsim screens deploy
+.PHONY: install lint imports serve sim simwatch netsim screens qrcheck deploy
 
 # production deploy target (ajo.es/microkarts) — override to deploy elsewhere
 DEPLOY_HOST ?= ajo@cpanel.optimizacionweb.es
@@ -36,6 +36,12 @@ netsim: install
 # fails on any page JS error. One-time setup: npx playwright install chromium
 screens: install
 	npm run screens
+
+# QR encoder gate: structural checks (finders/timing/alignment/format/version) +
+# full zigzag read-back (un-mask, de-interleave, RS syndrome via independently
+# computed generator) on 7 version cases × all 8 masks + exact-matrix fixture
+qrcheck: install
+	node ai-sim/qr-check.mjs
 
 # upload the game to the live server; run the gates first (`make sim netsim deploy`)
 deploy:

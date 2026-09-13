@@ -14,6 +14,7 @@ import {
   showOverlay, hideOverlay, hideCountdown, updateHud, fmt, resultsEl,
 } from './hud.js';
 import { podiumHtml, celebrate } from './resultsfx.js';
+import { drawQr } from './qr.js';
 import * as audio from './audio.js';
 import { ghostStop } from './ghost.js';
 import { pulseHint } from './touch.js';
@@ -166,8 +167,21 @@ export function createNet2p(ctx) {
     net.kartN = ctx.racers().length;
     net.hostStart().then(code => {
       hostCode.textContent = code;
-      hostMsg.textContent = 'Send this code to player 2, then paste their answer in STEP 2.' + LAN_HINT;
+      try { drawQr(el('hostCodeQr'), location.origin + location.pathname + '?join=' + code); el('hostCodeQr').classList.remove('hidden'); } catch { /* QR is optional decoration */ }
+      hostMsg.textContent = 'Send this code to player 2 (or let them scan the QR), then paste their answer in STEP 2.' + LAN_HINT;
     }).catch(err => { hostMsg.textContent = 'WEBRTC UNAVAILABLE — ' + err.message; });
+  }
+
+  function beginJoinSession() {
+    if (game.netMode === 2 && net && net.role === 'join') return;
+    if (net) net.close();
+    startBtn.textContent = 'WAITING FOR HOST…';
+    game.netMode = 2;
+    net = new NetSession('join', sessionCbs());
+    net.kartN = 4;
+    setHostRoster(game.roster);
+    joinMsg.textContent = "Paste the host's MKR-… code here.";
+    el('joinInField').innerText = '';
   }
 
   function hostPasteAnswer() {
@@ -191,6 +205,7 @@ export function createNet2p(ctx) {
       const out = el('joinOutCode');
       out.textContent = answerCode;
       out.classList.remove('hidden');
+      try { drawQr(el('joinOutCodeQr'), answerCode); el('joinOutCodeQr').classList.remove('hidden'); } catch { /* QR is optional decoration */ }
       el('joinOutLabel').style.display = '';
       el('joinBtn').disabled = false;
       try {
@@ -399,21 +414,22 @@ export function createNet2p(ctx) {
         beginHostSession();
         ctx.syncRosterVisibility();
       } else if (m === 'join') {
-        if (game.netMode === 2 && net && net.role === 'join') return;
-        if (net) net.close();
-        startBtn.textContent = 'WAITING FOR HOST…';
-        game.netMode = 2;
-        net = new NetSession('join', sessionCbs());
-        net.kartN = 4;
-        setHostRoster(game.roster);
-        joinMsg.textContent = "Paste the host's MKR-… code here.";
-        el('joinInField').innerText = '';
+        beginJoinSession();
       }
     },
     hostPasteAnswer,
     joinPasteOffer,
     r => { game.roster = r; setHostRoster(r); if (game.netMode === 2) ctx.syncRosterVisibility(); },
   );
+
+  // ?join=CODE (scanned on P2's phone): select JOIN mode, create the
+  // session, pre-fill the host code and connect immediately — one tap.
+  function joinAuto(code) {
+    if (game.state === 'racing' || game.state === 'countdown') return;
+    beginJoinSession();
+    el('joinInField').innerText = code;
+    joinPasteOffer();
+  }
 
   return {
     role, selfKart, host, broadcast,
@@ -422,6 +438,6 @@ export function createNet2p(ctx) {
     inputNow: (t, s, d, u) => net.inputNow(t, s, d, u),
     resetClientItems: () => { clientItemSeen = ctx.racers().map(() => false); },
     applyClientState,
-    beginHostSession, hostPasteAnswer, joinPasteOffer, onPeerLost,
+    beginHostSession, hostPasteAnswer, joinPasteOffer, joinAuto, onPeerLost,
   };
 }

@@ -89,6 +89,8 @@
   .ncode { font-size:15px; letter-spacing:1px; word-break:break-all; background:rgba(30,20,12,.85);
     border:1px dashed rgba(255,200,120,.4); border-radius:8px; padding:10px 12px; margin:6px 0 10px;
     min-height:20px; color:#ffe9c9; max-height:88px; overflow-y:auto; cursor:pointer; }
+  .qr { display:block; width:150px; height:150px; margin:0 auto 4px; image-rendering:pixelated;
+    background:#f6ead2; border-radius:8px; }
   .npaste { font-size:13px; letter-spacing:1px; word-break:break-all; background:rgba(30,20,12,.85);
     border:1px solid rgba(255,200,120,.4); border-radius:8px; padding:10px 12px; margin:6px 0 12px;
     min-height:44px; color:#ffe9c9; max-height:110px; overflow-y:auto; outline:none; text-align:left; }
@@ -204,8 +206,9 @@
     </div>
     <div class="net hidden" id="netPanel">
       <div id="hostPanel">
-        <div class="trk-label">STEP 1 — SEND THIS CODE TO PLAYER 2 (CLICK TO COPY)</div>
+        <div class="trk-label">STEP 1 — SEND THIS CODE TO PLAYER 2 (CLICK TO COPY, OR P2 SCANS THE QR)</div>
         <div class="ncode" id="hostCode" title="Click to copy">—</div>
+        <canvas id="hostCodeQr" class="qr hidden"></canvas>
         <div class="sub" id="hostMsg">Waiting for player 2…</div>
         <div class="trk-row" id="rosterRow" style="justify-content:center">
           <button type="button" class="tchip sel" data-roster="2ai">2 HUMANS + 2 AI</button>
@@ -220,8 +223,9 @@
         <div class="trk-label">STEP 1 — PASTE THE HOST'S CODE</div>
         <div contenteditable="true" class="npaste" id="joinInField"></div>
         <button class="btn sm" id="joinBtn">CONNECT — GET MY CODE</button>
-        <div class="trk-label" id="joinOutLabel" style="display:none; margin-top:14px">STEP 2 — YOUR CODE: PASTE IT ON THE HOST'S SCREEN (CLICK TO COPY)</div>
+        <div class="trk-label" id="joinOutLabel" style="display:none; margin-top:14px">STEP 2 — YOUR CODE: PASTE IT ON THE HOST'S SCREEN (CLICK TO COPY, OR THE HOST SCANS THE QR)</div>
         <div class="ncode hidden" id="joinOutCode" title="Click to copy">—</div>
+        <canvas id="joinOutCodeQr" class="qr hidden"></canvas>
         <div class="sub" id="joinMsg">…</div>
       </div>
     </div>

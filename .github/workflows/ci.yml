@@ -17,10 +17,14 @@ jobs:
           cache: npm
       - name: Lint (src + ai-sim)
         run: make lint
+      - name: Static import-graph check
+        run: make imports
       - name: AI bench — every track, every scenario
         run: make sim
       - name: Wire + host-authoritative 2P sims
         run: make netsim
+      - name: QR encoder (structural + RS decode gate)
+        run: make qrcheck
   render:  # Playwright boot check — if the browser can start the game and
            # render the menu/race without a single JS error, it works.
     runs-on: ubuntu-latest

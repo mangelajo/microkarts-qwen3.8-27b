@@ -70,8 +70,10 @@ export function setMode(m) {
     joinInField.innerText = '';
     joinOutCode.textContent = '—';
     joinOutCode.classList.add('hidden');
+    el('joinOutCodeQr').classList.add('hidden');
     el('joinOutLabel').style.display = 'none';
   }
+  if (m !== 'host') el('hostCodeQr').classList.add('hidden');
   netPanel.classList.toggle('hidden', m === 'solo');
   trackWrapEl().style.display = m === 'join' ? 'none' : '';
   hazardWrapEl().style.display = m === 'join' ? 'none' : ''; // join mirrors the host's pick

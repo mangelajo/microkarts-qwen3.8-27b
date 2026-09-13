@@ -190,6 +190,17 @@ const n2 = createNet2p({
   racers, syncRosterVisibility, addShake, snapChaseCam, camSnap,
 });
 
+// QR pairing (P2's phone): a scanned ?join=CODE opens straight into the
+// JOIN flow — mode selected, code pre-filled, connect kicked off. The
+// param is consumed so a reload doesn't re-fire the handshake.
+try {
+  const joinParam = new URLSearchParams(location.search).get('join');
+  if (joinParam) {
+    history.replaceState('', '', location.pathname); // drop ?join= so a reload doesn't re-fire the handshake
+    n2.joinAuto(joinParam);
+  }
+} catch { /* non-URL host (file://) */ }
+
 /* ------------------------------------------------------------------ *
  *  Race lifecycle
  * ------------------------------------------------------------------ */

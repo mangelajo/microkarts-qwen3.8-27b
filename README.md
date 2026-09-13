@@ -119,6 +119,19 @@ take in the catalogue. All track shapes are validated headlessly.
   The host runs the authoritative fixed-step sim and streams state frames at
   60 Hz; the joiner renders with 50 ms interpolation and sends input at 60 Hz.
   Protocol + simulation are verified headlessly (`make netsim`)
+- **QR pairing** — the pairing codes can be scanned instead of pasted: the host's
+  screen shows a QR encoding the join URL (`…?join=CODE`), the joiner's screen
+  shows a QR encoding their code, and opening the join URL on any device
+  auto-fills the code and pre-arms the connection (`?join=` is stripped from the
+  address bar after boot). The QR is drawn on a canvas by a self-contained
+  encoder (`src/qr.js`, ~290 lines, zero assets / zero dependencies): auto
+  version 1–40, byte mode, level-M Reed-Solomon (16- or 18-bit generator),
+  block interleave, all 8 masks with penalty selection, format + version info.
+  Validated headlessly by `ai-sim/qr-check.mjs` — structural checks (finders,
+  timing, alignment, dark module, format/version Hamming), a full zigzag read
+  back with un-masking + block de-interleave + RS syndrome check (zero
+  remainder, independently computed generator) on 7 version cases × all 8 masks
+  (v1 → v40), over-capacity rejection, and an exact-matrix fixture
 - **Skid-to-drift** — hold `Space` above ~95 km/h on asphalt: the nose steers in
   faster than the motion follows (real slip angle, capped + controllable), charge
   builds, releasing fires a mini-boost scaled by the slide. The skid howl's pitch
@@ -212,12 +225,14 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/minimap.js`  | HUD minimap: track outline + racer dots + heading arrow |
 | `src/ghost.js`    | Best-lap `localStorage` store + ghost-kart playback |
 | `src/rankings.js` | Per-track top-5 best-lap board (separate `localStorage` key) + `rankLapDone()` rank |
+| `src/qr.js`       | Self-contained QR encoder (auto v1–40, byte mode, level-M RS, 8-mask penalty selection) + canvas `drawQr()` |
 | `src/resultsfx.js`| Results juice: podium pips (`podiumHtml`) + procedural confetti burst (`celebrate`) |
 | `src/audio.js`    | WebAudio SFX + music sequencer (skid pitch follows drift charge, boost whoosh decays with `k.boost`) |
 | `ai-sim/`         | Node harnesses: `make sim` (AI) · `make netsim` (wire + 2P race sim) |
 | `ai-sim/playground.html` + `.js` | Browser **tuning playground**: the real `simulateTick` + AI on a 2D top-down canvas, runtime `tuneConfig`, telemetry (off % / stalls / laps / best lap) |
 | `ai-sim/watch.mjs`  | `make simwatch` — re-runs the AI bench on every change in `src/` + `ai-sim/` |
 | `ai-sim/screens.mjs` | `make screens` — Playwright render check: boots the game in headless Chromium (desktop + phone), captures menu/2P/countdown/race, fails on any page JS error |
+| `ai-sim/qr-check.mjs` | `make qrcheck` — QR encoder gate: structural checks + full zigzag/RS decode (7 versions × 8 masks) + exact-matrix fixture |
 
 ## Tuning
 
