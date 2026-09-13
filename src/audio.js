@@ -325,3 +325,24 @@ export function perfect() {
   note(ctx, t + 0.09, 1320, 0.14, 'square', 0.16, sfxGain);
   noiseHit(ctx, t + 0.09, 0.18, 0.1, 'highpass', 6000, 1);   // sparkle
 }
+
+let rainSrc = null, rainGain = null;
+export function rainPatter(on) {
+  if (!ctx) return;
+  if (on && !rainSrc) {
+    const s = noise(ctx);
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.value = 2800; f.Q.value = 0.6;
+    rainGain = ctx.createGain();
+    rainGain.gain.value = 0;
+    s.connect(f).connect(rainGain).connect(sfxGain);
+    s.start();
+    rainSrc = s;
+    rainGain.gain.setTargetAtTime(0.045, ctx.currentTime, 0.4);
+  } else if (!on && rainSrc) {
+    rainGain.gain.setTargetAtTime(0, ctx.currentTime, 0.3);
+    const old = rainSrc;
+    rainSrc = null;
+    setTimeout(() => { try { old.stop(); } catch { /* already stopped */ } }, 900);
+  }
+}

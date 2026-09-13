@@ -287,6 +287,29 @@ export function loadHazardPref() {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Rain toggle — chips on the EXTRAS page. Purely cosmetic (no
+ *  persistence, no wire): state lives in weather.js.
+ * ------------------------------------------------------------------ */
+let weatherChips = [];
+let weatherOnChange = null;
+
+export function initWeatherPicker(onChange, initialOn) {
+  weatherOnChange = onChange;
+  const row = el('rainRow');
+  if (!row) return;
+  for (const c of row.children) {
+    c.addEventListener('click', e => { weatherOnChange(c.dataset.rain === 'on'); e.target.blur(); });
+    weatherChips.push(c);
+  }
+  setWeatherChip(initialOn);
+}
+
+export function setWeatherChip(on) {
+  const v = !!on;
+  for (const c of weatherChips) c.classList.toggle('sel', c.dataset.rain === (v ? 'on' : 'off'));
+}
+
+/* ------------------------------------------------------------------ *
  *  Item-box toggle — chips on the menu; persisted in localStorage.
  *  Mirrors the hazard picker exactly (host broadcasts the pick over the
  *  wire; join clients mirror it and hide their own chips).

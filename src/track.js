@@ -8,12 +8,23 @@ import { buildObstacles, obstacleList, getObstaclesOn, HAZ_COLOR, mulberry32, KA
 import { buildPads, padList, CELL_LEN, CELL_W, GAP, CELLS } from './pads.js';
 import { buildItems, itemBoxList, walls } from './items.js';
 import { buildCorners } from './corners.js';
+import { buildPuddles } from './weather.js';
 
 /* ------------------------------------------------------------------ *
  *  Track data — filled IN PLACE by buildTrack().
  *  kart.js / ai-sim hold live bindings to these, so rebuilding a track
  *  keeps every consumer working without re-importing anything.
  * ------------------------------------------------------------------ */
+
+// wet-road retint (weather.js toggles it via setRoadWet)
+let roadMatRef = null;
+const roadBaseColor = new THREE.Color(0xffffff);
+export function setRoadWet(on) {
+  if (!roadMatRef) return;
+  roadMatRef.roughness = on ? 0.3 : 0.95;
+  roadMatRef.color.set(on ? 0x5f7488 : roadBaseColor);
+}
+
 export const samples = [];
 for (let i = 0; i < N_SAMPLES; i++) samples.push(new THREE.Vector3());
 export let trackLen = 0;
@@ -487,6 +498,8 @@ export function buildTrack(def, index = 0) {
   const trackMat = m => { builtMats.push(m); return m; };
 
   const roadMat = trackMat(new THREE.MeshStandardMaterial({ color: th.road, roughness: 0.95, metalness: 0, side: THREE.DoubleSide }));
+  roadMatRef = roadMat;
+  roadBaseColor.set(th.road);   // for the wet retint (weather.js setRoadWet)
   buildRibbon(group, curve, -ROAD_HW, ROAD_HW, 0.01, roadMat);
 
   const curbMat = trackMat(new THREE.MeshStandardMaterial({ map: curbTexture(), roughness: 0.85, side: THREE.DoubleSide }));
@@ -535,6 +548,7 @@ export function buildTrack(def, index = 0) {
   current.name = def.name;
   current.theme = def.theme;
   buildCorners();   // per-corner timing field (deterministic from the samples)
+  buildPuddles(index, group);   // weather: seeded puddles on flat sections (always built; visible only when raining)
 
   return { trackLen, name: def.name, points: def.points.length };
 }

@@ -13,6 +13,8 @@ import { aiControl } from './ai.js';
 import { selectTrack, updateItemBoxes, syncWallMeshes, tickProps, tickHazards } from './track.js';
 import { initDayNight, setDayNightFor, updateDayNight } from './daynight.js';
 import { initGamepad, gamepadPoll } from './gamepad.js';
+import { buildWeather, tickWeather, applyWeatherLights, tickPuddles, puddleRipple, setWeatherRain, getWeatherRain } from './weather.js';
+import { setRoadWet } from './track.js';
 import { GRID, simulateTick, raceOrder } from './race.js';
 import { setObstaclesOn, getObstaclesOn } from './obstacles.js';
 import { setItemsOn, getItemsOn } from './items.js';
@@ -22,6 +24,7 @@ import {
   initTrackPicker, cycleTrack, getTrackIdx, getMode,
   initHazardPicker, setHazard, getHazardOn, loadHazardPref,
   initItemPicker, setItem, getItemOn, loadItemPref,
+  initWeatherPicker, setWeatherChip,
   initMenuTabs, setMenuPage,
   hudRankNudge,
 } from './hud.js';
@@ -147,6 +150,9 @@ addEventListener('keydown', e => {
     }
     if (e.code === 'KeyI' && getMode() !== 'join') {
       audio.ensureAudio(); toggleItems(); audio.beep(getItemsOn() ? 440 : 330);
+    }
+    if (e.code === 'KeyT') {
+      audio.ensureAudio(); toggleWeather(); audio.beep(getWeatherRain() ? 440 : 330);
     }
   }
   if (e.code === 'KeyE' && game.state === 'racing' && !e.repeat) itemUseQ++; // fire held item
@@ -410,6 +416,18 @@ initItemPicker(
 // day/night: build the starfield + moon, then set the mode for the boot track
 initDayNight();
 initGamepad();   // connect at boot (no-op headless)
+buildWeather();  // rain field (no-op headless; visible only when raining)
+
+// rain (weather.js): T on the menu + the EXTRAS chip. Purely cosmetic —
+// wet retint + streaks + puddles + dimmed lights + patter; no wire.
+function setWeather(on) {
+  setWeatherRain(on);
+  setRoadWet(on);
+  audio.rainPatter(on);
+  setWeatherChip(on);
+}
+function toggleWeather() { setWeather(!getWeatherRain()); }
+initWeatherPicker(on => setWeather(on), false);
 if (getTrackIdx() !== 0 || getObstaclesOn() || getItemsOn()) applyTrackVisuals(getTrackIdx());
 setDayNightFor(getTrackIdx());
 
@@ -533,6 +551,10 @@ function animate() {
   const dt = game.dt;
   const now = performance.now();
   updateDayNight(now * 0.001); // the sky drifts (menu included — the orbit view shows it too)
+  tickWeather(1 / 60, camera.position); // rain (no-op when off)
+  applyWeatherLights();                // dim after daynight's absolute set
+  tickPuddles(1 / 60);
+  if (getWeatherRain()) puddleRipple(player.pos.x, player.pos.z, player.pos.y);
   const list = racers();
   const role = n2.role();
   // reactive props (cosmetic): a kart near a roadside prop spins/wobbles it —

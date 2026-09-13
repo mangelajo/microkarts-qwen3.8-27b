@@ -45,6 +45,7 @@ non-zero if a driver can't hold the road or recover.
 | `A` `D` / `←` `→` | Steer          |
 | `SPACE` (hold)    | Drift — release for a mini-boost; at the top of the charge curve a **PERFECT** release pays extra boost (touch: drag the stick to full lock) |
 | **Gamepad**       | Left stick steer · stick down = gas · LT / Y = drift (release = boost) · RT / X = item |
+| `T` (menu)        | Rain — wet road + puddles + rain patter (EXTRAS chip) |
 | `←` `→` (menu)  | Pick track        |
 | `M`            | Music on/off      |
 | `N`            | SFX on/off        |
@@ -174,6 +175,15 @@ take in the catalogue. All track shapes are validated headlessly.
   own from the fellOff mirror and the remote's from the existing y f32 drop —
   zero wire change. The pool saturates (8 booms) and fully decays; `make netsim`
   covers spawn/decay/saturation
+- **Rain + puddles** — the `T` menu key / EXTRAS chip toggles a fully
+  procedural weather: 320 falling rain-streak points (generated streak texture),
+  a wet-road retint (glossy dark, `roughness 0.3`), seeded **puddle discs on
+  flat road sections only** (deterministic per track — the host and every
+  client build the identical field; ripple + scale-pulse when a kart passes
+  over), dimmed lights (scaled after day/night's absolute set each frame) and a
+  band-passed rain patter. Purely cosmetic: zero physics, no wire, headless
+  safe; `make netsim` covers the puddle field (count, flat-section gate,
+  rebuild-identical determinism) + ripple lifecycle + headless toggle
 - **Music reactivity** — the per-track chiptune gains a second layer driven by
   `audio.setMusicEnergy()` (0.55 · drift charge + 0.45 · boost, fed every frame
   from `game.js`): a lowpass in the music bus opens from 1.5 kHz to 20 kHz with
@@ -266,6 +276,7 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/explosion.js`| Pooled floor-hit explosion FX (particle burst + smoke + shockwave ring) |
 | `src/corners.js`   | Per-corner timing — curvature-plateau corner field, in-corner time, lap-edge bank (deterministic; deltas are cosmetic) |
 | `src/gamepad.js`   | Gamepad — pure `mapGamepad()` (stick + D-pad + LT/Y drift, RT/X item) with browser connect/poll wiring (no-op headless) |
+| `src/weather.js`   | Rain + puddles — streak field, seeded flat-section puddle discs with ripples, wet retint + light dim (cosmetic, headless-safe) |
 | `src/race.js`     | Headless race core: grid, progress, positions, collisions, `simulateTick()` |
 | `src/pads.js`     | Boost-pad field: seeded straight-aware layout + chain-hit model (pure) |
 | `src/obstacles.js`| Sugar-hazard field: seeded candy layout + per-driver AI dodging (pure) |

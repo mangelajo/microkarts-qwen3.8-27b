@@ -14,6 +14,7 @@ import { samples, selectTrack, angDiff, curvatureAt, trackLen, propList, tickPro
 import { getCornerCount, getCornerIdx, tickCorners } from '../src/corners.js';
 import { mapGamepad } from '../src/gamepad.js';
 import * as audioMod from '../src/audio.js';
+import { buildPuddles, puddleList, setWeatherRain, tickWeather, tickPuddles, puddleRipple } from '../src/weather.js';
 import { makeExplosions } from '../src/explosion.js';
 import { scene } from '../src/scene.js';
 import { TRACKS } from '../src/tracks.js';
@@ -630,6 +631,48 @@ console.log('\n== item boxes: layout + effect models ==');
   audioMod.setMusicEnergy(0.9);
   audioMod.setMusicEnergy(3);   // clamped
   mark(true, 'setMusicEnergy is headless-safe (clamps, no ctx)');
+}
+
+/* ------------------------------------------------------------------ */
+/*  Weather — seeded puddle field on flat sections + ripple lifecycle
+ * ------------------------------------------------------------------ */
+{
+  selectTrack(0);
+  buildPuddles(0);
+  const n0 = puddleList.length;
+  mark(n0 >= 3, `track 0 builds ${n0} puddles (>= 3)`);
+  // all on flat sections (the builder's own gate — re-verify independently)
+  const flatOk = puddleList.every(p => {
+    // find the nearest sample and check its y stability
+    let bd = 1e9, bi = 0;
+    for (let i = 0; i < N_SAMPLES; i++) {
+      const dx = samples[i].x - p.x, dz = samples[i].z - p.z;
+      const d = dx * dx + dz * dz;
+      if (d < bd) { bd = d; bi = i; }
+    }
+    const s = samples[bi];
+    return Math.abs(samples[(bi + N_SAMPLES - 12) % N_SAMPLES].y - s.y) < 0.3
+      && Math.abs(samples[(bi + 12) % N_SAMPLES].y - s.y) < 0.3
+      && Math.abs(p.y - s.y) < 0.2;
+  });
+  mark(flatOk, 'every puddle sits on a flat road section');
+  // seeded: rebuild identical
+  const before = puddleList.map(p => `${p.x.toFixed(3)},${p.y.toFixed(3)},${p.z.toFixed(3)}`);
+  buildPuddles(0);
+  const same = puddleList.length === n0 && puddleList.every((p, i) => `${p.x.toFixed(3)},${p.y.toFixed(3)},${p.z.toFixed(3)}` === before[i]);
+  mark(same, 'puddle field is deterministic (rebuild identical)');
+  // ripple lifecycle
+  const P = puddleList[0];
+  puddleRipple(P.x, P.z, P.y);
+  mark(P.pulse > 0, 'a kart over the puddle ripples it');
+  for (let i = 0; i < 60 * 4; i++) tickPuddles(1 / 60);
+  mark(P.pulse === 0, 'the ripple decays to rest');
+  // toggle is headless-safe
+  setWeatherRain(true);
+  tickWeather(1 / 60, { x: 0, z: 0 });
+  setWeatherRain(false);
+  tickWeather(1 / 60, { x: 0, z: 0 });
+  mark(true, 'weather toggle + tick are headless-safe');
 }
 
 /* ------------------------------------------------------------------ */

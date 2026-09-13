@@ -51,12 +51,13 @@ flat tracks stay flat.
 
 ## Phase 6 — World
 
-- [ ] **Rain + puddles** — procedural rain (line-segment pool, no assets) on
-  the two coastal/midnight themes, plus a deterministic field of wet patches
-  (seeded per track like pads): grip/speed penalty inside a patch. The patch
-  field rides the track index (never streamed — old peers just see dry).
-  `make sim` gets the grip-penalty scenario; flat tracks stay bit-identical
-  when the field is empty.
+- [x] **Rain + puddles** ✅ (`src/weather.js` + `track.js` + `audio.js`) —
+  procedural rain streaks (320-point field, generated texture) + a wet-road
+  retint + a deterministic field of **puddle discs on flat sections** (seeded
+  per track like pads; ripple when a kart passes) + dimmed lights + band-passed
+  patter. Shipped as **purely cosmetic** — no grip penalty (that would change
+  the sim; the flat-track invariant stays bit-identical). No wire; `make
+  netsim` covers the puddle field + ripple lifecycle + headless toggle
 - [ ] **Two new tracks** — CANDY CAVERN (indoor, neon glow, low ceiling props,
   a new "cavern" theme) and STORM HARBOUR (coastal, fog + the rain above,
   long straight for the wall item). Each = data in `tracks.js` + a theme +
