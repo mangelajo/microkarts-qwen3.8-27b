@@ -184,6 +184,15 @@ take in the catalogue. All track shapes are validated headlessly.
   deterministic spatial field in `ai.js`). Both are flat; day/night is `static`
   (indoor / overcast). Adding a track = a `src/tracks.js` entry + a `make sim`
   run — the AI is track-agnostic and the harness runs all 8 tracks
+- **Item #4: sticky candy** — a box reward that leaves a **slow patch**
+  behind the thrower for 2 s: the first kart through it loses *grip* (65%
+  steering authority + a slide), not speed — distinct from the wall's
+  slam. `gripPenalty` decays in `kart.step`; the patch is host-
+  authoritative in `items.js` (one-shot, 2 s lifetime, pooled brown disc in
+  track.js, fades out). Same item-box economy (weighted roll,
+  `ITEM_WEIGHTS` = 40/25/20/15); one more u8 value — old peers decode it
+  as ITEM_NONE (a blank slot, safe). `make netsim` covers the patch field
+  + grip model
 - **Instanced rendering** — the scattered table props (donut / lollipop /
   block / gumdrop / pencil) now render as **7 InstancedMeshes** (one per
   part) instead of ~40 individual meshes: the per-prop state (spin, wobble,

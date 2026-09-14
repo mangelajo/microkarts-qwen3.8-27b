@@ -14,7 +14,7 @@ import { TRACKS } from './tracks.js';
 import { dailyChallenge } from './daily.js';
 import { recordStart, recordFrame, hasRecording, playbackFrame } from './replay.js';
 import { initTrackEditor, setEditorTrackIdx, resetEditor } from './trackedit.js';
-import { selectTrack, updateItemBoxes, syncWallMeshes, tickProps, tickHazards } from './track.js';
+import { selectTrack, updateItemBoxes, syncWallMeshes, syncStickyPatches, tickProps, tickHazards } from './track.js';
 import { initDayNight, setDayNightFor, updateDayNight } from './daynight.js';
 import { initGamepad, gamepadPoll } from './gamepad.js';
 import { buildWeather, tickWeather, applyWeatherLights, tickPuddles, puddleRipple, setWeatherRain, getWeatherRain } from './weather.js';
@@ -811,6 +811,7 @@ function animate() {
    }
   updateItemBoxes(dt, now);   // spin + bob the item boxes (hidden while respawning)
   syncWallMeshes();           // point the pooled wall meshes at live projectiles
+  syncStickyPatches(now * 0.001);   // the slow patches (fade + pulse)
   // explosion on floor-hit: every kart that just started its fell-off stun
   if (role !== 'join') {
     for (let i = 0; i < list.length; i++) {

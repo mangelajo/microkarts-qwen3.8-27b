@@ -94,11 +94,12 @@ flat tracks stay flat.
   reactive spin/wobble/hop state driving `refreshPropMatrices()` (visuals
   identical, screens-verified). Follow-up: curb/pad/hazard instancing +
   adaptive pixel ratio (drop to 0.75× on sustained <45 fps).
-- [ ] **Item #4: sticky candy** — a box reward that leaves a slow patch
-  behind the thrower for 2 s (the first kart through it loses grip, not
-  speed — distinct from the wall). Same item-box economy (weighted roll),
-  one more u8 value (old peers decode as ITEM_NONE… they'd see a blank slot,
-  which is safe). `make netsim` covers the patch field + grip model.
+- [x] **Item #4: sticky candy** — shipped as specced: a box reward leaves a
+  slow patch behind the thrower for 2 s (the first kart through it loses
+  grip — 65% steering + a slide — not speed, distinct from the wall).
+  Same item-box economy (weighted roll, 40/25/20/15); one more u8 value
+  (old peers decode as ITEM_NONE — a blank slot, safe). `make netsim`
+  covers the patch field + grip model.
 - [ ] **Controller-free mobile polish** — on-screen drift/boost buttons with
   haptic pulses on charge milestones (already partially there — the auto-fire
   path), plus a 9:16 portrait layout pass for the chase camera.

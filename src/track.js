@@ -6,7 +6,7 @@ import { TRACKS, trackTheme } from './tracks.js';
 import { retintSky } from './sky.js';
 import { buildObstacles, obstacleList, getObstaclesOn, HAZ_COLOR, mulberry32, KART_R } from './obstacles.js';
 import { buildPads, padList, CELL_LEN, CELL_W, GAP, CELLS } from './pads.js';
-import { buildItems, itemBoxList, walls } from './items.js';
+import { buildItems, itemBoxList, walls, stickyPatches } from './items.js';
 import { buildCorners } from './corners.js';
 import { buildPuddles } from './weather.js';
 import { buildScenery } from './scenery.js';
@@ -508,6 +508,39 @@ export function syncWallMeshes() {
   }
 }
 
+/* sticky-candy slow patches — scene-level pool (survive track rebuilds),
+ * synced from items.js's stickyPatches each frame. The patch fades out
+ * over its 2 s lifetime; a hit patch flashes. */
+let stickyPool = [];
+function ensureStickyPool() {
+  if (stickyPool.length) return stickyPool;
+  const mat = new THREE.MeshBasicMaterial({ color: 0x8a5a2a, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false });
+  for (let i = 0; i < 8; i++) {
+    const d = new THREE.Mesh(new THREE.CircleGeometry(2.2, 24), mat.clone());
+    d.rotation.x = -Math.PI / 2;
+    d.renderOrder = 1;
+    d.visible = false;
+    scene.add(d);
+    stickyPool.push(d);
+  }
+  return stickyPool;
+}
+
+export function syncStickyPatches(nowS) {
+  const pool = ensureStickyPool();
+  const STICKY_TTL = 2.0;
+  for (let i = 0; i < pool.length; i++) {
+    const s = stickyPatches[i], m = pool[i];
+    if (!s) { m.visible = false; continue; }
+    m.visible = true;
+    m.position.set(s.x, s.y + 0.03, s.z);
+    const life = 1 - s.t / STICKY_TTL;      // fade out over the lifetime
+    const pulse = 1 + 0.08 * Math.sin(nowS * 9);
+    m.scale.set(pulse * (0.6 + 0.4 * life), pulse * (0.6 + 0.4 * life), 1);
+    m.material.opacity = (s.hit ? 0.75 : 0.4) * life;
+  }
+}
+
 export function buildTrack(def, index = 0) {
   // [x, y, z] (or legacy [x, z] → y = 0); cap elevation at MAX_ELEVATION
   let maxAbsY = 0;
@@ -589,6 +622,7 @@ export function buildTrack(def, index = 0) {
   buildItems(index);              // item boxes (deterministic; items.js holds the state)
   scatterItemBoxes(group);
   syncWallMeshes();               // walls live on the scene — hide any in flight
+  syncStickyPatches(0);           // patches too
 
   // dispose the previous build's per-track materials (shared prop mats persist)
   for (const m of prevMats) m.dispose();

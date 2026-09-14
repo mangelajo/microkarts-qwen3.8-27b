@@ -235,6 +235,7 @@ export class Kart {
     this.boost = 0;       // 0..1 decaying mini-boost — drift release OR boost pads (pads.js)
     this.boostEdge = false; // true for one frame after a boost fires (main.js sfx)
     this.perfectEdge = false; // true for one frame after a PERFECT drift release (callout + chime)
+    this.gripPenalty = 0;  // 0..1 — sticky candy: the kart loses grip (not speed); decays
     // boost-pad chain bookkeeping (pads.js hitPads)
     this.padT = 0; this.padChain = 0; this.padStrip = -1; this.padPrevCell = -1; this.padLast = -1;
     // item-box state (items.js): held power-up id (0 = empty) + pickup cooldown
@@ -283,6 +284,7 @@ export class Kart {
     this.boost = 0;
     this.boostEdge = false;
     this.perfectEdge = false;
+    this.gripPenalty = 0;
     this.padT = 0; this.padChain = 0; this.padStrip = -1; this.padPrevCell = -1; this.padLast = -1;
     this.item = 0; this.itemT = 0; this.itemLife = 0;
     initCornerState(this);
@@ -470,11 +472,15 @@ export class Kart {
       this.boost *= Math.exp(-2.2 * dt);
       if (this.boost < 0.02) this.boost = 0;
     }
+    // sticky-candy grip penalty: decays back to full grip
+    if (this.gripPenalty > 0.01) this.gripPenalty *= Math.exp(-1.2 * dt);
+    else this.gripPenalty = 0;
     this.speed = clamp(this.speed, -MAX_REV, MAX_SPEED * (1 + BOOST_HEADROOM * this.boost));
     if (th === 0 && Math.abs(this.speed) < 0.03) this.speed = 0;
 
-    // sliding buys steering authority — the classic kart trade
-    const steerMul = turnFactor(this.speed) * (this.drifting ? DRIFT_STEER : 1);
+    // sliding buys steering authority — the classic kart trade; the sticky
+    // grip penalty robs steering (the kart keeps its SPEED, loses its GRIP)
+    const steerMul = turnFactor(this.speed) * (this.drifting ? DRIFT_STEER : 1) * (1 - 0.65 * this.gripPenalty);
     this.heading += this.steerVel * STEER_RATE * steerMul * (this.speed < 0 ? -1 : 1) * dt;
 
     // motion direction: glued to the nose unless sliding, where it follows
@@ -488,8 +494,10 @@ export class Kart {
       if (Math.abs(d) > DRIFT_MAX_SLIP) this.velDir = this.heading - Math.sign(d) * DRIFT_MAX_SLIP;
       this.slip = this.heading - this.velDir;
     } else {
-      this.velDir = this.heading;
-      this.slip = 0;
+      // grip penalty (sticky candy): partial slide — the velocity direction
+      // lags the nose in the steering direction (understeer)
+      this.velDir = this.heading - this.gripPenalty * this.steerVel * 0.4;
+      this.slip = this.heading - this.velDir;
     }
     this.pos.x += Math.sin(this.velDir) * this.speed * dt;
     this.pos.z += Math.cos(this.velDir) * this.speed * dt;

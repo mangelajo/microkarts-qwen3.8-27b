@@ -21,14 +21,16 @@ import { obstacleList, mulberry32 } from './obstacles.js';
 import { padList } from './pads.js';
 import { progress } from './race.js';
 import {
-  ITEM_NONE, ITEM_TURBO, ITEM_RUBBER, ITEM_WALL, ITEM_WEIGHTS,
+  ITEM_NONE, ITEM_TURBO, ITEM_RUBBER, ITEM_WALL, ITEM_STICKY, ITEM_WEIGHTS,
   N_ITEM_BOXES, ITEM_RESPAWN, ITEM_COOLDOWN, ITEM_PICKUP_R,
   RUBBER_ACCEL, RUBBER_DURATION, WALL_SPEED, WALL_LIFE, WALL_HIT_R, WALL_HIT_KILL,
+  STICKY_TTL, STICKY_R,
   MAX_SPEED,
 } from './config.js';
 
 export const itemBoxList = [];  // filled IN PLACE by buildItems; empty when off
 export const walls = [];        // live projectiles (host-authoritative, visual mirror elsewhere)
+export const stickyPatches = []; // sticky-candy slow patches (host-authoritative, visual mirror elsewhere)
 
 let itemsOn = true;
 export const getItemsOn = () => itemsOn;
@@ -44,17 +46,19 @@ export const setItemsOn = v => { itemsOn = !!v; };
 function rollItem(rng) {
   const total = ITEM_WEIGHTS.reduce((a, b) => a + b, 0);
   let r = rng() * total;
+  const IDS = [ITEM_TURBO, ITEM_RUBBER, ITEM_WALL, ITEM_STICKY];
   for (let i = 0; i < ITEM_WEIGHTS.length; i++) {
     r -= ITEM_WEIGHTS[i];
-    if (r <= 0) return [ITEM_TURBO, ITEM_RUBBER, ITEM_WALL][i];
+    if (r <= 0) return IDS[i];
   }
-  return ITEM_WALL;
+  return IDS[IDS.length - 1];
 }
 
 export function buildItems(trackIdx) {
   const list = itemBoxList;
   list.length = 0;
   walls.length = 0;               // in-flight projectiles die with the track
+  stickyPatches.length = 0;       // so do the slow patches
   if (!itemsOn || trackLen <= 0) return list;
 
   const N_S = samples.length;
@@ -153,6 +157,25 @@ export function tickItems(karts, dt, hitWall) {
       walls.splice(i, 1);
     }
   }
+  // sticky patches: 2 s lifetime; the FIRST kart through it loses grip
+  // (not speed) — one victim per patch, like a one-shot boomerang
+  for (let i = stickyPatches.length - 1; i >= 0; i--) {
+    const s = stickyPatches[i];
+    s.t += dt;
+    if (!s.hit) {
+      for (const k of karts) {
+        if (k.raceDone) continue;
+        const dx = k.pos.x - s.x, dz = k.pos.z - s.z;
+        const dy = Math.abs(k.pos.y - s.y);
+        if (dy < 2.2 && dx * dx + dz * dz < STICKY_R * STICKY_R) {
+          k.gripPenalty = 1;
+          s.hit = true;
+          break;
+        }
+      }
+    }
+    if (s.t > STICKY_TTL) stickyPatches.splice(i, 1);
+  }
 }
 
 /* E-key use (edge-triggered by the caller). Returns an event {kind, kart}
@@ -176,6 +199,17 @@ export function useItem(k) {
       idx: k.trackIdx, t: 0,
     });
     return { kind: 'wall', kart: k };
+  }
+  if (k.item === ITEM_STICKY) {
+    k.item = ITEM_NONE;
+    // the slow patch lands BEHIND the thrower — the first kart through it
+    // loses grip (steering + slide), not speed; one victim per patch
+    stickyPatches.push({
+      x: k.pos.x - Math.sin(k.heading) * 3.5,
+      z: k.pos.z - Math.cos(k.heading) * 3.5,
+      y: k.pos.y, t: 0, hit: false,
+    });
+    return { kind: 'sticky', kart: k };
   }
   return null;
 }

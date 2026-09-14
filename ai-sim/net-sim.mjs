@@ -468,7 +468,7 @@ console.log('\n== item boxes: layout + effect models ==');
     mark(itemBoxList.length >= 1 &&
       itemBoxList.map(b => b.u.toFixed(4) + ',' + b.o.toFixed(3) + ',' + b.item).join('|') === snap,
       `item layout seeded-deterministic (track ${ti}, ${itemBoxList.length} boxes)`);
-    mark(itemBoxList.every(b => [ITEM_TURBO, ITEM_RUBBER, ITEM_WALL].includes(b.item) && b.respawnT === 0),
+    mark(itemBoxList.every(b => [ITEM_TURBO, ITEM_RUBBER, ITEM_WALL, ITEM_STICKY].includes(b.item) && b.respawnT === 0),
       `track ${ti}: boxes hold real items and start live`);
   }
   setItemsOn(false);
@@ -876,3 +876,39 @@ for (let t = 0; t < 480; t++) {
   simulateTick([runB], k => (k.isPlayer ? { throttle: f.th, steer: f.st, use: f.it } : { throttle: 0, steer: 0 }), 1 / 120, t * (1000 / 120), { racing: true });
 }
 mark(Math.abs(runA.pos.distanceTo(runB.pos)) < 1e-6, 'replayed input reproduces the identical trajectory');
+
+// ---------------- item #4: sticky candy ----------------
+console.log('--- sticky candy ---');
+import { useItem as UI2, tickItems as TI2, stickyPatches as SP } from '../src/items.js';
+import { ITEM_STICKY } from '../src/config.js';
+setItemsOn(true);
+selectTrack(0);
+const sA = new Kart({ isPlayer: true });
+const sB = new Kart({ isPlayer: false });
+sA.placeAt(0.3, 0); sB.placeAt(0.35, 0);
+sA.item = ITEM_STICKY;
+sA.heading = 0; sA.velDir = 0; sA.speed = 10; sA.steerVel = 0.5;
+UI2(sA);
+mark(SP.length === 1, 'sticky use spawns one patch');
+mark(SP[0].z < sA.pos.z - 2.5, 'patch lands behind the thrower');
+mark(!sA.gripPenalty && !sB.gripPenalty, 'no grip loss before contact');
+// first kart through the patch: place sB in it
+sB.pos.x = SP[0].x; sB.pos.z = SP[0].x + 0; sB.pos.set ? 0 : 0;
+sB.pos.x = SP[0].x; sB.pos.z = SP[0].z;
+sB.speed = 8;
+for (let i = 0; i < 60; i++) TI2([sA, sB], 1 / 120, () => {});
+mark(sB.gripPenalty > 0.9, 'first kart through the patch loses grip');
+mark(sA.gripPenalty === 0, 'thrower untouched (patch is behind it)');
+mark(SP.length === 0 || SP[0].hit, 'patch is one-shot (hit flag set)');
+sB.gripPenalty = 1;
+for (let i = 0; i < 120 * 4; i++) {
+  sB.offRoad = false;
+  simulateTick([sB], k => ({ throttle: 0, steer: 0 }), 1 / 120, i * (1000 / 120), { racing: true });
+}
+mark(sB.gripPenalty < 0.15, 'grip penalty decays back to full grip');
+// the patch expires at 2 s
+sA.item = ITEM_STICKY;
+UI2(sA);
+for (let i = 0; i < 120 * 3; i++) TI2([sA], 1 / 120, () => {});
+mark(SP.length === 0, 'patch expires after its 2 s lifetime');
+setItemsOn(false);
