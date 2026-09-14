@@ -75,7 +75,13 @@ for (const [name, vp] of Object.entries(VPS)) {
   const page = await browser.newPage({ viewport: vp });
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
-  page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('console', m => {
+    if (m.type() !== 'error') return;
+    // the dev static server has no /ws — a 2P screenshot that dials the
+    // WS server gets a handshake 404, which is expected (not a game bug)
+    if (/WebSocket|404 \(Not Found\)/.test(m.text())) return;
+    errors.push(m.text());
+  });
 
   await page.goto(`http://localhost:${PORT_ACTUAL}/`, { waitUntil: 'load', timeout: 30000 });
   await page.waitForSelector('#overlay', { state: 'visible', timeout: 20000 });
@@ -157,7 +163,7 @@ for (const [name, vp] of Object.entries(VPS)) {
   const nightPage = await browser.newPage({ viewport: vp });
   const nightErrors = [];
   nightPage.on('pageerror', e => nightErrors.push(String(e)));
-  nightPage.on('console', m => { if (m.type() === 'error') nightErrors.push(m.text()); });
+  nightPage.on('console', m => { if (m.type() === 'error' && !/WebSocket|404 \(Not Found\)/.test(m.text())) nightErrors.push(m.text()); });
   await nightPage.goto(`http://localhost:${PORT_ACTUAL}/`, { waitUntil: 'load', timeout: 30000 });
   await nightPage.waitForSelector('#overlay', { state: 'visible', timeout: 20000 });
   await nightPage.waitForTimeout(1200);
@@ -181,7 +187,7 @@ for (const [name, vp] of Object.entries(VPS)) {
   const cavePage = await browser.newPage({ viewport: vp });
   const caveErrors = [];
   cavePage.on('pageerror', e => caveErrors.push(String(e)));
-  cavePage.on('console', m => { if (m.type() === 'error') caveErrors.push(m.text()); });
+  cavePage.on('console', m => { if (m.type() === 'error' && !/WebSocket|404 \(Not Found\)/.test(m.text())) caveErrors.push(m.text()); });
   await cavePage.goto(`http://localhost:${PORT_ACTUAL}/`, { waitUntil: 'load', timeout: 30000 });
   await cavePage.waitForSelector('#overlay', { state: 'visible', timeout: 20000 });
   await cavePage.waitForTimeout(1200);

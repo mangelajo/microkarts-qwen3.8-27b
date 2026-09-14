@@ -1,0 +1,31 @@
+# docker-compose.yml — the OPTIONAL two-container deploy.
+#
+# The DEFAULT deploy is the single container:
+#   podman build -f Containerfile.game -t microkarts-game .
+#   podman run -d -p 8080:8080 microkarts-game
+#   → http://host:8080/  (game + multiplayer on one port, zero config)
+#
+# This compose file splits it (Nginx front :80 → game container :8080):
+#   docker compose up -d --build
+#   → http://host/  (nginx serves the game, proxies /ws + /rooms)
+services:
+  game:
+    build:
+      context: .
+      dockerfile: Containerfile.game
+    container_name: microkarts-game
+    environment:
+      - PORT=8080
+    expose:
+      - "8080"
+    restart: unless-stopped
+  web:
+    build:
+      context: .
+      dockerfile: Containerfile.web
+    container_name: microkarts-web
+    depends_on:
+      - game
+    ports:
+      - "80:80"
+    restart: unless-stopped

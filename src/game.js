@@ -247,13 +247,11 @@ const n2 = createNet2p({
 
 // QR pairing (P2's phone): a scanned ?join=CODE opens straight into the
 // JOIN flow — mode selected, code pre-filled, connect kicked off. The
-// param is consumed so a reload doesn't re-fire the handshake — but
-// ?api= (the relay base) is KEPT, or the joiner would hit same-origin.
+// param is consumed so a reload doesn't re-fire the handshake.
 try {
   const joinParam = new URLSearchParams(location.search).get('join');
   if (joinParam) {
-    const apiParam = new URLSearchParams(location.search).get('api');
-    history.replaceState('', '', location.pathname + (apiParam ? '?api=' + encodeURIComponent(apiParam) : ''));
+    history.replaceState('', '', location.pathname);
     n2.joinAuto(joinParam);
     setMenuPage('multi'); // show the pairing UI (code pre-filled, connect in flight)
   }
@@ -299,11 +297,14 @@ function startRace() {
   hideCountdown();
   startBtn.blur();
   if (n2.role() === 'host') {
-    // fixed sim clock starts at 0 → GO at COUNTDOWN_MS
+    // fixed sim clock starts at 0 → GO at COUNTDOWN_MS (local-sim path only;
+    // WS mode gets its countdown from the server's PREP/START wall clock)
     n2.host.t = 0; n2.host.acc = 0;
-    game.raceStart = COUNTDOWN_MS; // host-sim-ms
-    n2.host.enc = makeStateEncoder(racers().length);
-    n2.net().kartN = racers().length;
+    game.raceStart = n2.wsMode() ? now + COUNTDOWN_MS : COUNTDOWN_MS;
+    if (!n2.wsMode()) {
+      n2.host.enc = makeStateEncoder(racers().length);
+      n2.net().kartN = racers().length;
+    }
     const list = racers();
     n2.net().sendPrep(getTrackIdx(), COUNTDOWN_MS); // client syncs countdown first (ordered channel)
     n2.net().sendStart({
@@ -664,7 +665,7 @@ function animate() {
     camera.lookAt(menuLook);
   } else if (game.state === 'countdown') {
     let clockMs = now;
-    if (role === 'host') {
+    if (role === 'host' && !n2.wsMode()) {
       // step the (static) sim so hostSimT tracks the client's expected wall clock
       n2.host.acc += Math.min(dt, 0.1);
       let steps = 0;
@@ -692,11 +693,11 @@ function animate() {
     if (clockMs >= game.raceStart + 700) {
       game.state = 'racing';
       hideCountdown();
-      if (role === 'host') { n2.host.acc = 0; n2.host.tick = 0; p2.netOn = true; }
+      if (role === 'host' && !n2.wsMode()) { n2.host.acc = 0; n2.host.tick = 0; p2.netOn = true; }
       // GO — the ghost laps with us from here (join clients mirror, never record)
-      if (role !== 'join') ghostLapStart();
+      if (role !== 'join' && !n2.wsMode()) ghostLapStart();
     }
-  } else if (role === 'join') {      // ---- client: no sim, render snapshots + stream our input ----
+  } else if (role === 'join' || n2.wsMode()) {      // ---- WS + client: no sim, render snapshots + stream our input ----
     if (game.state === 'racing') {
       // live touch drag drives over the wire; otherwise the keyboard. steer pitch
       const d = readDrive(true);

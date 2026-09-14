@@ -10,60 +10,56 @@ flat tracks stay flat.
 
 - 8 procedural tracks (4 flat, 4 elevated), day/night sky, procedural rain,
   fully synthesized reactive music
-- 1P / 2P over the relay (`api/relay.php` + `RelaySession`: 4-char room code,
-  QR pairing, `?join=` deep link, FIND A RACE lobby, global rankings via
-  `api/rank.php`), host-authoritative sim — WebRTC/LAN pairing removed
+- 1P / 2P over the **Node WebSocket game server** (`server/`: 60 Hz
+  server-authoritative sim per room, 2 human slots + 2 AI fill; 4-char
+  room code, QR pairing, `?join=` deep link, FIND A RACE lobby),
+  deployed as one container — static + `/ws` + `/rooms` on a single port
+  (zero-config multiplayer). WebRTC/LAN and the PHP relay paths removed
 - Drift → boost → pads + perfect drift; 4 item-box rewards (turbo / timed
   rubber / wall / sticky candy); sugar hazards; corner deltas
 - Ghost + top-5 rankings; replays; daily challenge; 5-tab menu incl. track
   editor; gamepad + on-screen mobile controls; haptic charge pulses;
   9:16 portrait camera pass; instanced prop rendering
 
-## Phase 9 — Network server (cPanel: PHP now, Node later)
+## Phase 9 — Network server (Node + WebSocket)
 
-- [x] **Online rooms + relay (PHP path)** — shipped as the pure-PHP
-  long-poll relay (the cPanel box has no Node; the user chose PHP first,
-  Node later): `api/relay.php` (per-room file queue, 100 ms tick, ≤20 s
-  hold, raw POST bodies <8 KB → base64 batch; the server never decodes
-  frames) + `api/rooms.php` (heartbeated lobby). `src/relaynet.js`
-  `RelaySession` is a drop-in for the old WebRTC session (same cbs + send
-  surface — the `net2p.js` orchestration is untouched); the WebRTC/LAN
-  path was removed, 2P is relay-only. The 2P tab: room code + QR, type-in
-  join, FIND A RACE lobby; `?join=CODE` deep-link auto-connects (`?api=`
-  kept for dev relays). The queue is a persistent backlog — a joiner polls
-  from seq 0 and backfills frames sent before it arrived. Gaps found +
-  fixed while wiring: PHP `filesize()` stat staleness inside mod_php
-  workers (fixed with `clearstatcache()`), mtime-granular long-poll
-  detection (replaced with size-based), host senders gated on peer-hello
-  (now valid from room registration — the backlog makes late join catch up).
-  `make relaycheck` (real PHP when podman :8123 is up, in-process contract
-  mock otherwise), `make relaye2e` (two real browser pages race over the
-  relay); `make netsim` covers the contract mock round-trip. The Node
-  `ws` transport remains the follow-up (cPanel “Setup Node.js® App”).
-  **Netplay smoothness tuned (A):** the original 60 Hz wire + fixed 50 ms
-  client buffer undersized the long-poll delivery clumps, so the joiner’s
-  mirror caught up in visible jumps. Now: state at 30 Hz on the wire
-  (60 Hz sim stays local), input at 30 Hz (drift/item edges never
-  rate-gated), relay tick 200 → 100 ms, and an **adaptive interpolation
-  buffer** — the joiner measures the state-frame arrival gap and holds the
-  buffer at ~1.5× the recent gap (clamped 100–350 ms); a perceived-lag
-  readout (`n2.lastLagMs()`) shows how old the sampled snapshot was. A
-  headless two-browser A/B (same relay, before/after) cut catch-up jumps
-  (Δ > 1.5 u per 50 ms sample) from 13/46 = 28 % to 3/39 = 8 % with the
-  host running ~3× slow — real 60 fps browsers land smoother still.
-  The structural upgrade (per-room Node authoritative sim over WebSocket,
-  symmetric latency, 4-player for free) remains the Phase 9 follow-up.
-- [x] **Global rankings (PHP)** — `api/rank.php` stores a top-5 per track
-  (POST name + track + ms, rate-limited 1/10 s per name+track, JSON file)
-  and GETs the board; `rankings.js` merges the global entries (name
-  shown) with the local board and submits best laps fire-and-forget.
-  `make relaycheck` covers the POST→GET round-trip.
-- [ ] **Server-authoritative 4-player race** — the sim is pure JS and
-  already headless-safe (`ai-sim` proves it), so a per-room Node process
-  can run `simulateTick` + AI fill and broadcast state frames: up to 4
-  humans over the internet, no host privileges, no NAT. The Phase 10
-  4-player item then becomes an online mode. Requires the Node app
-  (the PHP path stays host-authoritative as the fallback).
+- [x] **Online rooms over a Node WebSocket server** — the shipped path.
+  A single Node process is the whole backend: static files + `/ws`
+  + `/rooms` lobby + `/health` on one port (`server/index.js` +
+  `server/room.js`), built as one container (`Containerfile.game`) —
+  **the client at `http://host/` needs zero configuration** (same-origin
+  `/ws`). The server is the **single sim authority**: each room runs the
+  60 Hz `simulateTick` loop (the same pure-JS sim modules `ai-sim`
+  proves Node-safe) with 2 human slots + 2 AI fill; both humans are pure
+  renderers — input at 30 Hz (drift/item edges never rate-gated), state
+  broadcast at 30 Hz, rendered through the adaptive interpolation buffer
+  (100–350 ms) with a PING/PONG RTT readout. Dropped human mid-race →
+  silently AI-driven; host drop → room dissolves (joiner kicked back to
+  the code screen). Client side: `src/wsnet.js` `WSSession` (WebSocket
+  transport, binary frames, `?ws=URL` override), the WebRTC + PHP relay
+  paths are **removed** (2P = WS server + QR pairing). The 2P tab: room
+  code + QR, type-in join (or FIND A RACE lobby), `?join=CODE`
+  deep-link auto-connects. Gates: `make wscheck` (a WS client drives the
+  real server: lobby, create/join, start, state, input → control,
+  PING/PONG, finish, kick, host-left dissolve) + `make wse2e` (two real
+  browser pages race over the server — the full production loop);
+  `make netsim` keeps the per-track 2P race sim + wire round-trip. Both
+  container variants verified end-to-end with podman (single container:
+  static + WS on one port; two-container: Nginx front proxies `/ws` +
+  `/rooms`). Earlier dead ends, recorded for the future: a pure-PHP
+  long-poll relay (shipped + deployed, then replaced — long-poll clumps
+  needed the adaptive buffer; file-queue stat staleness under mod_php;
+  1 s mtime granularity) and the WebRTC/LAN path (NAT/SDP pain).
+  Netplay tuning history: 60 Hz wire + fixed 50 ms buffer → catch-up
+  jumps (28 % of samples); 30 Hz wire + adaptive buffer → 8 % (Δ > 1.5 u
+  per 50 ms, headless A/B with a ~3× slow host); the server-authoritative
+  path removes the host-side load asymmetry entirely.
+- [ ] **Server-authoritative 4-player race** — the Phase 9 server already
+  runs the room loop, so 4 humans is an extension, not a build: a
+  third `humans` slot (the state frame is length-derived — the wire is
+  already N-kart-ready), per-slot input routing, a 4-seat roster picker
+  (AI fills the rest). No host privileges, no NAT, symmetric latency
+  for all four; the Phase 10 4-player item then becomes an online mode.
 
 ## Phase 10 — Four karts, four players
 
@@ -174,7 +170,7 @@ flat tracks stay flat.
 - **Asset-based content** — the zero-asset rule is a feature (instant load,
   no CDN); everything stays procedural.
 - **Accounts / asset pipelines / CDNs** — the server (Phase 9) is a thin
-  relay + optional room sim: no sign-up, no stored profiles; the
+  room-sim backend: no sign-up, no stored profiles; the
   zero-asset rule is a feature (instant load), everything stays
   procedural. Share-a-lap stays a brag string, not a validation.
 - **Full 3D physics** — still a 2.5D table: y comes from the spline, no

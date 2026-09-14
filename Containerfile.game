@@ -1,0 +1,24 @@
+# Containerfile.game — the server-authoritative game server (one container,
+# one port: static files + /ws + /rooms + /health).
+#
+#   podman build -f Containerfile.game -t microkarts-game .
+#   podman run -p 8080:8080 microkarts-game
+#
+# The game is served from the same process that runs the sim — a client at
+# http://host/ needs zero configuration (same-origin /ws).
+FROM docker.io/library/node:20-slim
+
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm install --omit=dev
+COPY index.html ./
+COPY src/ ./src/
+COPY server/ ./server/
+# the sim modules pull in browser-only scene modules — the server boots with
+# the same loader stub the headless sims use (stub.js + hooks.mjs)
+COPY ai-sim/stub.js ./ai-sim/stub.js
+COPY ai-sim/hooks.mjs ./ai-sim/hooks.mjs
+
+EXPOSE 8080
+ENV PORT=8080
+CMD ["node", "--import", "file:///app/ai-sim/stub.js", "/app/server/index.js"]

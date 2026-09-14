@@ -30,4 +30,23 @@ export default [
       globals: globals.browser,
     },
   },
+  {
+    // ws-e2e drives browser pages — its page.evaluate/waitForFunction
+    // callbacks run in the page (browser globals), not in Node
+    files: ['ai-sim/ws-e2e.mjs'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: { ...globals.node, ...globals.browser },
+    },
+  },
+  {
+    // the server-authoritative WS server (Node + ws)
+    files: ['server/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: { ...globals.node, WebSocket: 'readonly' },
+    },
+  },
 ];

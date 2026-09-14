@@ -2,7 +2,7 @@ import {
   game, LAPS, COUNTDOWN_MS, INTERP_DELAY, N_SAMPLES,
   FELL_MIN_HEIGHT, FELL_PENALTY, ITEM_RESPAWN,
 } from './config.js';
-import { RelaySession } from './relaynet.js';
+import { WSSession, wsUrl } from './wsnet.js';
 import { FrameRing, sampleState } from './interp.js';
 import { TRACKS } from './tracks.js';
 import { selectTrack, samples, trackLen } from './track.js';
@@ -60,30 +60,31 @@ export function createNet2p(ctx) {
   function sessionCbs() {
     return {
       onOpen: () => {
-        setStatus('CONNECTED');
+        setStatus('SERVER CONNECTED');
         audio.beep(880);
-        if (role() === 'host') { net.sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn()); hostMsg.textContent = 'P2 connected! Pick a track, then press START RACE.'; }
+        if (role() === 'host') { hostMsg.textContent = 'Waiting for a joiner — send them the code (or QR).'; }
         if (role() === 'join') { setJoinUi('connected'); joinMsg.textContent = 'Connected. Now just wait — the host starts the race.'; }
+      },
+      onPeerJoined: () => {
+        if (role() !== 'host') return;
+        if (net && net.isWS) net.sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn());
+        hostMsg.textContent = 'JOINER CONNECTED — pick a track, then press START RACE.';
       },
       onStatus: s => {
         const label = {
-          'standby': 'NO PEER',
-          'awaiting-peer': 'WAITING FOR P2…',
-          'awaiting-host': 'WAITING FOR HOST…',
-          'connected': 'CONNECTED',
-          'open': 'CONNECTED',
-          'closed': 'P2 LOST',
-          'failed': 'P2 LOST',
+          'connecting': 'CONNECTING…',
+          'online': 'SERVER CONNECTED',
+          'offline': (game.netMode === 2 ? 'SERVER OFFLINE' : ''),
         }[s];
         if (label) setStatus(label);
-        if (s === 'failed' || s === 'closed') {
-          const hint = 'CONNECTION LOST/FAILED — same Wi-Fi? Open the game via a LAN IP (not localhost) and retry.';
+        if (s === 'offline' && game.netMode === 2) {
+          const hint = 'SERVER LINK LOST — reconnect (or the room dissolved). Solo still works.';
           if (role() === 'host') hostMsg.textContent = hint;
           if (role() === 'join') joinMsg.textContent = hint;
         }
       },
       onPrep: prep => {
-        if (role() !== 'join') return;
+        if (role() !== 'join' && !wsMode()) return;
         if (prep.trackIdx !== getTrackIdx()) setTrack(prep.trackIdx); // mirror the host's pick
         netStartWall = performance.now();
         clientRing = new FrameRing();
@@ -113,12 +114,12 @@ export function createNet2p(ctx) {
         else setTrack(idx);                            // idx change: rebuild + chips via onChange
       },
       onStart: info => {
-        if (role() !== 'join') return;
+        if (role() !== 'join' && !wsMode()) return;
         clientStart(info);
       },
       onState: st => {
         // session already decoded the frame: { hostMs, echoPing, karts }
-        if (role() !== 'join') return;
+        if (role() !== 'join' && !wsMode()) return;
         if (!clientRing) return;
         const nowA = performance.now();
         const gap = lastStateAt ? nowA - lastStateAt : 100;
@@ -129,20 +130,36 @@ export function createNet2p(ctx) {
         mirrorItemPickups(st);   // boxes are deterministic locally — no wire traffic
         game.net = st;
         clientRaceBookkeeping(st);
-        // RTT readout: host echoes the ping from our latest input
-        if (st.echoPing !== lastNetInput.ping && lastNetInput.at > 0) {
+        // RTT readout: WS mode uses the session's PING/PONG RTT; the legacy
+        // echo-ping path survives for any non-WS transport
+        if (wsMode() && net.rttMs) {
+          setStatus('P2 CONNECTED · ' + net.rttMs + ' ms');
+          net.rtt = net.rttMs;
+        } else if (st.echoPing !== lastNetInput.ping && lastNetInput.at > 0) {
           const rtt = Math.round(performance.now() - lastNetInput.at);
           if (rtt > 0 && rtt < 2500) { setStatus('P2 CONNECTED · ' + rtt + ' ms'); net.rtt = rtt; }
         }
-      },    onFinish: (order, lapsMs) => {
-        if (role() !== 'join') return;
+      },    onFinish: f => {
+        if (role() !== 'join' && !wsMode()) return;
+        const order = Array.isArray(f) ? f : f.order;
+        const lapsMs = Array.isArray(f) ? null : f.laps;
         clientFinish(order, lapsMs);
       },
-      onInput: inp => { // client → host: drives the peer's kart on the sim
-        lastNetInput = { throttle: inp.throttle, steer: inp.steer, drift: inp.drift, use: !!inp.use, ping: inp.ping, at: performance.now() };
+      onInput: inp => { // server echoes our input back (the RTT readout uses the PING/PONG path)
+        if (inp) lastNetInput = { throttle: inp.throttle, steer: inp.steer, drift: inp.drift, use: !!inp.use, ping: inp.ping, at: lastNetInput.at || performance.now() };
       },
       onClose: () => onPeerLost(),
+      onPeerLost: () => onPeerLost(),
     };
+  }
+
+  // WSSession registers callbacks explicitly (RelaySession took them at
+  // construction) — wire the same cbs object onto either shape
+  function wireSession(s) {
+    const cbs = sessionCbs();
+    for (const k of ['onOpen', 'onStatus', 'onPrep', 'onStart', 'onState', 'onFinish', 'onInput', 'onPeerLost', 'onPeerJoined', 'onClose']) {
+      if (cbs[k] && s[k]) s[k](cbs[k]);
+    }
   }
 
   function onPeerLost() {
@@ -175,15 +192,16 @@ export function createNet2p(ctx) {
     }
   }
 
-  const apiBase = () => {
-    const m = new URLSearchParams(location.search).get('api');
-    if (m) return m.replace(/\/$/, '');
-    // same origin (production): the app's own directory — the game sits at
-    // <base>/index.html and the relay at <base>/api/, so a bare '' would
-    // hit the domain root and 404 in a subdirectory deploy (e.g. /microkarts/)
+  const wsMode = () => !!(net && net.isWS);
+  const mySlot = () => net ? (net.slot >= 0 ? net.slot : (role() === 'join' ? 1 : 0)) : 0;
+
+  const httpBase = () => {
+    // the lobby/rooms HTTP endpoint sits on the same origin as the ws server
+    const q = new URLSearchParams(location.search).get('ws');
     try {
-      return location.pathname.replace(/index\.html$/, '').replace(/\/$/, '');
-    } catch { return ''; }   // headless: no location — no relay
+      if (q) return q.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://').replace(/\/ws$/, '');
+      return location.origin;
+    } catch { return ''; }   // headless: no location
   };
 
   function beginHostSession() {
@@ -191,12 +209,21 @@ export function createNet2p(ctx) {
     host.t = 0; host.acc = 0;
     lastNetInput = { throttle: 0, steer: 0, drift: false, use: false, ping: -1, at: 0 };
     ctx.ensureP2().netOn = false; // peer's kart is AI-free until the race starts
-    net = new RelaySession('host', sessionCbs(), apiBase());
-    net.hostStart('HOST', getTrackIdx()).then(code => {
-      hostCode.textContent = code.replace(/^MKR-/, '');
-      try { drawQr(el('hostCodeQr'), location.origin + location.pathname + '?join=' + code.replace(/^MKR-/, '')); el('hostCodeQr').classList.remove('hidden'); } catch { /* QR is optional decoration */ }
-      hostMsg.textContent = 'Send this room code to player 2 (or let them scan the QR). They pick JOIN and type it — no shared network needed.';
-    }).catch(err => { hostMsg.textContent = 'RELAY UNAVAILABLE — ' + err.message; });
+    net = new WSSession(wsUrl());
+    net.role = 'host';
+    net.active = true;
+    wireSession(net);
+    startBtn.textContent = 'CONNECTING…';
+    net.open('H', 'HOSTY').then(ok => {
+      if (!ok) {
+        startBtn.textContent = 'START RACE';
+        hostMsg.textContent = 'MULTIPLAYER SERVER UNREACHABLE — solo still works; or ?ws=ws://host:port/ws to point at one.';
+        return;
+      }
+      hostCode.textContent = net.code;
+      try { drawQr(el('hostCodeQr'), location.origin + location.pathname + '?join=' + net.code); el('hostCodeQr').classList.remove('hidden'); } catch { /* QR is optional decoration */ }
+      hostMsg.textContent = 'Send this room code to player 2 (or let them scan the QR). They pick JOIN and type it — the server runs the race for both of you.';
+    });
   }
 
   // join-side menu UI: 'joining' = code entry + lobby visible; 'connected' =
@@ -208,7 +235,7 @@ export function createNet2p(ctx) {
     row.style.display = state === 'connected' ? 'none' : '';
     if (lobby) lobby.style.display = state === 'connected' ? 'none' : '';
   }
-  const joinConnected = () => net && net.role === 'join' && net.active && net.open;
+  const joinConnected = () => net && net.role === 'join' && net.active && net.connected;
 
   function beginJoinSession() {
     if (game.netMode === 2 && net && net.role === 'join' && net.active) {
@@ -226,28 +253,33 @@ export function createNet2p(ctx) {
   }
 
   function joinRoom() {
-    const code = el('joinInField').innerText.trim();
+    const code = el('joinInField').innerText.trim().toUpperCase();
     if (!code) return;
     setJoinUi('joining');
     if (!net || net.role !== 'join' || !net.active) {
       if (net) net.close();
-      net = new RelaySession('join', sessionCbs(), apiBase());
+      net = new WSSession(wsUrl());
+      net.role = 'join';
+      net.active = true;
+      wireSession(net);
     }
     el('joinBtn').disabled = true;
-    joinMsg.textContent = 'Joining room ' + code.toUpperCase() + '…';
-    net.joinOffer(code).then(() => {
-      el('joinCodeEcho').textContent = code.toUpperCase();
-      joinMsg.textContent = 'Waiting for the host\'s signal… (status top-right)';
+    joinMsg.textContent = 'Joining room ' + code + '…';
+    net.open('J', 'JOINR', code).then(ok => {
       el('joinBtn').disabled = false;
-    }).catch(err => { joinMsg.textContent = 'BAD CODE — ' + err.message; el('joinBtn').disabled = false; });
+      if (!ok) { joinMsg.textContent = 'COULD NOT REACH THE SERVER — check your connection (or ?ws=ws://host:port/ws).'; return; }
+      el('joinCodeEcho').textContent = code;
+      setJoinUi('connected');
+      joinMsg.textContent = 'Connected. Now just wait — the host starts the race.';
+    });
   }
 
-  // FIND A RACE: the room list (rooms.php) — poll while in the menu
+  // FIND A RACE: the room list (the server's /rooms endpoint) — poll while in the menu
   async function refreshLobby() {
     const listEl = el('lobbyList');
     if (!listEl) return;
     try {
-      const r = await fetch(apiBase() + '/api/rooms.php');
+      const r = await fetch(httpBase() + '/rooms');
       const j = await r.json();
       const rooms = (j && j.rooms) || [];
       listEl.innerHTML = '';
@@ -316,8 +348,8 @@ export function createNet2p(ctx) {
         list[i].lapDone = m.lapDone;
         list[i].lapTimes.push((st.hostMs - clientLapMark[i]) / 1000);
         clientLapMark[i] = st.hostMs;
-        const isYou = i === list.length - 2;
-        const isP1 = i === list.length - 1;
+        const isYou = i === mySlot();
+        const isP1 = i === 0 && mySlot() !== 0;
         if (isYou && !m.raceDone) audio.lap();   // our own lap crossing
         if (isP1 && !m.raceDone) audio.beep(660); // P1 crossing (party cue)
       }
@@ -427,22 +459,24 @@ export function createNet2p(ctx) {
   function clientFinish(order, lapsMs) {
     game.state = 'finished';
     hideCountdown();
-    const list = ctx.racers();
     audio.stopMusicTimer();
-    const nameOfIdx = idx => idx === list.length - 2 ? '<b>YOU</b>' : idx === list.length - 1 ? '<b>P1</b>' : list[idx].name;
+    // names by slot — the server's roster is deterministic (P1/P2/AI-N), no
+    // wire change; `order` is the server's authoritative kart index order
+    const my = mySlot();
+    const nameOfIdx = idx => idx === my ? '<b>YOU</b>' : idx === 0 ? 'P1' : idx === 1 ? 'P2' : 'AI-' + (idx + 1);
     const rows = order.map((idx, i) => {
       const nm = nameOfIdx(idx);
-      const lap = lapsMs[idx] ? ' ' + fmt(lapsMs[idx] / 1000) : '';
+      const lap = lapsMs && lapsMs[idx] ? ' ' + fmt(lapsMs[idx] / 1000) : '';
       return (i + 1) + '. ' + nm + lap;
     });
-    const nameOf = idx => idx === list.length - 2 ? 'YOU' : idx === list.length - 1 ? 'P1' : list[idx].name;
+    const nameOf = idx => idx === my ? 'YOU' : idx === 0 ? 'P1' : idx === 1 ? 'P2' : 'AI-' + (idx + 1);
     resultsEl.innerHTML = podiumHtml(order, nameOf) + rows.join(' &nbsp;&nbsp; ');
     resultsEl.style.display = '';
     celebrate();   // confetti burst (resultsfx.js)
-    const place = order.indexOf(list.length - 2) + 1;
+    const place = order.indexOf(my) + 1;
     const placeMsg =
       place === 1 ? 'YOU WRECKED THE TABLE!' :
-      'YOU WERE ' + place + ' OF ' + list.length;
+      'YOU WERE ' + place + ' OF ' + order.length;
     showOverlay('RACE COMPLETE', placeMsg, 'WAIT FOR HOST', false, 'HOST CAN RACE AGAIN');
   }
 
@@ -512,6 +546,7 @@ export function createNet2p(ctx) {
 
   return {
     role, selfKart, host, broadcast,
+    wsMode, mySlot,
     net: () => net,
     input: () => lastNetInput,
     inputNow: (t, s, d, u) => net && net.sendInput && net.sendInput(t, s, d, u),
@@ -519,6 +554,6 @@ export function createNet2p(ctx) {
     lastLagMs: () => lastLagMs,
     resetClientItems: () => { clientItemSeen = ctx.racers().map(() => false); },
     applyClientState,
-    beginHostSession, joinRoom, joinAuto, onPeerLost, refreshLobby, apiBase,
+    beginHostSession, joinRoom, joinAuto, onPeerLost, refreshLobby,
   };
 }

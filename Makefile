@@ -1,6 +1,6 @@
 PORT ?= 8080
 
-.PHONY: install lint imports serve sim simwatch netsim screens qrcheck deploy
+.PHONY: install lint imports serve sim simwatch netsim wscheck wse2e screens qrcheck deploy
 
 # production deploy target (ajo.es/microkarts) — override to deploy elsewhere
 DEPLOY_HOST ?= ajo@cpanel.optimizacionweb.es
@@ -10,7 +10,7 @@ install:
 	npm install
 
 lint: install
-	npx eslint src/ ai-sim/
+	npx eslint src/ ai-sim/ server/
 
 # static import-graph check: every relative import must name an export the
 # target declares — catches browser-only modules (main.js, hud.js, …) that
@@ -31,13 +31,17 @@ simwatch: install
 netsim: install
 	node --import ./ai-sim/stub.js ai-sim/net-sim.mjs
 
-# relay: full client<->relay round-trip (real PHP on :8123 if up, else the in-process contract mock)
-relaycheck:
-	node ai-sim/relay-check.mjs
+# ws server gate: spawns the real Node server in-process and drives it with a
+# WS client (health, lobby, create/join, handshake, start, state 30 Hz,
+# input → server-authoritative control, PING/PONG, forced finish, BYE,
+# host-left dissolve, room-full kick)
+wscheck:
+	WS_TEST=1 node ai-sim/ws-check.mjs
 
-# relay E2E: two real browser pages race over the PHP relay (needs `make serve` + podman PHP; SKIPs otherwise)
-relaye2e:
-	node ai-sim/relay-e2e.mjs
+# ws E2E: two real browser pages race over the local Node server (needs
+# `make serve` + the server; SKIPs otherwise)
+wse2e:
+	WS_E2E_PORT=8317 node ai-sim/ws-e2e.mjs
 
 # Playwright render check: boots the game in headless Chromium (menu / 2P /
 # countdown / race, desktop + phone viewports), captures into screens/ and
