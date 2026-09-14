@@ -34,6 +34,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - run: npm ci  # the playwright *package* (npx below only fetches the browser binary)
       - run: npx playwright install --with-deps chromium
       - name: Screenshots (menu + 2P + countdown + race, desktop & phone)
         run: npm run screens
