@@ -92,6 +92,15 @@
     border:1px solid rgba(255,200,120,.4); border-radius:8px; padding:10px 12px; margin:6px 0 12px;
     min-height:44px; color:#ffe9c9; max-height:110px; overflow-y:auto; outline:none; text-align:left; }
   .npaste:focus { border-color:#ffd07a; }
+  #joinConnected { display:flex; gap:14px; align-items:center; padding:14px 16px; margin:10px 0;
+    background:rgba(40,120,60,.18); border:1.5px solid rgba(120,220,140,.55); border-radius:10px;
+    animation: connGlow 1.6s ease-in-out infinite; }
+  #joinConnected.hidden { display:none; }
+  .conn-dot { width:14px; height:14px; border-radius:50%; background:#7fe39b; flex:none;
+    box-shadow:0 0 8px #7fe39b; animation: connBlink 1.2s ease-in-out infinite; }
+  .conn-txt { display:flex; flex-direction:column; gap:2px; }
+  @keyframes connBlink { 0%,100% { opacity:1; } 50% { opacity:.35; } }
+  @keyframes connGlow { 0%,100% { border-color:rgba(120,220,140,.55); } 50% { border-color:rgba(120,220,140,.9); } }
   .btn.sm { font-size:13px; padding:9px 20px; }
   #netStatus { position:fixed; top:110px; right:20px; z-index:7; font-size:11px; letter-spacing:2px;
     color:#ff9d6b; background:rgba(12,8,5,.5); padding:6px 12px; border-radius:8px; display:none; }
@@ -238,9 +247,18 @@
         </div>
       </div>
       <div id="joinPanel" style="display:none">
-        <div class="trk-label">JOIN A ROOM — TYPE THE 4-CHAR CODE (OR SCAN THE HOST'S QR)</div>
-        <div contenteditable="true" class="npaste" id="joinInField"></div>
-        <button class="btn sm" id="joinBtn">JOIN ROOM</button>
+        <div id="joinConnected" class="hidden">
+          <div class="conn-dot"></div>
+          <div class="conn-txt">
+            <div class="trk-label">CONNECTED — room <span id="joinCodeEcho">—</span></div>
+            <div class="sub">waiting for the host to pick the track + press START…</div>
+          </div>
+        </div>
+        <div id="joinJoinRow">
+          <div class="trk-label">JOIN A ROOM — TYPE THE 4-CHAR CODE (OR SCAN THE HOST'S QR)</div>
+          <div contenteditable="true" class="npaste" id="joinInField"></div>
+          <button class="btn sm" id="joinBtn">JOIN ROOM</button>
+        </div>
         <div class="sub" id="joinMsg">…</div>
       </div>
       <div id="lobbyWrap">

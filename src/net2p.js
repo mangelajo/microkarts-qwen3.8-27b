@@ -55,7 +55,7 @@ export function createNet2p(ctx) {
         setStatus('CONNECTED');
         audio.beep(880);
         if (role() === 'host') { net.sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn()); hostMsg.textContent = 'P2 connected! Pick a track, then press START RACE.'; }
-        if (role() === 'join') joinMsg.textContent = 'CONNECTED! Now wait — the host picks the track and starts the race.';
+        if (role() === 'join') { setJoinUi('connected'); joinMsg.textContent = 'Connected. Now just wait — the host starts the race.'; }
       },
       onStatus: s => {
         const label = {
@@ -142,6 +142,10 @@ export function createNet2p(ctx) {
     const s = net; net = null;
     if (s && !s.closed) s.close(); // fires onClose → re-enters onPeerLost, guarded by s.closed
     host.acc = 0; lastNetInput.ping = -1;
+    if (s && s.role === 'join') {   // joiner lost the link: back to code entry
+      setJoinUi('joining');
+      joinMsg.textContent = 'CONNECTION LOST — enter the room code again (or re-scan the QR).';
+    }
     lastNetInput = { throttle: 0, steer: 0, drift: false, use: false, ping: -1, at: 0 };
     const p = ctx.p2Ref(); if (p) p.netOn = false;
     ctx.syncRosterVisibility();
@@ -181,19 +185,36 @@ export function createNet2p(ctx) {
     }).catch(err => { hostMsg.textContent = 'RELAY UNAVAILABLE — ' + err.message; });
   }
 
+  // join-side menu UI: 'joining' = code entry + lobby visible; 'connected' =
+  // big CONNECTED banner only (input box, JOIN button + race list go away)
+  function setJoinUi(state) {
+    const conn = el('joinConnected'), row = el('joinJoinRow'), lobby = el('lobbyWrap');
+    if (!conn || !row) return;
+    conn.classList.toggle('hidden', state !== 'connected');
+    row.style.display = state === 'connected' ? 'none' : '';
+    if (lobby) lobby.style.display = state === 'connected' ? 'none' : '';
+  }
+  const joinConnected = () => net && net.role === 'join' && net.active && net.open;
+
   function beginJoinSession() {
-    if (game.netMode === 2 && net && net.role === 'join' && net.active) return;
+    if (game.netMode === 2 && net && net.role === 'join' && net.active) {
+      setJoinUi(joinConnected() ? 'connected' : 'joining');   // re-click: keep the current state
+      return;
+    }
     if (net) net.close();
     startBtn.textContent = 'WAITING FOR HOST…';
+    ctx.ensureP2();   // peer kart must exist before netMode=2 — racers() returns it, and a null entry would crash the frame loops
     game.netMode = 2;
     setHostRoster(game.roster);
     joinMsg.textContent = 'Type the 4-char room code (or scan the host\'s QR).';
     el('joinInField').innerText = '';
+    setJoinUi('joining');
   }
 
   function joinRoom() {
     const code = el('joinInField').innerText.trim();
     if (!code) return;
+    setJoinUi('joining');
     if (!net || net.role !== 'join' || !net.active) {
       if (net) net.close();
       net = new RelaySession('join', sessionCbs(), apiBase());
@@ -201,7 +222,8 @@ export function createNet2p(ctx) {
     el('joinBtn').disabled = true;
     joinMsg.textContent = 'Joining room ' + code.toUpperCase() + '…';
     net.joinOffer(code).then(() => {
-      joinMsg.textContent = 'JOINED — waiting for the host to pick a track + start (status top-right).';
+      el('joinCodeEcho').textContent = code.toUpperCase();
+      joinMsg.textContent = 'Waiting for the host\'s signal… (status top-right)';
       el('joinBtn').disabled = false;
     }).catch(err => { joinMsg.textContent = 'BAD CODE — ' + err.message; el('joinBtn').disabled = false; });
   }
@@ -242,7 +264,7 @@ export function createNet2p(ctx) {
       listEl.appendChild(d);
     }
   }
-  setInterval(() => { if (game.state === 'menu') refreshLobby(); }, 4000);
+  setInterval(() => { if (game.state === 'menu' && !joinConnected()) refreshLobby(); }, 4000);
 
   function clientStart(info) {
     ctx.ensureP2();

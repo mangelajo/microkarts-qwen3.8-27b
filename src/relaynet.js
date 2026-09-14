@@ -103,9 +103,9 @@ export class RelaySession {
   _startAliveWatch() {
     if (this._aliveTimer || this.role !== 'join') return;
     this._aliveTimer = setInterval(() => {
-      if (this.active && this.open &&
+      if (this.active && this.open && !this.closedFired &&
           performance.now() - this.lastHostFrameAt > 10000) {
-        this._status('closed');
+        this.close();   // full close path: status + onClose → onPeerLost restores the menu
       }
     }, 2000);
   }

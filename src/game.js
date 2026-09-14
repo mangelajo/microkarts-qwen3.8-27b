@@ -846,11 +846,13 @@ function animate() {
   // explosion on floor-hit: every kart that just started its fell-off stun
   if (role !== 'join') {
     for (let i = 0; i < list.length; i++) {
-      if (list[i].fellOff && !prevFell[i]) {
-        expFx.boom(list[i].pos.x, list[i].pos.y, list[i].pos.z);
+      const k = list[i];
+      if (!k || !k.pos) continue;
+      if (k.fellOff && !prevFell[i]) {
+        expFx.boom(k.pos.x, k.pos.y, k.pos.z);
         audio.explode();
       }
-      prevFell[i] = !!list[i].fellOff;
+      prevFell[i] = !!k.fellOff;
     }
   }
   expFx.update(dt);

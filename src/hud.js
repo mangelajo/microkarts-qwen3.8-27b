@@ -71,8 +71,8 @@ export function setMode(m) {
   hostPanel.style.display = m === 'host' ? '' : 'none';
   joinPanel.style.display = m === 'join' ? '' : 'none';
   rosterRow.style.display  = m === 'host' ? '' : 'none';
-  if (m === 'join') { // fresh join attempt
-    joinInField.innerText = '';
+  if (m === 'join' && el('joinConnected').classList.contains('hidden')) {
+    joinInField.innerText = '';   // fresh join attempt (keep the CONNECTED banner if already in)
   }
   if (m !== 'host') el('hostCodeQr').classList.add('hidden');
   netPanel.classList.toggle('hidden', m === 'solo');
