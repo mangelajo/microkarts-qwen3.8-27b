@@ -55,3 +55,4 @@ qrcheck: install
 deploy:
 	scp index.html $(DEPLOY_HOST):$(DEPLOY_DIR)/
 	scp src/* $(DEPLOY_HOST):$(DEPLOY_DIR)/src/
+	scp -r api $(DEPLOY_HOST):$(DEPLOY_DIR)/
