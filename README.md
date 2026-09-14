@@ -120,16 +120,26 @@ take in the catalogue. All track shapes are validated headlessly.
   and a hard graze makes it hop (cosmetic only, `src/track.js` `tickProps`, verified in `make netsim`)
 - Fully synthesized audio (`src/audio.js`): engine, tire skids, crashes, lap &
   countdown SFX, one chiptune per track (108–152 BPM depending on track)
-- **2-player LAN** over WebRTC DataChannel (no server): host or join from the
-  menu, pair by pasting codes (`MKR-…`), then race 2 humans + 2 AI (or 1 v 1).
-  The host runs the authoritative fixed-step sim and streams state frames at
-  60 Hz; the joiner renders with 50 ms interpolation and sends input at 60 Hz.
-  Protocol + simulation are verified headlessly (`make netsim`)
-- **QR pairing** — the pairing codes can be scanned instead of pasted: the 2P menu
-  tab shows a big canvas QR (280 px) encoding the join URL (`…?join=CODE`), the joiner's
-  screen shows a QR encoding their code, and opening the join URL on any device
+- **2-player over the relay** (no shared network, no SDP pasting): the 2P menu
+  tab creates a 4-char room code (a QR is drawn for it) or lists live rooms
+  from the lobby (“FIND A RACE”); the joiner types the code (or scans the
+  QR — `?join=CODE` auto-fills + connects). Transport is a dumb long-poll
+  relay (`api/relay.php` + `src/relaynet.js` `RelaySession`, a drop-in for the
+  old WebRTC session): frames ride raw in POST bodies <8 KB and come back
+  base64 in the long-poll batch; the server never decodes them — the client
+  filters by frame type byte + `from` identity. The room queue is a persistent
+  backlog, so a joiner polls from seq 0 and backfills everything (start/state
+  frames sent before it arrived). The host runs the authoritative fixed-step
+  sim and streams state frames at 60 Hz; the joiner renders with 50 ms
+  interpolation and sends input at 60 Hz. `?api=URL` points the client at a
+  dev relay (production = same origin). Verified headlessly by `make netsim`
+  (mock of the same contract) and `make relaycheck` (real PHP when podman is
+  up, mock otherwise); a full two-browser race is `make relaye2e`
+- **QR pairing** — the room code can be scanned instead of typed: the 2P menu
+  tab shows a big canvas QR (280 px) encoding the join URL (`…?join=CODE`), and
+  opening the join URL on any device
   auto-fills the code, pre-arms the connection and jumps to the 2P tab (`?join=` is
-  stripped from the address bar after boot). The QR is drawn by a self-contained
+  stripped from the address bar after boot, `?api=` kept). The QR is drawn by a self-contained
   encoder (`src/qr.js`, ~290 lines, zero assets / zero dependencies): auto
   version 1–40, byte mode, level-M Reed-Solomon (16- or 18-bit generator),
   block interleave, all 8 masks with penalty selection, format + version info.
@@ -338,10 +348,11 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/items.js`    | Item boxes: seeded layout + weighted rolls, pickups, wall projectiles, rubber band (pure) |
 | `src/touch.js`    | Mobile "pull" joystick: first finger seeds a virtual stick, drag = drive vector |
 | `src/textures.js` | Procedural canvas textures (wood table, sea, …) |
-| `src/net.js`      | 2P wire protocol (enc/dec) + `NetSession` (pairing, DataChannel routing) |
+| `src/net.js`      | 2P wire protocol (u8 frame enc/dec) — pure, no transport |
+| `src/relaynet.js` | Relay transport (`RelaySession`, drop-in for the 2P session): long-poll loop with backoff, hello handshake, room code + lobby, keep-alive watchdog — relay-only frame type `T_HELLO` (0x41) |
 | `src/interp.js`   | Client-side interpolation ring + sampler (50 ms delay, angular wrap) |
 | `src/game.js`     | Game state machine: karts, input, race lifecycle, cameras, the `animate()` loop (solo/host sim + client pass) — boots the `net2p` session |
-| `src/net2p.js`    | 2P net orchestration: `NetSession` host/join lifecycle, code pairing, client render mirror (interp, lap/finish bookkeeping, item-pickup mirror) |
+| `src/net2p.js`    | 2P net orchestration: `RelaySession` host/join lifecycle, room code + QR, lobby (FIND A RACE), client render mirror (interp, lap/finish bookkeeping, item-pickup mirror) |
 | `src/hud.js`      | DOM HUD + overlays, 2P mode/roster pickers + net panels |
 | `src/minimap.js`  | HUD minimap: track outline + racer dots + heading arrow |
 | `src/ghost.js`    | Best-lap `localStorage` store + ghost-kart playback |
@@ -355,6 +366,11 @@ take in the catalogue. All track shapes are validated headlessly.
 | `ai-sim/watch.mjs`  | `make simwatch` — re-runs the AI bench on every change in `src/` + `ai-sim/` |
 | `ai-sim/screens.mjs` | `make screens` — Playwright render check: boots the game in headless Chromium (desktop + phone), captures menu/2P/countdown/race + a night-track race, fails on any page JS error |
 | `ai-sim/qr-check.mjs` | `make qrcheck` — QR encoder gate: structural checks + full zigzag/RS decode (7 versions × 8 masks) + exact-matrix fixture |
+| `ai-sim/relay-check.mjs` | `make relaycheck` — full client↔relay round-trip (real PHP on :8123 when up, in-process contract mock otherwise) |
+| `ai-sim/relay-e2e.mjs` | `make relaye2e` — two real browser pages race over the relay (SKIPs when serve/PHP are down) |
+| `api/relay.php` | Relay: per-room message queue over long-poll — raw POST bodies <8 KB come back base64; the server never decodes frames (dumb forwarder) |
+| `api/rooms.php` | Lobby: room heartbeats (host, every 5 s) + fresh-room listing (≤20 s) |
+| `api/rank.php` | Global top-5 per track (rate-limited 1/10 s per name+track) |
 
 ## Tuning
 

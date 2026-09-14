@@ -55,7 +55,6 @@ export function hideCountdown() {
 const modeRow = el('modeRow');
 export const hostCode  = el('hostCode');
 export const joinInField  = el('joinInField');
-export const joinOutCode = el('joinOutCode');
 export const netStatus = el('netStatus');
 export const rosterRow = el('rosterRow');
 export const hostMsg   = el('hostMsg');
@@ -74,10 +73,6 @@ export function setMode(m) {
   rosterRow.style.display  = m === 'host' ? '' : 'none';
   if (m === 'join') { // fresh join attempt
     joinInField.innerText = '';
-    joinOutCode.textContent = '—';
-    joinOutCode.classList.add('hidden');
-    el('joinOutCodeQr').classList.add('hidden');
-    el('joinOutLabel').style.display = 'none';
   }
   if (m !== 'host') el('hostCodeQr').classList.add('hidden');
   netPanel.classList.toggle('hidden', m === 'solo');
@@ -122,11 +117,10 @@ export function setHostRoster(r) {
 export function getHostRoster() { return hostRoster; }
 
 
-export function initModePicker(onMode, onHostAnswer, onJoinSend, onRoster) {
+export function initModePicker(onMode, onJoinSend, onRoster) {
   for (const c of modeRow.children) {
     c.addEventListener('click', e => { onMode(c.dataset.mode); e.target.blur(); });
   }
-  el('answerBtn').addEventListener('click', e => { onHostAnswer(); e.target.blur(); });
   el('joinBtn').addEventListener('click', e => { onJoinSend(); e.target.blur(); });
   for (const c of rosterRow.children) {
     c.addEventListener('click', e => { onRoster(c.dataset.roster); e.target.blur(); });
@@ -139,11 +133,6 @@ export function initModePicker(onMode, onHostAnswer, onJoinSend, onRoster) {
       '<div><kbd>PULL ↓</kbd>Brake · reverse</div>' +
       '<div><kbd>FULL LOCK</kbd>Drift · release = boost</div>';
   }
-  joinOutCode.addEventListener('click', () => {
-    if (joinOutCode.textContent === '—') return;
-    try { navigator.clipboard.writeText(joinOutCode.textContent); joinMsg.textContent = 'Copied! Paste it in the host STEP 2 box.'; }
-    catch { joinMsg.textContent = 'Select + copy the code, then paste it on the host’s screen.'; }
-  });
 }
 
 

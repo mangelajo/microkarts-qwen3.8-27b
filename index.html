@@ -228,7 +228,7 @@
     <div class="sub" id="multiHint">PICK A MODE — HOST THE RACE, OR JOIN WITH THE HOST'S CODE</div>
     <div class="net hidden" id="netPanel">
       <div id="hostPanel">
-        <div class="trk-label">STEP 1 — SEND THIS CODE TO PLAYER 2 (CLICK TO COPY, OR P2 SCANS THE QR)</div>
+        <div class="trk-label">ROOM CODE — SHARE IT (OR P2 SCANS THE QR)</div>
         <div class="ncode" id="hostCode" title="Click to copy">—</div>
         <canvas id="hostCodeQr" class="qr hidden"></canvas>
         <div class="sub" id="hostMsg">Waiting for player 2…</div>
@@ -236,19 +236,16 @@
           <button type="button" class="tchip sel" data-roster="2ai">2 HUMANS + 2 AI</button>
           <button type="button" class="tchip" data-roster="1v1">1 v 1</button>
         </div>
-        <br/>
-        <div class="trk-label">STEP 2 — PASTE P2'S CODE HERE</div>
-        <div contenteditable="true" class="npaste" id="answerField"></div>
-        <button class="btn sm" id="answerBtn">CONNECT — PASTE P2'S CODE</button>
       </div>
       <div id="joinPanel" style="display:none">
-        <div class="trk-label">STEP 1 — PASTE THE HOST'S CODE</div>
+        <div class="trk-label">JOIN A ROOM — TYPE THE 4-CHAR CODE (OR SCAN THE HOST'S QR)</div>
         <div contenteditable="true" class="npaste" id="joinInField"></div>
-        <button class="btn sm" id="joinBtn">CONNECT — GET MY CODE</button>
-        <div class="trk-label" id="joinOutLabel" style="display:none; margin-top:14px">STEP 2 — YOUR CODE: PASTE IT ON THE HOST'S SCREEN (CLICK TO COPY, OR THE HOST SCANS THE QR)</div>
-        <div class="ncode hidden" id="joinOutCode" title="Click to copy">—</div>
-        <canvas id="joinOutCodeQr" class="qr hidden"></canvas>
+        <button class="btn sm" id="joinBtn">JOIN ROOM</button>
         <div class="sub" id="joinMsg">…</div>
+      </div>
+      <div id="lobbyWrap">
+        <div class="trk-label">FIND A RACE</div>
+        <div id="lobbyList"><div class="sub">loading…</div></div>
       </div>
     </div>
       </div>

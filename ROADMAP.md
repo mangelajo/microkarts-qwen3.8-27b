@@ -10,14 +10,49 @@ flat tracks stay flat.
 
 - 8 procedural tracks (4 flat, 4 elevated), day/night sky, procedural rain,
   fully synthesized reactive music
-- 1P / 2P WebRTC (QR pairing, `?join=` deep link), host-authoritative sim
+- 1P / 2P over the relay (`api/relay.php` + `RelaySession`: 4-char room code,
+  QR pairing, `?join=` deep link, FIND A RACE lobby, global rankings via
+  `api/rank.php`), host-authoritative sim — WebRTC/LAN pairing removed
 - Drift → boost → pads + perfect drift; 4 item-box rewards (turbo / timed
   rubber / wall / sticky candy); sugar hazards; corner deltas
 - Ghost + top-5 rankings; replays; daily challenge; 5-tab menu incl. track
   editor; gamepad + on-screen mobile controls; haptic charge pulses;
   9:16 portrait camera pass; instanced prop rendering
 
-## Phase 9 — Four karts, four players
+## Phase 9 — Network server (cPanel: PHP now, Node later)
+
+- [x] **Online rooms + relay (PHP path)** — shipped as the pure-PHP
+  long-poll relay (the cPanel box has no Node; the user chose PHP first,
+  Node later): `api/relay.php` (per-room file queue, 200 ms tick, ≤20 s
+  hold, raw POST bodies <8 KB → base64 batch; the server never decodes
+  frames) + `api/rooms.php` (heartbeated lobby). `src/relaynet.js`
+  `RelaySession` is a drop-in for the old WebRTC session (same cbs + send
+  surface — the `net2p.js` orchestration is untouched); the WebRTC/LAN
+  path was removed, 2P is relay-only. The 2P tab: room code + QR, type-in
+  join, FIND A RACE lobby; `?join=CODE` deep-link auto-connects (`?api=`
+  kept for dev relays). The queue is a persistent backlog — a joiner polls
+  from seq 0 and backfills frames sent before it arrived. Gaps found +
+  fixed while wiring: PHP `filesize()` stat staleness inside mod_php
+  workers (fixed with `clearstatcache()`), mtime-granular long-poll
+  detection (replaced with size-based), host senders gated on peer-hello
+  (now valid from room registration — the backlog makes late join catch up).
+  `make relaycheck` (real PHP when podman :8123 is up, in-process contract
+  mock otherwise), `make relaye2e` (two real browser pages race over the
+  relay); `make netsim` covers the contract mock round-trip. The Node
+  `ws` transport remains the follow-up (cPanel “Setup Node.js® App”).
+- [x] **Global rankings (PHP)** — `api/rank.php` stores a top-5 per track
+  (POST name + track + ms, rate-limited 1/10 s per name+track, JSON file)
+  and GETs the board; `rankings.js` merges the global entries (name
+  shown) with the local board and submits best laps fire-and-forget.
+  `make relaycheck` covers the POST→GET round-trip.
+- [ ] **Server-authoritative 4-player race** — the sim is pure JS and
+  already headless-safe (`ai-sim` proves it), so a per-room Node process
+  can run `simulateTick` + AI fill and broadcast state frames: up to 4
+  humans over the internet, no host privileges, no NAT. The Phase 10
+  4-player item then becomes an online mode. Requires the Node app
+  (the PHP path stays host-authoritative as the fallback).
+
+## Phase 10 — Four karts, four players
 
 - [ ] **4-player races** — the state frame is already length-derived
   (`makeStateEncoder(kartN)` / `decodeState(d, kartN)` infer the stride from
@@ -34,7 +69,7 @@ flat tracks stay flat.
   (1P / 2P / 3P / 4P, AI fills the rest), persisted like the other menu
   choices; screens capture all four roster states on phone + desktop.
 
-## Phase 10 — World expansion
+## Phase 11 — World expansion
 
 - [ ] **Reverse mode** — a REVERSE chip on the track picker inverts the
   spline (free 8 → 16 track content); pad / hazard / prop / puddle / corner
@@ -53,7 +88,7 @@ flat tracks stay flat.
   flat tracks are unaffected (the flat invariant stays bit-identical);
   `make netsim` covers launch / airtime / re-stick.
 
-## Phase 11 — Modes
+## Phase 12 — Modes
 
 - [ ] **Time trial** — a TIME TRIAL button on the RACE page: 1 lap,
   ghost-only (no AI, no rubber band), the lap posts straight to rankings +
@@ -70,7 +105,7 @@ flat tracks stay flat.
   "who's in front" HUD already exists; `make netsim` covers the start
   state.
 
-## Phase 12 — Feel & juice
+## Phase 13 — Feel & juice
 
 - [ ] **Hit-stop + shake pass** — a 40 ms hit-stop (sim + render freeze)
   on wall-slam and the floor-hit explosion, plus a screen-shake curve
@@ -91,7 +126,7 @@ flat tracks stay flat.
   filter): pure additive draw pass, energy 0 = flat ring; `make netsim`
   smoke-tests the setter, screens capture an energy>0 ring.
 
-## Phase 13 — Persistence & sharing (localStorage, no server)
+## Phase 14 — Persistence & sharing (localStorage, no server)
 
 - [ ] **Track editor: save + share** — the Phase 7 follow-up: pad
   placement, localStorage save (per track), and a `?track=` deep link
@@ -105,7 +140,7 @@ flat tracks stay flat.
   roster / camera FOV persist across boots (localStorage, one key,
   versioned). `make netsim` covers a fake-store round-trip.
 
-## Phase 14 — Performance
+## Phase 15 — Performance
 
 - [ ] **Adaptive pixel ratio** — the Phase 8 follow-up: drop the renderer
   pixel ratio to 0.75× on a sustained <45 fps (3 s moving average), restore
@@ -125,8 +160,9 @@ flat tracks stay flat.
   is a protocol re-design, not an extension.
 - **Asset-based content** — the zero-asset rule is a feature (instant load,
   no CDN); everything stays procedural.
-- **Server backend / matchmaking / accounts** — localStorage + WebRTC
-  pairing stays the whole stack; rankings / ghost / share-a-lap are
-  local-or-brag by design.
+- **Accounts / asset pipelines / CDNs** — the server (Phase 9) is a thin
+  relay + optional room sim: no sign-up, no stored profiles; the
+  zero-asset rule is a feature (instant load), everything stays
+  procedural. Share-a-lap stays a brag string, not a validation.
 - **Full 3D physics** — still a 2.5D table: y comes from the spline, no
   rigid-body world.

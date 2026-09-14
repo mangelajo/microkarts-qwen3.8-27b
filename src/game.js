@@ -246,11 +246,13 @@ const n2 = createNet2p({
 
 // QR pairing (P2's phone): a scanned ?join=CODE opens straight into the
 // JOIN flow — mode selected, code pre-filled, connect kicked off. The
-// param is consumed so a reload doesn't re-fire the handshake.
+// param is consumed so a reload doesn't re-fire the handshake — but
+// ?api= (the relay base) is KEPT, or the joiner would hit same-origin.
 try {
   const joinParam = new URLSearchParams(location.search).get('join');
   if (joinParam) {
-    history.replaceState('', '', location.pathname); // drop ?join= so a reload doesn't re-fire the handshake
+    const apiParam = new URLSearchParams(location.search).get('api');
+    history.replaceState('', '', location.pathname + (apiParam ? '?api=' + encodeURIComponent(apiParam) : ''));
     n2.joinAuto(joinParam);
     setMenuPage('multi'); // show the pairing UI (code pre-filled, connect in flight)
   }
@@ -853,5 +855,8 @@ function animate() {
   expFx.update(dt);
   renderer.render(scene, camera);
 }
+
+/* Read-only E2E hook for the Playwright gates (no-op in headless Node). */
+if (typeof window !== 'undefined') window.__mkr = { game, n2 };
 
 animate();

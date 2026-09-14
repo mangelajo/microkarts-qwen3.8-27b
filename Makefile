@@ -31,6 +31,14 @@ simwatch: install
 netsim: install
 	node --import ./ai-sim/stub.js ai-sim/net-sim.mjs
 
+# relay: full client<->relay round-trip (real PHP on :8123 if up, else the in-process contract mock)
+relaycheck:
+	node ai-sim/relay-check.mjs
+
+# relay E2E: two real browser pages race over the PHP relay (needs `make serve` + podman PHP; SKIPs otherwise)
+relaye2e:
+	node ai-sim/relay-e2e.mjs
+
 # Playwright render check: boots the game in headless Chromium (menu / 2P /
 # countdown / race, desktop + phone viewports), captures into screens/ and
 # fails on any page JS error. One-time setup: npx playwright install chromium

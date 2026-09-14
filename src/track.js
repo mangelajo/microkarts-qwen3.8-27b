@@ -255,6 +255,7 @@ export function tickProps(dt, karts) {
   for (const p of propList) {
     const R = p.r + 1.0;
     for (const k of karts) {
+      if (!k || !k.pos) continue;   // not placed yet (menu / join-before-start)
       const dy = Math.abs(k.pos.y - p.y);
       if (dy > 2.2) continue;   // a table kart under an elevated road doesn't touch road-side props
       const dx = k.pos.x - p.x, dz = k.pos.z - p.z;

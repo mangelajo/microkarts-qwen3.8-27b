@@ -2,8 +2,9 @@ import {
   game, LAPS, COUNTDOWN_MS, INTERP_DELAY, N_SAMPLES,
   FELL_MIN_HEIGHT, FELL_PENALTY, ITEM_RESPAWN,
 } from './config.js';
-import { NetSession } from './net.js';
+import { RelaySession } from './relaynet.js';
 import { FrameRing, sampleState } from './interp.js';
+import { TRACKS } from './tracks.js';
 import { selectTrack, samples, trackLen } from './track.js';
 import { tickCorners, closeCorners, resetCorners } from './corners.js';
 import { setObstaclesOn, getObstaclesOn } from './obstacles.js';
@@ -156,74 +157,91 @@ export function createNet2p(ctx) {
     }
   }
 
-  const LAN_HINT = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-    ? '  ⚠ You opened the game via localhost — other devices can’t reach it. Open http://<your-LAN-IP>:8080 on THIS machine instead.'
-    : '';
+  const apiBase = () => {
+    const m = new URLSearchParams(location.search).get('api');
+    return m ? m.replace(/\/$/, '') : '';   // '' = same origin (production)
+  };
 
   function beginHostSession() {
     if (net) net.close();
     host.t = 0; host.acc = 0;
     lastNetInput = { throttle: 0, steer: 0, drift: false, use: false, ping: -1, at: 0 };
-    ctx.ensureP2().netOn = false; // peer's kart is AI-free until the channel opens
-    net = new NetSession('host', sessionCbs());
-    net.kartN = ctx.racers().length;
-    net.hostStart().then(code => {
-      hostCode.textContent = code;
-      try { drawQr(el('hostCodeQr'), location.origin + location.pathname + '?join=' + code); el('hostCodeQr').classList.remove('hidden'); } catch { /* QR is optional decoration */ }
-      hostMsg.textContent = 'Send this code to player 2 (or let them scan the QR), then paste their answer in STEP 2.' + LAN_HINT;
-    }).catch(err => { hostMsg.textContent = 'WEBRTC UNAVAILABLE — ' + err.message; });
+    ctx.ensureP2().netOn = false; // peer's kart is AI-free until the race starts
+    net = new RelaySession('host', sessionCbs(), apiBase());
+    net.hostStart('HOST', getTrackIdx()).then(code => {
+      hostCode.textContent = code.replace(/^MKR-/, '');
+      try { drawQr(el('hostCodeQr'), location.origin + location.pathname + '?join=' + code.replace(/^MKR-/, '')); el('hostCodeQr').classList.remove('hidden'); } catch { /* QR is optional decoration */ }
+      hostMsg.textContent = 'Send this room code to player 2 (or let them scan the QR). They pick JOIN and type it — no shared network needed.';
+    }).catch(err => { hostMsg.textContent = 'RELAY UNAVAILABLE — ' + err.message; });
   }
 
   function beginJoinSession() {
-    if (game.netMode === 2 && net && net.role === 'join') return;
+    if (game.netMode === 2 && net && net.role === 'join' && net.active) return;
     if (net) net.close();
     startBtn.textContent = 'WAITING FOR HOST…';
     game.netMode = 2;
-    net = new NetSession('join', sessionCbs());
-    net.kartN = 4;
     setHostRoster(game.roster);
-    joinMsg.textContent = "Paste the host's MKR-… code here.";
+    joinMsg.textContent = 'Type the 4-char room code (or scan the host\'s QR).';
     el('joinInField').innerText = '';
   }
 
-  function hostPasteAnswer() {
-    const code = el('answerField').innerText.trim();
-    if (!code || !net) return;
-    el('answerField').innerText = '';
-    net.hostAnswer(code).then(() => {
-      hostMsg.textContent = 'Handshake done — connecting… (same Wi-Fi?); status top-right';
-    }).catch(err => { hostMsg.textContent = 'BAD CODE — ' + err.message; });
-  }
-
-  function joinPasteOffer() {
+  function joinRoom() {
     const code = el('joinInField').innerText.trim();
     if (!code) return;
-    if (!net) net = new NetSession('join', sessionCbs());
-    net.kartN = 4;
+    if (!net || net.role !== 'join' || !net.active) {
+      if (net) net.close();
+      net = new RelaySession('join', sessionCbs(), apiBase());
+    }
     el('joinBtn').disabled = true;
-    joinMsg.textContent = 'Working…';
-    net.joinOffer(code).then(answerCode => {
-      el('joinInField').innerText = '';
-      const out = el('joinOutCode');
-      out.textContent = answerCode;
-      out.classList.remove('hidden');
-      try { drawQr(el('joinOutCodeQr'), answerCode); el('joinOutCodeQr').classList.remove('hidden'); } catch { /* QR is optional decoration */ }
-      el('joinOutLabel').style.display = '';
+    joinMsg.textContent = 'Joining room ' + code.toUpperCase() + '…';
+    net.joinOffer(code).then(() => {
+      joinMsg.textContent = 'JOINED — waiting for the host to pick a track + start (status top-right).';
       el('joinBtn').disabled = false;
-      try {
-        navigator.clipboard.writeText(answerCode);
-        joinMsg.textContent = 'Copied! Paste it in the host STEP 2 box, then wait for CONNECTED.';
-      } catch {
-        joinMsg.textContent = 'Click the code box to copy it, then paste it in the host STEP 2 box.';
-      }
     }).catch(err => { joinMsg.textContent = 'BAD CODE — ' + err.message; el('joinBtn').disabled = false; });
   }
+
+  // FIND A RACE: the room list (rooms.php) — poll while in the menu
+  async function refreshLobby() {
+    const listEl = el('lobbyList');
+    if (!listEl) return;
+    try {
+      const r = await fetch(apiBase() + '/api/rooms.php');
+      const j = await r.json();
+      const rooms = (j && j.rooms) || [];
+      listEl.innerHTML = '';
+      if (!rooms.length) {
+        const d = document.createElement('div');
+        d.className = 'lobby-empty';
+        d.textContent = 'NO ACTIVE ROOMS — create one on the left.';
+        listEl.appendChild(d);
+      }
+      for (const room of rooms) {
+        const row = document.createElement('div');
+        row.className = 'lobby-row';
+        const label = document.createElement('span');
+        label.textContent = room.code + '  ·  ' + room.name + '  ·  ' + ((TRACKS[room.track] || {}).name || '?');
+        const btn = document.createElement('button');
+        btn.textContent = 'JOIN';
+        btn.onclick = () => {
+          el('joinInField').innerText = room.code;
+          joinRoom();
+        };
+        row.appendChild(label); row.appendChild(btn);
+        listEl.appendChild(row);
+      }
+    } catch {
+      const d = document.createElement('div');
+      d.className = 'lobby-empty';
+      d.textContent = 'RELAY OFFLINE — cannot reach the room list.';
+      listEl.appendChild(d);
+    }
+  }
+  setInterval(() => { if (game.state === 'menu') refreshLobby(); }, 4000);
 
   function clientStart(info) {
     ctx.ensureP2();
     clientItemSeen = ctx.racers().map(() => false);
     game.roster = info.karts === 2 ? '1v1' : '2ai';
-    net.kartN = info.karts;
     ctx.syncRosterVisibility();
     for (const k of ctx.racers()) { k.laps = info.laps; }
     for (let i = 0; i < ctx.racers().length; i++) {
@@ -433,18 +451,17 @@ export function createNet2p(ctx) {
         beginJoinSession();
       }
     },
-    hostPasteAnswer,
-    joinPasteOffer,
+    joinRoom,
     r => { game.roster = r; setHostRoster(r); if (game.netMode === 2) ctx.syncRosterVisibility(); },
   );
 
   // ?join=CODE (scanned on P2's phone): select JOIN mode, create the
-  // session, pre-fill the host code and connect immediately — one tap.
+  // session, pre-fill the room code and connect immediately — one tap.
   function joinAuto(code) {
     if (game.state === 'racing' || game.state === 'countdown') return;
     beginJoinSession();
     el('joinInField').innerText = code;
-    joinPasteOffer();
+    joinRoom();
   }
 
   return {
@@ -454,6 +471,6 @@ export function createNet2p(ctx) {
     inputNow: (t, s, d, u) => net.inputNow(t, s, d, u),
     resetClientItems: () => { clientItemSeen = ctx.racers().map(() => false); },
     applyClientState,
-    beginHostSession, hostPasteAnswer, joinPasteOffer, joinAuto, onPeerLost,
+    beginHostSession, joinRoom, joinAuto, onPeerLost, refreshLobby, apiBase,
   };
 }

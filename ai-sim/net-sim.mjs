@@ -35,8 +35,8 @@ import {
   makeStateEncoder, decodeState,
   encFinish, decFinish,
   encBye, T_TRACK, T_PREP, T_BYE,
-  codeFromSdp, sdpFromCode,
 } from '../src/net.js';
+import { genRoomCode, RelaySession } from '../src/relaynet.js';
 
 const n = N_SAMPLES;
 function posAt(t) {
@@ -283,10 +283,116 @@ console.log('\n== boost pads: layout + chain model ==');
   mark(d.order.join(',') === '3,0,1,2' && d.laps.length === 4 && Math.abs(d.laps[0] - 31.2) < 1e-4, 'finish frame');
 }
 mark(new DataView(encBye()).getUint8(0) === T_BYE, 'bye frame');
+
+/* ------------------------------------------------------------------ * *   Relay transport (relaynet.js) — a mock relay that implements the
+ *   api/relay.php + api/rooms.php contract, and a full
+ *   host↔joiner round-trip over it.
+ * ------------------------------------------------------------------ */
 {
-  const sdp = 'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\n';
-  mark(sdpFromCode(codeFromSdp(sdp)) === sdp, 'pairing code round-trip');
-  mark(sdpFromCode('garbage!!') === '', 'pairing code rejects junk');
+  const { createServer } = await import('node:http');
+  const rooms = {}, queues = {};
+  const server = await new Promise(resolve => {
+    const s = createServer((req, res) => {
+      const u = new URL(req.url, 'http://x');
+      const body = () => new Promise(r => { const cs = [];
+        req.on('data', c => cs.push(c));
+        req.on('end', () => r(Buffer.concat(cs))); });
+      if (u.pathname === '/api/rooms.php') {
+        if (req.method === 'POST') {
+          body().then(b => {
+            const j = JSON.parse(b);
+            rooms[j.code] = { name: j.name, track: j.track, ts: Date.now() / 1000 | 0 };
+            res.end('{"ok":true}');
+          });
+        } else {
+          const fresh = Object.entries(rooms)
+            .filter(([, e]) => Date.now() / 1000 - e.ts < 20)
+            .map(([code, e]) => ({ code, name: e.name, track: e.track }));
+          res.end(JSON.stringify({ rooms: fresh }));
+        }
+      } else if (u.pathname === '/api/relay.php') {
+        const room = (u.searchParams.get('room') || '').toUpperCase();
+        if (!/^[A-Z2-9]{4,8}$/.test(room)) { res.end('{"error":"bad room"}'); return; }
+        if (req.method === 'POST') {
+          body().then(b => {
+            const q = queues[room] = queues[room] || [];
+            const seq = q.length + 1;
+            q.push({ seq, from: u.searchParams.get('who'),
+              data: b.toString('base64'), ts: Date.now() / 1000 | 0 });
+            res.end('{"ok":true,"seq":' + seq + '}');
+          });
+        } else {
+          const after = parseInt(u.searchParams.get('after') || '0', 10);
+          const t0 = Date.now();
+          const check = () => {
+            const out = (queues[room] || []).filter(m => m.seq > after);
+            if (out.length) { res.end(JSON.stringify({ msgs: out })); return; }
+            if (Date.now() - t0 > 2000) { res.end('{"msgs":[]}'); return; }
+            setTimeout(check, 50);
+          };
+          check();
+        }
+      } else res.end('{"error":"404"}');
+    });
+    s.listen(0, '127.0.0.1', () => resolve(s));
+  });
+  const api = 'http://127.0.0.1:' + server.address().port;
+
+  const rng = (() => { let s = 42; return () => { s = (s * 16807) % 2147483647; return s / 2147483647; }; })();
+  mark(/^[A-Z2-9]{4}$/.test(genRoomCode(rng)), 'room code format');
+  mark(genRoomCode(rng) !== genRoomCode(rng), 'room code is rng-driven');
+
+  let hostOpen = false, joinOpen = false, lastIn = null, lastSt = null, lastTr = null;
+  const host = new RelaySession('host', {
+    onOpen: () => { hostOpen = true; },
+    onInput: i => { lastIn = i; },
+  }, api);
+  await host.hostStart('MOCK', 1, rng);
+  mark(host.code.length === 4, 'host registers a 4-char room');
+
+  const join = new RelaySession('join', {
+    onOpen: () => { joinOpen = true; },
+    onState: st => { lastSt = st; },
+    onTrack: idx => { lastTr = idx; },
+  }, api);
+  await join.joinOffer(host.code);
+  const t0 = Date.now();
+  while (!hostOpen || !joinOpen) {
+    if (Date.now() - t0 > 5000) break;
+    await new Promise(s => setTimeout(s, 20));
+  }
+  mark(hostOpen && joinOpen, 'relay connection (hello both ways)');
+
+  const karts = [0, 1, 2, 3].map(i => ({
+    pos: { x: i, y: 0, z: i * 2 }, heading: 0, speed: 3 + i,
+    steerVel: 0, offRoad: false, lapDone: 0, posIdx: i, raceDone: false, item: 0,
+  }));
+  // START first (as in the real flow) — it carries the kart count the
+  // state decoder needs
+  host.sendStart({ karts: 4, laps: 3, rosterN: 4, steerFlip: 0, simDt: 1 / 60, grid: [1, 0, 2, 1, 3, 2, 4, 3] });
+  host.sendState(makeStateEncoder(4)(1234, 7, karts));
+  const t1 = Date.now();
+  while (!lastSt) { if (Date.now() - t1 > 5000) break; await new Promise(s => setTimeout(s, 20)); }
+  mark(!!lastSt && lastSt.karts.length === 4 && lastSt.hostMs === 1234, 'state frame via relay');
+  mark(Math.abs(lastSt.karts[2].speed - 5) < 1e-3, 'state frame payload intact');
+
+  join.sendInput(0.5, -0.2, true, false);
+  const t2 = Date.now();
+  while (!lastIn) { if (Date.now() - t2 > 5000) break; await new Promise(s => setTimeout(s, 20)); }
+  mark(!!lastIn && Math.abs(lastIn.throttle - 0.5) < 0.02 && lastIn.drift, 'input frame via relay');
+
+  host.sendTrack(3, 1, 0);
+  const t3 = Date.now();
+  while (lastTr === null) { if (Date.now() - t3 > 5000) break; await new Promise(s => setTimeout(s, 20)); }
+  mark(lastTr === 3, 'track frame via relay');
+
+  const rj = await (await fetch(api + '/api/rooms.php')).json();
+  mark(rj.rooms.some(x => x.code === host.code && x.name === 'MOCK'), 'lobby lists the host room');
+
+  join.close();
+  host.close();
+  server.close();
+  mark(true, 'relay sessions close cleanly');
 }
 console.log(failures === 0 ? '  wire OK' : `  ${failures} wire failure(s)`);
 
