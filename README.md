@@ -21,7 +21,8 @@ make sim     # AI drivers on every track
 make netsim  # wire round-trips + 2P race sims on every track
 make wscheck # a WS client drives the real game server (start → race → finish)
 make wse2e   # two real browser pages race over the server (full loop)
-make serve   # local server + playground URL (see Tuning)
+make serve   # local full stack on ONE port: static + /ws multiplayer +
+             # /rooms + /health (the same process the container runs)
 make screens # Playwright render check — boots the game in headless Chromium
              # (menu / 2P / countdown / race, desktop + phone viewports)
 ```

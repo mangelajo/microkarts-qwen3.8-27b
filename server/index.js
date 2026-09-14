@@ -141,6 +141,10 @@ wss.on('connection', ws => {
 
 httpSrv.listen(PORT, () => {
   console.log(`microkarts server on :${PORT} (root ${ROOT}, test=${WS_TEST})`);
+  console.log(`  game:                  http://localhost:${PORT}/`);
+  console.log(`  multiplayer:           ws://localhost:${PORT}/ws (same origin — no config needed)`);
+  console.log(`  ai-sim playground:    http://localhost:${PORT}/ai-sim/playground.html`);
+  console.log(`  lobby / health:       http://localhost:${PORT}/rooms  http://localhost:${PORT}/health`);
 });
 
 export { rooms, genCode };

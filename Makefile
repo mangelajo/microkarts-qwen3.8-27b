@@ -1,6 +1,6 @@
 PORT ?= 8080
 
-.PHONY: install lint imports serve sim simwatch netsim wscheck wse2e screens qrcheck deploy
+.PHONY: install lint imports serve serve-static sim simwatch netsim wscheck wse2e screens qrcheck deploy
 
 # production deploy target (ajo.es/microkarts) — override to deploy elsewhere
 DEPLOY_HOST ?= ajo@cpanel.optimizacionweb.es
@@ -18,7 +18,15 @@ lint: install
 imports: install
 	node ai-sim/imports.mjs
 
-serve:
+# the local full stack: the Node game server on ONE port (static files +
+# /ws multiplayer + /rooms + /health) — the same process the container runs,
+# so a 2P race works locally exactly as it does in production. Ctrl-C stops.
+serve: install
+	PORT=$(PORT) node --import ./ai-sim/stub.js server/index.js
+
+# static-only dev server (no multiplayer) — keeps the no-cache Python
+# behaviour for when you don't want the Node process
+serve-static:
 	python3 ai-sim/serve.py $(PORT)
 
 sim: install
@@ -38,8 +46,9 @@ netsim: install
 wscheck:
 	WS_TEST=1 node ai-sim/ws-check.mjs
 
-# ws E2E: two real browser pages race over the local Node server (needs
-# `make serve` + the server; SKIPs otherwise)
+# ws E2E: two real browser pages race over the local Node server (the
+# gate spawns its own server + static server; SKIPs if Playwright's
+# chromium is missing)
 wse2e:
 	WS_E2E_PORT=8317 node ai-sim/ws-e2e.mjs
 
