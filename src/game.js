@@ -73,6 +73,13 @@ function ensureP2() {
    solo: [AZURE, MATCHA, PLUMP, you]. Wire order = this array, player last. */
 function racers() {
   if (game.netMode !== 2) return karts.filter(k => k !== p2); // solo: 3 AI + you (p2 stays hidden)
+  if (n2.wsMode()) {
+    // WS: the wire order is [slot0, slot1, AI, AI] — each device's own
+    // vessel must sit at racers()[mySlot()] so selfKart() lines up with
+    // the server's kart order (host → player first, joiner → p2 first)
+    const humans = n2.mySlot() === 1 ? [p2, player] : [player, p2];
+    return game.roster === '1v1' ? humans : humans.concat(karts[0], karts[1]);
+  }
   return game.roster === '1v1' ? [p2, player] : [karts[0], karts[1], p2, player];
 }
 
@@ -87,7 +94,14 @@ function resetKarts() {
   const order = game.netMode !== 2 ? [karts[0], player, karts[1], karts[2]]
     : game.roster === '1v1' ? [player, p2]
                             : [player, p2, karts[0], karts[1]];   // humans in the front row
-  order.forEach((k, i) => { k.laps = game.laps; k.placeAt(GRID[i].u, GRID[i].o); });
+  order.forEach((k, i) => {
+    // WS: same staggered AI grid as the frame (startRace sends it) so the
+    // host's countdown mirror matches the joiner's — LAN/solo unchanged.
+    const g = n2.wsMode() && i >= 2
+      ? (i === 2 ? { u: 0.97, o: -1.0 } : { u: 0.955, o: 1.0 })
+      : GRID[i];
+    k.laps = game.laps; k.placeAt(g.u, g.o);
+  });
   syncRosterVisibility();
 }
 
@@ -310,7 +324,16 @@ function startRace() {
     n2.net().sendStart({
       karts: list.length, laps: LAPS, rosterN: list.length,
       steerFlip: false, simDt: SIM_DT,
-      grid: list.flatMap(k => [GRID[gridSlot(k)].u, GRID[gridSlot(k)].o]),
+      grid: list.flatMap(k => {
+        const slot = gridSlot(k);
+        // WS: stagger the AI row (further back, offset toward the centre).
+        // A same-lane start has the AI's launch rear-end the human's kart
+        // before the player can steer; the local (LAN/solo) grid is unchanged.
+        const g = n2.wsMode() && slot >= 2
+          ? (slot === 2 ? { u: 0.97, o: -1.0 } : { u: 0.955, o: 1.0 })
+          : GRID[slot];
+        return [g.u, g.o];
+      }),
     });
   } else {
     game.raceStart = now + COUNTDOWN_MS;

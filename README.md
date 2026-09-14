@@ -148,9 +148,15 @@ take in the catalogue. All track shapes are validated headlessly.
   drift/item edge is never rate-gated), the server broadcasts state at 30 Hz,
   and the client renders through an **adaptive interpolation buffer** (holds
   ~1.5× the recent arrival gap, clamped 100–350 ms) + a PING/PONG RTT
-  readout. A dropped human mid-race is silently AI-driven (the race
+  readout. Input ownership is explicit: a **connected human always owns
+  their kart** (no key input = a parked kart — the server never drives it),
+  and a **dropped** human's kart is silently AI-driven (the race
   continues); a host drop dissolves the room (the joiner is kicked back to
-  the code screen). The countdown + finish are decided by the server. Verified
+  the code screen). The WS grid staggers the AI row (further back, offset
+  toward the centre) so the AI launch can't rear-end a human before they
+  can steer, and kart-vs-kart impulse is projected along the collision
+  normal so a rear-end push moves the front kart forward, not backwards.
+  The countdown + finish are decided by the server. Verified
   headlessly by `make wscheck` (a WS client drives the real server: lobby,
   create/join, start, state, input → control, PING/PONG, finish, kick,
   dissolve) and by `make wse2e` (two real browser pages race over the
@@ -371,7 +377,7 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/net.js`      | 2P wire protocol (u8 frame enc/dec) — pure, no transport; also the client↔server protocol (CONNECT/HELLO 0x41, PEER_JOINED 0x82, PEER_LEFT 0x81, KICK 0x83, PING/PONG 0x70/0x71) |
 | `src/wsnet.js`    | WS transport (`WSSession`): WebSocket connect + binary frame dispatch (ArrayBuffer), 30 Hz input rate gate (drift/item edges never gated), PING/PONG RTT, connect timeout — `?ws=URL` override, same-origin `/ws` otherwise |
 | `server/index.js` | **The game server** (Node, one container, one port): static files + `/ws` (WebSocket) + `/rooms` lobby + `/health`; CONNECT → create/join room, host leave dissolves, room-full kick, `/rooms` + `/health` |
-| `server/room.js`  | Per-room **server-authoritative sim**: the 60 Hz `simulateTick` loop (same pure-JS sim modules), 2 human slots + 2 AI fill, 30 Hz state broadcast, drop → AI, host drop → dissolve, force-finish hook (`WS_TEST=1`) |
+| `server/room.js`  | Per-room **server-authoritative sim**: the 60 Hz `simulateTick` loop (same pure-JS sim modules), 2 human slots + 2 AI fill, 30 Hz state broadcast, **connected human always owns the kart** (no input = parked; only a *dropped* human becomes AI), host drop → dissolve, force-finish hook (`WS_TEST=1`) |
 | `src/interp.js`   | Client-side interpolation ring + sampler (adaptive delay via `net2p`, angular wrap; `newestAt()` feeds the perceived-lag readout) |
 | `src/game.js`     | Game state machine: karts, input, race lifecycle, cameras, the `animate()` loop — in WS mode both humans render the server's state (solo + LAN-host sim otherwise) — boots the `net2p` session |
 | `src/net2p.js`    | 2P net orchestration: `WSSession` host/join lifecycle, room code + QR, lobby (FIND A RACE), client render mirror (interp, lap/finish bookkeeping, item-pickup mirror) |

@@ -38,7 +38,6 @@ import { decInput, decStart, encPrep, encStart, encFinish, makeStateEncoder } fr
 
 const SIM_DT = 1 / 60;
 const CD_MS = 3000;
-const INPUT_FRESH_MS = 250;
 const dec = new TextDecoder();
 
 const str = (d, off, n) => n ? dec.decode(d.subarray(off, off + n)) : '';
@@ -90,10 +89,12 @@ export function createRoom(code, ownerName) {
     for (const [ws, h] of room.humans) {
       if (h.slot !== idx) continue;
       if (!racing) return { throttle: 0, steer: 0 };
+      // a PRESENT human (ws still in the map) always owns the kart: a stale
+      // frame just means "keys released" (0,0) — AI takeover is for the
+      // DETACHED (dropped) human, which falls through to the final return
       const inp = room.input.get(ws);
-      if (inp && inp.at && performance.now() - inp.at < INPUT_FRESH_MS)
-        return { throttle: inp.throttle, steer: inp.steer, drift: inp.drift, use: inp.use };
-      return aiControl(k, room.karts);   // stale / dropped human → AI takes over
+      if (inp) return { throttle: inp.throttle, steer: inp.steer, drift: inp.drift, use: inp.use };
+      return { throttle: 0, steer: 0 };
     }
     return racing ? aiControl(k, room.karts) : { throttle: 0, steer: 0 };
   };

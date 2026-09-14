@@ -55,7 +55,9 @@ export function createNet2p(ctx) {
 
   const role = () => game.netMode === 2 && net ? net.role : null;
   // "you" per device: host/solo = player kart · client = p2 (its own wire kart)
-  const selfKart = () => role() === 'join' ? ctx.p2Ref() : ctx.player;
+  const selfKart = () => (wsMode() && net
+    ? ctx.racers()[mySlot()]   // WS: the vessel that mirrors MY server slot
+    : role() === 'join' ? ctx.p2Ref() : ctx.player);
 
   function sessionCbs() {
     return {
@@ -209,6 +211,7 @@ export function createNet2p(ctx) {
     host.t = 0; host.acc = 0;
     lastNetInput = { throttle: 0, steer: 0, drift: false, use: false, ping: -1, at: 0 };
     ctx.ensureP2().netOn = false; // peer's kart is AI-free until the race starts
+    game.netMode = 2;   // the host IS a 2P device (racers() must use the 2P/WS order)
     net = new WSSession(wsUrl());
     net.role = 'host';
     net.active = true;
@@ -286,14 +289,14 @@ export function createNet2p(ctx) {
       if (!rooms.length) {
         const d = document.createElement('div');
         d.className = 'lobby-empty';
-        d.textContent = 'NO ACTIVE ROOMS — create one on the left.';
+        d.textContent = 'NO ACTIVE ROOMS — HOST 2P (above) creates one.';
         listEl.appendChild(d);
       }
       for (const room of rooms) {
         const row = document.createElement('div');
         row.className = 'lobby-row';
         const label = document.createElement('span');
-        label.textContent = room.code + '  ·  ' + room.name + '  ·  ' + ((TRACKS[room.track] || {}).name || '?');
+        label.textContent = room.code + '  ·  ' + room.host + '  ·  ' + ((TRACKS[room.track] || {}).name || '?');
         const btn = document.createElement('button');
         btn.textContent = 'JOIN';
         btn.onclick = () => {
@@ -306,11 +309,11 @@ export function createNet2p(ctx) {
     } catch {
       const d = document.createElement('div');
       d.className = 'lobby-empty';
-      d.textContent = 'RELAY OFFLINE — cannot reach the room list.';
+      d.textContent = 'SERVER OFFLINE — cannot reach the room list.';
       listEl.appendChild(d);
     }
   }
-  setInterval(() => { if (game.state === 'menu' && !joinConnected()) refreshLobby(); }, 4000);
+  setInterval(() => { if (game.state === 'menu') refreshLobby(); }, 4000);
 
   function clientStart(info) {
     ctx.ensureP2();
@@ -397,7 +400,7 @@ export function createNet2p(ctx) {
       // explosion mirror: a remote kart falling to the table (y drops from
       // the track to 0) bursts — read from the existing y f32, no wire change
       const my = m.y ?? 0;
-      if (my < 0.5 && prevRemoteY[i] > 2 && k !== ctx.player) ctx.boom(k.pos.x, 0, k.pos.z);
+      if (my < 0.5 && prevRemoteY[i] > 2 && k !== selfKart()) ctx.boom(k.pos.x, 0, k.pos.z);
       prevRemoteY[i] = my;
       // cosmetic tumble mirror: run the same corner-torque dynamics as the
       // local sim so a falling remote kart tips the same way (host stays
@@ -451,7 +454,13 @@ export function createNet2p(ctx) {
     game.raceTime = st.hostMs / 1000;
     const you = list.length - 2; // client "you" = p2; updateHud reads the last kart
     const lapStartMs = clientLapMark[you] || COUNTDOWN_MS; // host clock: GO at cdMs
-    const hudList = [...list.slice(0, -2), ctx.player, ctx.p2Ref()];
+    // updateHud reads the LAST kart as "you" — in WS mode the self vessel
+    // is racers()[mySlot()] (player on both devices), p2 mirrors the peer
+    const selfV = selfKart();
+    const peerVessel = selfV === ctx.player ? ctx.p2Ref() : ctx.player;
+    const hudList = (wsMode() && net)
+      ? [...list.slice(0, -2), peerVessel, selfV]
+      : [...list.slice(0, -2), ctx.player, ctx.p2Ref()];
     updateHud(game.raceTime, Math.max(0, (st.hostMs - lapStartMs) / 1000), hudList);
     ctx.snapChaseCam(dt);
   }

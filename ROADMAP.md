@@ -11,7 +11,8 @@ flat tracks stay flat.
 - 8 procedural tracks (4 flat, 4 elevated), day/night sky, procedural rain,
   fully synthesized reactive music
 - 1P / 2P over the **Node WebSocket game server** (`server/`: 60 Hz
-  server-authoritative sim per room, 2 human slots + 2 AI fill; 4-char
+  server-authoritative sim per room, 2 human slots + 2 AI fill, connected
+  human always owns their kart / dropped human → AI; 4-char
   room code, QR pairing, `?join=` deep link, FIND A RACE lobby),
   deployed as one container — static + `/ws` + `/rooms` on a single port
   (zero-config multiplayer). WebRTC/LAN and the PHP relay paths removed
@@ -33,9 +34,19 @@ flat tracks stay flat.
   proves Node-safe) with 2 human slots + 2 AI fill; both humans are pure
   renderers — input at 30 Hz (drift/item edges never rate-gated), state
   broadcast at 30 Hz, rendered through the adaptive interpolation buffer
-  (100–350 ms) with a PING/PONG RTT readout. Dropped human mid-race →
-  silently AI-driven; host drop → room dissolves (joiner kicked back to
-  the code screen). Client side: `src/wsnet.js` `WSSession` (WebSocket
+  (100–350 ms) with a PING/PONG RTT readout. Input ownership is
+  explicit: a **connected human always owns their kart** (no key input =
+  a parked kart — the server never drives it), a **dropped** human
+  mid-race → silently AI-driven; host drop → room dissolves (joiner
+  kicked back to the code screen). The WS grid staggers the AI row so
+  the AI launch can't rear-end a human before they can steer, and
+  kart-vs-kart impulse is projected along the collision normal (a
+  rear-end push moves the front kart forward, not backwards — the old
+  front-collision impulse knocked grid karts into reverse). The first
+  WS build also shipped with three 2P-drivability bugs (vessel mapping
+  used the legacy LAN kart order; 1v1 frames crashed on a hard-coded
+  kartN=4; the lobby read a field the server never sent) — all fixed
+  and covered by `make wse2e`. Client side: `src/wsnet.js` `WSSession` (WebSocket
   transport, binary frames, `?ws=URL` override), the WebRTC + PHP relay
   paths are **removed** (2P = WS server + QR pairing). The 2P tab: room
   code + QR, type-in join (or FIND A RACE lobby), `?join=CODE`

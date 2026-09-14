@@ -58,10 +58,17 @@ export function collideKarts(karts, crashFor) {
         const dv = vb - va;
         if (dv < 0) {
           // low restitution: the bounce must not re-launch a kart that a driver
-          // is holding into the contact (was 0.58 — it re-fired every tick)
+          // is holding into the contact (was 0.58 — it re-fired every tick).
+          // Project the impulse onto each kart's motion axis along the
+          // collision normal (n points a→b): a rear-end hit (b behind) pushes
+          // a FORWARD and slows b; a front-end hit (b ahead) does the classic
+          // shove — the sign falls out of the dot product, so a kart parked
+          // in front of a grid row is no longer knocked backwards.
           const jimp = -0.3 * dv;
-          a.speed -= Math.sin(a.heading) * jimp * 0.5 + Math.cos(a.heading) * jimp * 0.5;
-          b.speed += Math.sin(b.heading) * jimp * 0.5 + Math.cos(b.heading) * jimp * 0.5;
+          const pa = -(nx * Math.sin(a.heading) + nz * Math.cos(a.heading));
+          const pb = (nx * Math.sin(b.heading) + nz * Math.cos(b.heading));
+          a.speed += pa * jimp * 0.5;
+          b.speed += pb * jimp * 0.5;
           a.speed = clamp(a.speed, -MAX_REV, MAX_SPEED + 3);
           b.speed = clamp(b.speed, -MAX_REV, MAX_SPEED + 3);
           if (crashFor) crashFor(a, b, Math.min(1, -dv / 14));

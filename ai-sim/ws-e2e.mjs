@@ -122,12 +122,18 @@ try {
   ]);
   mark(!!bothRacing, 'both pages reached state=racing (server countdown)');
 
-  // let the server sim run — the joiner's mirrored kart must accelerate
+  // drive both karts: a connected human with no input owns the kart at rest
+  // (the server's AI only takes over a DROPPED human), so the gate sends
+  // real throttle — this exercises the full input → server → mirror loop.
+  await host.keyboard.down('w');
+  await joinp.keyboard.down('w');
   await sleep(6000);
   const joinSp = await joinp.evaluate(() => window.__mkr.n2.selfKart().speed);
   mark(joinSp > 1, `joiner mirrored kart speed ${joinSp.toFixed(2)} (server-driven)`);
   const hostSp = await host.evaluate(() => window.__mkr.n2.selfKart().speed);
   mark(hostSp > 1, `host mirrored kart speed ${hostSp.toFixed(2)} (server-driven)`);
+  await host.keyboard.up('w');
+  await joinp.keyboard.up('w');
 } catch (e) {
   mark(false, 'e2e flow: ' + String(e).slice(0, 160));
 }

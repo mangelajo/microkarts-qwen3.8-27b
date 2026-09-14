@@ -164,12 +164,16 @@ export class WSSession {
         return;
       }
       case T_START: {  // 0x03 — the server echoes the start (both clients sync
-        // the countdown from the wall clock)
-        if (this._cbs.start) this._cbs.start(decStart(d));
+        // the countdown from the wall clock); the roster size rides along
+        const st = decStart(d);
+        if (st.karts) this.kartN = st.karts;
+        if (this._cbs.start) this._cbs.start(st);
         return;
       }
       case T_STATE:  // 0x20 — decode before the cb (the n2 contract is decoded st)
-        if (this._cbs.state) this._cbs.state(decodeState(d, this.kartN));
+        // the frame is length-derived (1 + 4 + 2 + kartN*29): 1v1 races send
+        // 2-kart frames, so never trust a cached kartN for the stride
+        if (this._cbs.state) this._cbs.state(decodeState(d, Math.max(1, (d.byteLength - 7) / 29)));
         return;
       case T_FINISH: {  // 0x30
         if (this._cbs.finish) this._cbs.finish(decFinish(d));
