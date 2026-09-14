@@ -64,9 +64,9 @@ screens: install
 qrcheck: install
 	node ai-sim/qr-check.mjs
 
-# upload the game to the live server; run the gates first (`make sim netsim wscheck wse2e deploy`)
+# upload the game to the live server; run the gates first (`make sim netsim wscheck wse2e deploy`).
+# STATIC ONLY — the live host runs no backend; multiplayer is played via
+# `make serve` (or a self-hosted container: `Containerfile.game` / docker-compose.yml).
 deploy:
 	scp index.html $(DEPLOY_HOST):$(DEPLOY_DIR)/
 	scp -r src ai-sim $(DEPLOY_HOST):$(DEPLOY_DIR)/
-	scp -r server $(DEPLOY_HOST):$(DEPLOY_DIR)/
-	scp package.json $(DEPLOY_HOST):$(DEPLOY_DIR)/

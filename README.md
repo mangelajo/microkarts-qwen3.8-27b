@@ -41,7 +41,10 @@ An optional two-container variant (Nginx front :80 → game :8080):
 `docker compose up -d --build` (see `docker-compose.yml`).
 
 Static-only hosts (no 2P): `make deploy` uploads `index.html` + `src/`
-to ajo.es/microkarts (run the gates first: `make sim netsim deploy`).
++ `ai-sim/` to ajo.es/microkarts (run the gates first: `make sim
+netsim deploy`) — multiplayer on such a host is played locally via
+`make serve` (one process: static + `/ws` on one port) or a self-hosted
+`Containerfile.game` / `docker-compose.yml` setup.
 
 All game constants live in `src/config.js`: `ACCEL`, `BRAKE`, `MAX_SPEED`,
 `STEER_RATE`, `ROAD_HW`, `LAPS`, `AI_SKILL`, …
