@@ -229,16 +229,21 @@ console.log('\n== boost pads: layout + chain model ==');
   mark(K.padChain === 1, 'strips re-arm for the next pass');
 }
 {
-  const fake = [{ pos: new THREE.Vector3(1.5, 2.5, -2.25), heading: 0.75, speed: 12.5, steerVel: 0.3, offRoad: false, lapDone: 1, posIdx: 2, raceDone: false, item: ITEM_WALL }];
-  const enc = makeStateEncoder(1);
-  const d = decodeState(enc(987654, 17, fake), 1);
+  const fake = [{ pos: new THREE.Vector3(1.5, 2.5, -2.25), heading: 0.75, speed: 12.5, steerVel: 0.3, offRoad: false, lapDone: 1, posIdx: 2, raceDone: false, item: ITEM_WALL, fellOff: false },
+    { pos: new THREE.Vector3(3, 0.2, 4), heading: 1, speed: 0, steerVel: 0, offRoad: true, lapDone: 0, posIdx: 1, raceDone: false, item: 0, fellOff: true }];
+  const enc = makeStateEncoder(2);
+  const d = decodeState(enc(987654, 17, fake), 2);
   mark(d.hostMs === 987654 && d.echoPing === 17, 'state header');
   const k = d.karts[0];
   mark(Math.abs(k.x - 1.5) < 1e-5 && Math.abs(k.z + 2.25) < 1e-5, 'state pos');
   mark(Math.abs(k.y - 2.5) < 1e-5, 'state pos y (elevation round-trips)');
   mark(Math.abs(k.heading - 0.75) < 1e-5 && Math.abs(k.speed - 12.5) < 1e-5, 'state speed');
-  mark(k.lapDone === 1 && k.posIdx === 2 && !k.raceDone && !k.offRoad, 'state flags');
+  mark(k.lapDone === 1 && k.posIdx === 2 && !k.raceDone && !k.offRoad && !k.fellOff, 'state flags');
   mark(k.item === ITEM_WALL, 'state frame round-trips the held item');
+  const k2 = d.karts[1];
+  // the fall state rides in the off-road byte (2 = fell): WS clients use it
+  // for the floor-hit explosion + HUD; old peers see a plain off-road flag
+  mark(k2.fellOff === true && k2.offRoad === true, 'state frame round-trips fellOff (floor-hit FX over the wire)');
 }
 {
   // legacy: a pre-item peer sends 28-byte karts (no item) — decode item = 0

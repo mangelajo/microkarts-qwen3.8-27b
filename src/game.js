@@ -389,7 +389,10 @@ function finishRace() {
 
 function primaryAction() {
   if (n2.role() === 'join') return;               // the host calls the shots
-  if (n2.role() === 'host' && !n2.net().open) return;  // wait for the pairing
+  // the host needs a live server link AND a joiner actually in the room
+  // (the old gate tested `net.open` — a method, always truthy — so the host
+  // could start a 1-player race by accident)
+  if (n2.role() === 'host' && !n2.netReady()) return;
   if (game.state === 'menu' || game.state === 'finished') startRace();
 }
 
@@ -736,6 +739,14 @@ function animate() {
         lastPlayerItem = sk.item;
       }
       audio.updateEngine(sk.speed, d.steer, !sk.offRoad, d.drift && sk.speed * KMH_PER_U > DRIFT_MIN_KMH, (sk.charge || 0) / DRIFT_CHARGE_MAX, sk.boost || 0); // engine sound from interpolated speed
+      // HUD from the interpolated mirror — the WS branch previously had NO
+      // HUD update, so the item slot / speed / lap counter sat frozen at
+      // grid values on both devices ("the joiner can't catch items").
+      // updateHud reads karts[karts.length-1] as the player → self last.
+      const rl = racers();
+      game.raceTime = Math.max(0, (now - game.raceStart) / 1000);
+      updateHud(game.raceTime, Math.max(0, (now - sk.lapStart) / 1000),
+        [...rl.filter(k => k !== sk), sk]);
     }
   } else {
     // ---- solo + net host sim: ONE shared body, only the time base differs.
@@ -870,7 +881,9 @@ function animate() {
   syncWallMeshes();           // point the pooled wall meshes at live projectiles
   syncStickyPatches(now * 0.001);   // the slow patches (fade + pulse)
   // explosion on floor-hit: every kart that just started its fell-off stun
-  if (role !== 'join') {
+  // (solo/LAN host on its own sim karts; WS mode on the server-mirrored
+  // karts on BOTH devices — the state frame now carries fellOff)
+  if (role !== 'join' || n2.wsMode()) {
     for (let i = 0; i < list.length; i++) {
       const k = list[i];
       if (!k || !k.pos) continue;

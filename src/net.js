@@ -86,7 +86,7 @@ export function makeStateEncoder(kartN) {
       v.setFloat32(o, k.heading); o += 4;
       v.setFloat32(o, k.speed); o += 4;
       v.setFloat32(o, k.steerVel); o += 4;
-      v.setUint8(o, k.offRoad ? 1 : 0); o += 1;
+      v.setUint8(o, k.fellOff ? 2 : k.offRoad ? 1 : 0); o += 1;   // 2 = fell off (old peers read it as off-road)
       v.setUint8(o, k.lapDone); o += 1;
       v.setUint8(o, k.posIdx); o += 1;
       v.setUint8(o, k.raceDone ? 1 : 0); o += 1;
@@ -116,6 +116,7 @@ export function decodeState(d, kartN) {
       steerVel: v.getFloat32(o + 16 + f),
     };
     karts[i].offRoad = v.getUint8(o + 20 + f) !== 0;
+    karts[i].fellOff = v.getUint8(o + 20 + f) === 2;
     karts[i].lapDone = v.getUint8(o + 21 + f);
     karts[i].posIdx = v.getUint8(o + 22 + f);
     karts[i].raceDone = v.getUint8(o + 23 + f) !== 0;

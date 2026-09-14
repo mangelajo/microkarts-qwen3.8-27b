@@ -13,9 +13,12 @@ flat tracks stay flat.
 - 1P / 2P over the **Node WebSocket game server** (`server/`: 60 Hz
   server-authoritative sim per room, 2 human slots + 2 AI fill, connected
   human always owns their kart / dropped human → AI; 4-char
-  room code, QR pairing, `?join=` deep link, FIND A RACE lobby),
-  deployed as one container — static + `/ws` + `/rooms` on a single port
-  (zero-config multiplayer). WebRTC/LAN and the PHP relay paths removed
+  room code, QR pairing, `?join=` deep link, FIND A RACE lobby;
+  wire-slot kart colours, forwarded TRACK to the joiner, fall state
+  over the wire for both devices' floor-hit FX, live 1/2 → 2/2 host
+  screen with a start gate), deployed as one container — static + `/ws`
+  + `/rooms` on a single port (zero-config multiplayer). WebRTC/LAN and
+  the PHP relay paths removed
 - Drift → boost → pads + perfect drift; 4 item-box rewards (turbo / timed
   rubber / wall / sticky candy); sugar hazards; corner deltas
 - Ghost + top-5 rankings; replays; daily challenge; 5-tab menu incl. track
@@ -54,7 +57,21 @@ flat tracks stay flat.
   real server: lobby, create/join, start, state, input → control,
   PING/PONG, finish, kick, host-left dissolve) + `make wse2e` (two real
   browser pages race over the server — the full production loop);
-  `make netsim` keeps the per-track 2P race sim + wire round-trip. Both
+  `make netsim` keeps the per-track 2P race sim + wire round-trip. A
+  follow-up sweep fixed the first-race correctness gaps: **kart paint
+  now follows the wire slot** (host red / joiner teal on *both* screens
+  — the mirror objects used to keep their local-object colours), the
+  **host's `TRACK` frame is forwarded to the joiner** (their local item
+  boxes / hazards now match the server's sim, so pickups mirror on both
+  screens) and the **WS clients' HUD is driven from the interpolated
+  mirror** (the item slot / speed / lap timer used to sit frozen). The
+  state frame's off-road byte doubles as the **fall state (2 = fell
+  off)** so the floor-hit explosion + HUD warning reach both devices
+  (old peers read a 2 as plain off-road — backward compatible). The host
+  screen shows a **live player count (1/2 → 2/2** via the `/rooms`
+  poll, which now reports `players`, host included), **gates START until
+  a joiner is in**, and times out a dead server instead of sitting on
+  “CONNECTING”. Both
   container variants verified end-to-end with podman (single container:
   static + WS on one port; two-container: Nginx front proxies `/ws` +
   `/rooms`). Earlier dead ends, recorded for the future: a pure-PHP

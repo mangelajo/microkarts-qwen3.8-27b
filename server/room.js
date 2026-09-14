@@ -208,6 +208,7 @@ export function createRoom(code, ownerName) {
       setObstaclesOn(room.hazards); buildObstacles(room.trackIdx);
       setItemsOn(room.items);
       selectTrack(room.trackIdx);           // rebuild the field (pure data)
+      
       // forward the live picker to the other client (the joiner mirrors the
       // host's chips — the frame is re-sent as-is, no new wire fields)
       const d2 = new Uint8Array(d);

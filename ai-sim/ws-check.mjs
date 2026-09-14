@@ -118,6 +118,8 @@ host.ws.send(encTrack(2, 1, 0));
 await sleep(200);
 lobby = await http('/rooms');
 mark(lobby[0].track === 2, 'lobby shows the track pick');
+const tf = await nextMsg(join.ws, 0x02);
+mark(tf[1] === 2 && tf[2] === 1 && tf[3] === 0, 'joiner got the forwarded TRACK frame (idx + flags)');
 
 // start (grid for 4 karts)
 const grid = [0.9925, -1.75, 0.9925, 1.75, 0.985, -1.75, 0.985, 1.75];

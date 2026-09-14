@@ -1,6 +1,6 @@
 import {
   game, LAPS, COUNTDOWN_MS, INTERP_DELAY, N_SAMPLES,
-  FELL_MIN_HEIGHT, FELL_PENALTY, ITEM_RESPAWN,
+  FELL_MIN_HEIGHT, FELL_PENALTY, ITEM_RESPAWN, P2_COLOR,
 } from './config.js';
 import { WSSession, wsUrl } from './wsnet.js';
 import { FrameRing, sampleState } from './interp.js';
@@ -70,7 +70,7 @@ export function createNet2p(ctx) {
       onPeerJoined: () => {
         if (role() !== 'host') return;
         if (net && net.isWS) net.sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn());
-        hostMsg.textContent = 'JOINER CONNECTED — pick a track, then press START RACE.';
+        updateHostPlayers(2, true);
       },
       onStatus: s => {
         const label = {
@@ -159,7 +159,7 @@ export function createNet2p(ctx) {
   // construction) — wire the same cbs object onto either shape
   function wireSession(s) {
     const cbs = sessionCbs();
-    for (const k of ['onOpen', 'onStatus', 'onPrep', 'onStart', 'onState', 'onFinish', 'onInput', 'onPeerLost', 'onPeerJoined', 'onClose']) {
+    for (const k of ['onOpen', 'onStatus', 'onPrep', 'onTrack', 'onStart', 'onState', 'onFinish', 'onInput', 'onPeerLost', 'onPeerJoined', 'onClose']) {
       if (cbs[k] && s[k]) s[k](cbs[k]);
     }
   }
@@ -168,6 +168,9 @@ export function createNet2p(ctx) {
     const wasNet = game.netMode === 2;
     const wasRacing = wasNet && (game.state === 'racing' || game.state === 'countdown');
     game.netMode = 0;
+    if (hostPoll) { clearInterval(hostPoll); hostPoll = null; }
+    if (hostHelloTimer) { clearTimeout(hostHelloTimer); hostHelloTimer = null; }
+    hostReady = false;
     startBtn.textContent = 'START RACE';
     ghostStop();
     if (clientRing) clientRing.clear();
@@ -206,6 +209,10 @@ export function createNet2p(ctx) {
     } catch { return ''; }   // headless: no location
   };
 
+  let hostReady = false;   // a joiner is actually in the room (PEER_JOINED or room poll)
+  let hostPoll = null;    // 2 s room-list poll — the host screen shows the live player count
+  let hostHelloTimer = null;
+
   function beginHostSession() {
     if (net) net.close();
     host.t = 0; host.acc = 0;
@@ -215,18 +222,54 @@ export function createNet2p(ctx) {
     net = new WSSession(wsUrl());
     net.role = 'host';
     net.active = true;
+    hostReady = false;
     wireSession(net);
     startBtn.textContent = 'CONNECTING…';
+    hostMsg.textContent = 'Connecting to the server…';
+    // a server that never answers HELLO must not leave the screen stuck on CONNECTING
+    let helloDone = false;
+    hostHelloTimer = setTimeout(() => {
+      if (helloDone) return;
+      startBtn.textContent = 'START RACE';
+      hostMsg.textContent = 'COULD NOT REACH THE MULTIPLAYER SERVER — check the connection (or ?ws=ws://host:port/ws). Solo still works.';
+    }, 8000);
     net.open('H', 'HOSTY').then(ok => {
+      helloDone = true; clearTimeout(hostHelloTimer);
       if (!ok) {
         startBtn.textContent = 'START RACE';
         hostMsg.textContent = 'MULTIPLAYER SERVER UNREACHABLE — solo still works; or ?ws=ws://host:port/ws to point at one.';
         return;
       }
       hostCode.textContent = net.code;
+      startBtn.textContent = 'START RACE';   // gated until a joiner is in (hostReady)
       try { drawQr(el('hostCodeQr'), location.origin + location.pathname + '?join=' + net.code); el('hostCodeQr').classList.remove('hidden'); } catch { /* QR is optional decoration */ }
-      hostMsg.textContent = 'Send this room code to player 2 (or let them scan the QR). They pick JOIN and type it — the server runs the race for both of you.';
+      hostMsg.textContent = 'PLAYERS 1/2 — send this room code to player 2 (or let them scan the QR).';
+      // live player count: the /rooms endpoint carries the room's player total,
+      // so the screen shows 1/2 → 2/2 even if the PEER_JOINED frame is lost
+      if (hostPoll) clearInterval(hostPoll);
+      hostPoll = setInterval(() => {
+        if (!net || net.role !== 'host' || !net.code) return;
+        fetch(httpBase() + '/rooms').then(r => r.json()).then(j => {
+          const arr = Array.isArray(j) ? j : (j && j.rooms) || [];
+          const mine = arr.find(rm => rm.code === net.code);
+          updateHostPlayers(mine ? mine.players : 0, false);
+        }).catch(() => { /* transient network blip — the next poll retries */ });
+      }, 2000);
     });
+  }
+
+  function updateHostPlayers(n, fromFrame) {
+    if (n >= 2) {
+      if (!hostReady) {
+        hostReady = true;
+        startBtn.textContent = 'START RACE';
+        audio.beep(1180);
+      }
+      hostMsg.textContent = 'PLAYERS 2/2 — ready. Pick a track, then press START RACE.';
+    } else {
+      hostMsg.textContent = 'PLAYERS ' + n + '/2 — waiting for a joiner… send the code (or the QR).';
+    }
+    if (fromFrame) hostCode.textContent = net ? net.code : hostCode.textContent; // frame path: ensure the code is on screen
   }
 
   // join-side menu UI: 'joining' = code entry + lobby visible; 'connected' =
@@ -284,7 +327,7 @@ export function createNet2p(ctx) {
     try {
       const r = await fetch(httpBase() + '/rooms');
       const j = await r.json();
-      const rooms = (j && j.rooms) || [];
+      const rooms = Array.isArray(j) ? j : (j && j.rooms) || [];
       listEl.innerHTML = '';
       if (!rooms.length) {
         const d = document.createElement('div');
@@ -324,6 +367,20 @@ export function createNet2p(ctx) {
     for (let i = 0; i < ctx.racers().length; i++) {
       ctx.racers()[i].placeAt(info.grid[i * 2], info.grid[i * 2 + 1]);
     }
+    // repaint per WIRE slot (WS only — the legacy LAN order keeps its
+    // traditional palette): a local object's paint follows the object, but
+    // each device's local objects sit at different slots (the host's player
+    // is wire 0, the joiner's player is wire 1) — without this, the same
+    // kart is red on one screen and green on the other. Palette:
+    // 0 = host (red), 1 = joiner (P2 green), 2/3 = the AI colours.
+    if (wsMode()) {
+      const PAL = [
+        [0xe0392b, 0xf6c445], [P2_COLOR, 0xf6c445],
+        [0x2e7dd1, 0x80c8e0], [0x39b17c, 0xa8e6c0],
+      ];
+      for (let i = 0; i < ctx.racers().length && i < 4; i++)
+        ctx.racers()[i].setColor(PAL[i][0], PAL[i][1]);
+    }
     game.laps = info.laps;
     clientRing = new FrameRing();
     lastClientSp = 0;
@@ -335,6 +392,7 @@ export function createNet2p(ctx) {
     game.state = 'countdown';
     game.cdText = -1;
     hideOverlay();
+    ctx.racers().forEach(k => { k.lapStart = game.raceStart; });   // HUD lap-timer base
     hideCountdown();
     // snap camera behind our grid spot (state frames take over in a moment)
     ctx.camSnap(selfKart());
@@ -351,6 +409,7 @@ export function createNet2p(ctx) {
         list[i].lapDone = m.lapDone;
         list[i].lapTimes.push((st.hostMs - clientLapMark[i]) / 1000);
         clientLapMark[i] = st.hostMs;
+        list[i].lapStart = performance.now();        // HUD lap-timer re-bases
         const isYou = i === mySlot();
         const isP1 = i === 0 && mySlot() !== 0;
         if (isYou && !m.raceDone) audio.lap();   // our own lap crossing
@@ -395,6 +454,7 @@ export function createNet2p(ctx) {
       k.speed = m.speed;
       k.steerVel = m.steerVel;
       k.offRoad = m.offRoad;
+      k.fellOff = m.fellOff;   // server-authoritative fall state (floor-hit FX + HUD)
       k.posIdx = m.posIdx;
       k.item = m.item ?? 0;   // held item (interpolated frames pass it through intact)
       // explosion mirror: a remote kart falling to the table (y drops from
@@ -556,6 +616,8 @@ export function createNet2p(ctx) {
   return {
     role, selfKart, host, broadcast,
     wsMode, mySlot,
+    hostReady: () => hostReady,
+    netReady: () => !!(net && net.isWS && net.connected && hostReady),
     net: () => net,
     input: () => lastNetInput,
     inputNow: (t, s, d, u) => net && net.sendInput && net.sendInput(t, s, d, u),

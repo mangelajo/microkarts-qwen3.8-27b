@@ -179,7 +179,7 @@ export function makeKart(bodyColor, accentColor) {
   addWheel(-0.85,   -1.05, false);
 
   scene.add(root);
-  return { root, bodyGroup, wheels, frontPivots, exhaustGlow, blast };
+  return { root, bodyGroup, wheels, frontPivots, exhaustGlow, blast, paint, accent, caliperMat };
 }
 
 
@@ -244,6 +244,16 @@ export class Kart {
     this.itemT = 0;
     this.itemLife = 0;
     initCornerState(this);   // per-corner lap timing (corners.js)
+  }
+
+  // repaint an existing kart (WS: the wire slot's colour must be the same on
+  // every device — a local object's paint follows the object, not the slot)
+  setColor(color, accent) {
+    this.color = color;
+    const m = this.mesh;
+    if (m.paint) m.paint.color.setHex(color);
+    if (m.accent) m.accent.color.setHex(accent);
+    if (m.caliperMat) { m.caliperMat.color.setHex(accent); m.caliperMat.emissive.setHex(accent); }
   }
 
   placeAt(t, offset) {

@@ -24,7 +24,7 @@
 import { decInput, decStart, decFinish, decodeState, encInput, encTrack, encStart, encBye } from './net.js';
 // wire type bytes (the single-line export in net.js is opaque to the
 // import-graph check — keep the values in one documented place)
-const T_PREP = 0x05, T_START = 0x03, T_STATE = 0x20, T_FINISH = 0x30;
+const T_TRACK = 0x02, T_PREP = 0x05, T_START = 0x03, T_STATE = 0x20, T_FINISH = 0x30;
 
 export class WSSession {
   constructor(url) {
@@ -50,6 +50,7 @@ export class WSSession {
   onOpen(cb) { this._cbs.open = cb; }
   onStatus(cb) { this._cbs.status = cb; }
   onPrep(cb) { this._cbs.prep = cb; }
+  onTrack(cb) { this._cbs.track = cb; }
   onStart(cb) { this._cbs.start = cb; }
   onState(cb) { this._cbs.state = cb; }
   onFinish(cb) { this._cbs.finish = cb; }
@@ -161,6 +162,12 @@ export class WSSession {
         return;
       case T_PREP: {  // 0x05
         if (this._cbs.prep) this._cbs.prep({ trackIdx: d[1], cdMs: new DataView(d.buffer).getUint32(2) });
+        return;
+      }
+      case T_TRACK: {  // 0x02 — the server forwards the host's live picker
+        // (idx, hazards, items — all u8, encTrack layout) so the joiner's
+        // local field (item boxes, hazards) matches the server's sim
+        if (this._cbs.track) this._cbs.track(d[1], d[2], d[3]);
         return;
       }
       case T_START: {  // 0x03 — the server echoes the start (both clients sync
