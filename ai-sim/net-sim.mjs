@@ -903,7 +903,7 @@ mark(SP.length === 0 || SP[0].hit, 'patch is one-shot (hit flag set)');
 sB.gripPenalty = 1;
 for (let i = 0; i < 120 * 4; i++) {
   sB.offRoad = false;
-  simulateTick([sB], k => ({ throttle: 0, steer: 0 }), 1 / 120, i * (1000 / 120), { racing: true });
+  simulateTick([sB], () => ({ throttle: 0, steer: 0 }), 1 / 120, i * (1000 / 120), { racing: true });
 }
 mark(sB.gripPenalty < 0.15, 'grip penalty decays back to full grip');
 // the patch expires at 2 s
