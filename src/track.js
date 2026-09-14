@@ -362,6 +362,7 @@ export function tickHazards(dt, karts) {
   for (const h of hazardFx) {
     const o = h.o, R = o.r + KART_R;
     for (const k of karts) {
+      if (!k || !k.pos) continue;
       if (Math.abs(k.pos.y - (o.y || 0)) > 2.2) continue;
       const dx = k.pos.x - o.x, dz = k.pos.z - o.z;
       const sp = Math.abs(k.speed);

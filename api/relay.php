@@ -10,7 +10,7 @@
  *  Contract (also implemented by the dev mock in ai-sim/relay-check.mjs):
  *    GET  /api/relay.php?room=CODE&after=SEQ   (long-poll ≤20 s)
  *         -> {"msgs":[{"seq":N,"from":"HOST|P2","data":"<b64>"}...]}
- *    POST /api/relay.php?room=CODE&who=HOST|P2 (raw body, <8 KB)
+ *    POST /api/relay.php?room=CODE&who=HOST|JOIN (raw body, <8 KB)
  *         -> {"ok":true,"seq":N}
  *    GET  /api/relay.php (no room)  -> {"rooms": false}
  * ------------------------------------------------------------------ */
@@ -31,7 +31,7 @@ if (is_file($rf) && $now - filemtime($rf) > 30) @unlink($rf);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $who = strtoupper($_GET['who'] ?? '');
-    if ($who !== 'HOST' && $who !== 'P2') { echo '{"error":"bad who"}'; exit; }
+    if ($who !== 'HOST' && $who !== 'JOIN' && $who !== 'P2') { echo '{"error":"bad who"}'; exit; }
     $body = file_get_contents('php://input');
     if (strlen($body) > 8192) { echo '{"error":"too big"}'; exit; }
     $seq = 0;

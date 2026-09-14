@@ -155,10 +155,11 @@ mark(rj.rooms.some(x => x.code === host.code && x.name === 'RELAY'), 'lobby list
 
 /* Rank round-trip check (unique name: the server rate-limits per name+track) */
 const rankName = 'TEST' + (Math.random() * 9999 | 0);
+const rankMs = 987 + (Math.random() * 10 | 0);   // faster than any stale entry → guaranteed top-5
 await fetch(api + '/api/rank.php', { method: 'POST', headers: { 'Content-Type': 'text/plain' },
-  body: JSON.stringify({ name: rankName, ms: 12345, track: 1 }) });
+  body: JSON.stringify({ name: rankName, ms: rankMs, track: 1 }) });
 const rk = await (await fetch(api + '/api/rank.php?track=1')).json();
-mark((rk.top || []).some(x => x.name === rankName && x.ms === 12345), 'global rank round-trip');
+mark((rk.top || []).some(x => x.name === rankName && x.ms === rankMs), 'global rank round-trip');
 
 host.close(); join.close();
 await new Promise(r => setTimeout(r, 200));

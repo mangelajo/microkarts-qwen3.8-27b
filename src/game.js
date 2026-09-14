@@ -700,7 +700,7 @@ function animate() {
       // live touch drag drives over the wire; otherwise the keyboard. steer pitch
       const d = readDrive(true);
       const use = tryConsumeItemUse(performance.now());   // E / touch auto-fire
-      n2.net().inputNow(d.throttle, d.steer, d.drift, use);
+      n2.inputNow(d.throttle, d.steer, d.drift, use);   // inputNow is on the n2 factory, not the session
       n2.applyClientState(dt);
       const sk = n2.selfKart();
       if (sk.item !== lastPlayerItem) {   // item juice on the wire-mirrored item
@@ -858,6 +858,6 @@ function animate() {
 }
 
 /* Read-only E2E hook for the Playwright gates (no-op in headless Node). */
-if (typeof window !== 'undefined') window.__mkr = { game, n2 };
+if (typeof window !== 'undefined') window.__mkr = { game, n2, player: () => player, racers: () => racers() };
 
 animate();

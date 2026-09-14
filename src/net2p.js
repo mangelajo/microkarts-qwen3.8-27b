@@ -474,7 +474,7 @@ export function createNet2p(ctx) {
     role, selfKart, host, broadcast,
     net: () => net,
     input: () => lastNetInput,
-    inputNow: (t, s, d, u) => net.inputNow(t, s, d, u),
+    inputNow: (t, s, d, u) => net && net.sendInput && net.sendInput(t, s, d, u),
     resetClientItems: () => { clientItemSeen = ctx.racers().map(() => false); },
     applyClientState,
     beginHostSession, joinRoom, joinAuto, onPeerLost, refreshLobby, apiBase,
