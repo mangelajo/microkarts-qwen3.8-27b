@@ -100,9 +100,11 @@ flat tracks stay flat.
   Same item-box economy (weighted roll, 40/25/20/15); one more u8 value
   (old peers decode as ITEM_NONE — a blank slot, safe). `make netsim`
   covers the patch field + grip model.
-- [ ] **Controller-free mobile polish** — on-screen drift/boost buttons with
-  haptic pulses on charge milestones (already partially there — the auto-fire
-  path), plus a 9:16 portrait layout pass for the chase camera.
+- [x] **Controller-free mobile polish** — shipped: an on-screen DRIFT
+  button (touch devices only) + haptic pulses on drift-charge milestones
+  (⅓ / ⅔ / PERFECT) and the button press, plus a 9:16 portrait layout
+  pass for the chase camera (pulled in ×0.82, raised ×1.2, FOV +8).
+  Verified with a Playwright touch context.
 
 ## Deliberately not doing (for now)
 

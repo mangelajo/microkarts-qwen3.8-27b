@@ -114,6 +114,16 @@
     white-space:nowrap; opacity:0; transition:opacity .45s; }
    .joy-hint.on { opacity:.85; transition:opacity .2s; }
 
+   /* on-screen drift button: phones have no spacebar */
+   #driftBtn { display:none; position:fixed; right:18px; bottom:168px; z-index:7;
+     width:84px; height:84px; border-radius:50%; border:2px solid rgba(255,210,150,.4);
+     background:radial-gradient(circle at 38% 32%, rgba(255,200,90,.9), rgba(190,110,30,.85));
+     color:#241505; font:700 12px/1.15 monospace; letter-spacing:1px;
+     box-shadow:0 6px 16px rgba(0,0,0,.5); touch-action:none; user-select:none;
+     align-items:center; justify-content:center; }
+   .touch #driftBtn { display:flex; }
+   #driftBtn.down { transform:scale(.93); box-shadow:0 2px 8px rgba(0,0,0,.5); }
+
   /* small screens: the menu must never clip — start at the top + scroll
      vertically (the panel is taller than a phone's viewport), with a
      compact layout (2-col key grid, smaller chips/title) */
@@ -143,6 +153,9 @@
 </head>
 <body>
 <div id="app"></div>
+
+<!-- on-screen drift button (touch devices): hold to slide, release to boost -->
+<button id="driftBtn" aria-label="Drift">DRIFT</button>
 
 <div class="hud hudbox" id="lap-hud">
   <div class="big" id="lap">LAP 1/3</div>

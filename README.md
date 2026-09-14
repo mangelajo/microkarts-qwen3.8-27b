@@ -184,6 +184,13 @@ take in the catalogue. All track shapes are validated headlessly.
   deterministic spatial field in `ai.js`). Both are flat; day/night is `static`
   (indoor / overcast). Adding a track = a `src/tracks.js` entry + a `make sim`
   run — the AI is track-agnostic and the harness runs all 8 tracks
+- **Controller-free mobile polish** — an on-screen **DRIFT button** (a big
+  circular touch target, shown only on touch devices — verified with a
+  Playwright touch context): hold to slide, release to boost; **haptic
+  pulses** (`navigator.vibrate`) fire on drift-charge milestones (⅓, ⅔,
+  PERFECT) and on the button press. A **9:16 portrait layout pass** for
+  the chase camera: portrait viewports pull the camera in (×0.82), raise
+  it (×1.2) and widen the FOV (+8) so the kart + road ahead both fit
 - **Item #4: sticky candy** — a box reward that leaves a **slow patch**
   behind the thrower for 2 s: the first kart through it loses *grip* (65%
   steering authority + a slide), not speed — distinct from the wall's

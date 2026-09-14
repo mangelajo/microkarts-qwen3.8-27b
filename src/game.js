@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {
   game,
   N_AI, AI_SKILL,
-  CAM_DIST, CAM_HEIGHT, SIM_DT, COUNTDOWN_MS, LAPS, KMH_PER_U, DRIFT_MIN_KMH, DRIFT_CHARGE_MAX, P2_COLOR,
+  CAM_DIST, CAM_HEIGHT, SIM_DT, COUNTDOWN_MS, LAPS, KMH_PER_U, DRIFT_MIN_KMH, DRIFT_CHARGE_MAX, PERFECT_CHARGE, P2_COLOR,
   ITEM_TURBO, ITEM_WALL,
 } from './config.js';
 import { renderer, scene, camera, updateDust, dustForKart } from './scene.js';
@@ -107,12 +107,24 @@ function inText() { return (keys.left ? 1 : 0) - (keys.right ? 1 : 0); }
 // readDrive is called per frame for the player's kart, for the audio pitch, and
 // (on the client) for what gets streamed over the wire.
 const drive = { throttle: 0, steer: 0, drift: false };
+let touchDrift = false;   // the on-screen DRIFT button (phones)
+{
+  const db = document.getElementById('driftBtn');
+  if (db) {
+    const down = e => { e.preventDefault(); touchDrift = true; db.classList.add('down'); if (navigator.vibrate) navigator.vibrate(20); };
+    const up = () => { touchDrift = false; db.classList.remove('down'); };
+    db.addEventListener('pointerdown', down);
+    db.addEventListener('pointerup', up);
+    db.addEventListener('pointercancel', up);
+    db.addEventListener('pointerleave', up);
+  }
+}
 function readDrive(racing) {
   const t = getDrive();
   if (t.active && racing) {
     drive.throttle = t.throttle; drive.steer = t.steer;
-    // touch has no drift button: drag the stick to FULL lock to commit to a slide
-    drive.drift = keys.drift || (Math.abs(t.steer) > 0.95 && t.throttle > 0.5);
+    // touch: the on-screen DRIFT button, or drag the stick to FULL lock
+    drive.drift = keys.drift || touchDrift || (Math.abs(t.steer) > 0.95 && t.throttle > 0.5);
   }
   else {
     drive.throttle = (keys.up ? 1 : 0) - (keys.down ? 1 : 0);
@@ -179,6 +191,7 @@ addEventListener('resize', () => {
 // mobile: the floating "pull" joystick lives on the render canvas; it drives
 // via the same {throttle, steer} channel as the keyboard (see readDrive).
 initTouch(renderer.domElement);
+if (isTouchDevice()) document.body.classList.add('touch');   // after initTouch sets the flag
 
 // item use is edge-triggered: E queues one fire (itemUseQ), touch devices
 // auto-fire a turbo/wall ~450 ms after pickup (autoUseAt). The rubber band
@@ -578,6 +591,7 @@ function hostInputFor(k, racing) {
  *  Cameras
  * ------------------------------------------------------------------ */
 let camShake = 0; // collision camera shake, decays
+let hapticMs = 0; // last drift-charge milestone (haptic pulses)
 function addShake(v) { camShake = Math.min(1, camShake + v); }
 
 // replay: record the player's input each race; REPLAY re-runs it
@@ -586,14 +600,19 @@ let replayMode = false, replayIdx = 0, replayQueued = false;
 function snapChaseCam(dt) {
   const p = n2.selfKart();
   const fx = Math.sin(p.heading), fz = Math.cos(p.heading);
+  // 9:16 portrait layout pass: narrow screens crop the chase — pull the
+  // camera in + up so the kart and the road ahead both fit
+  const portrait = typeof window !== 'undefined' && window.innerWidth < window.innerHeight;
+  const cdist = portrait ? CAM_DIST * 0.82 : CAM_DIST;
+  const cheight = portrait ? CAM_HEIGHT * 1.2 : CAM_HEIGHT;
   // the camera rides with the kart's elevation (3D tracks: p.pos.y > 0)
-  const target = _cdVec.set(p.pos.x - fx * CAM_DIST, p.pos.y + CAM_HEIGHT, p.pos.z - fz * CAM_DIST);
+  const target = _cdVec.set(p.pos.x - fx * cdist, p.pos.y + cheight, p.pos.z - fz * cdist);
   camPos.lerp(target, 1 - Math.exp(-7 * dt));
   camera.position.copy(camPos);
   camLook.lerp(_cdVec.set(p.pos.x + fx * 3.5, p.pos.y + 0.9, p.pos.z + fz * 3.5), 1 - Math.exp(-7 * dt));
   camera.lookAt(camLook);
   // speed-FOV: widens with speed for a sense of pace (55 -> ~70 at top speed)
-  const fovT = 55 + 15 * Math.min(Math.abs(p.speed) / 30, 1);
+  const fovT = 55 + 15 * Math.min(Math.abs(p.speed) / 30, 1) + (portrait ? 8 : 0);
   camera.fov += (fovT - camera.fov) * Math.min(1, 4 * dt);
   camera.updateProjectionMatrix();
   // collision shake: high-frequency offset, decays fast
@@ -726,6 +745,15 @@ function animate() {
     audio.updateEngine(player.speed, readDrive(racing).steer, !player.offRoad, player.drifting, player.charge / DRIFT_CHARGE_MAX, player.boost);
     // music reactivity: drift charge + boost open the filter + add arp density
     audio.setMusicEnergy(0.55 * (player.charge / DRIFT_CHARGE_MAX) + 0.45 * Math.min(player.boost, 1));
+    // haptic pulses on drift-charge milestones (phones feel the slide building)
+    {
+      const c = player.charge / DRIFT_CHARGE_MAX;
+      if (c > hapticMs && c - hapticMs >= 0.3) {
+        hapticMs = c;
+        if (navigator.vibrate) navigator.vibrate(c >= PERFECT_CHARGE ? [40, 30, 40] : 30);
+      }
+      if (c < hapticMs - 0.2) hapticMs = 0;
+    }
     if (player.boostEdge) {   // drift released with charge — whoosh (louder = more charge)
       player.boostEdge = false;
       if (player.boost > 0.2) audio.beep(430 + 640 * player.boost);
