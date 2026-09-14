@@ -670,8 +670,9 @@ function animate() {
       let steps = 0;
       while (n2.host.acc >= SIM_DT && steps < 8) {
         n2.host.t += SIM_DT * 1000;
+        n2.host.tick = (n2.host.tick || 0) + 1;
         simulateTick(list, hostInputFor, SIM_DT, n2.host.t, { racing: false });
-        n2.broadcast();
+        if ((n2.host.tick & 1) === 0) n2.broadcast();   // 30 Hz on the wire — the 60 Hz sim keeps running locally
         n2.host.acc -= SIM_DT;
         steps++;
       }
@@ -691,7 +692,7 @@ function animate() {
     if (clockMs >= game.raceStart + 700) {
       game.state = 'racing';
       hideCountdown();
-      if (role === 'host') { n2.host.acc = 0; p2.netOn = true; }
+      if (role === 'host') { n2.host.acc = 0; n2.host.tick = 0; p2.netOn = true; }
       // GO — the ghost laps with us from here (join clients mirror, never record)
       if (role !== 'join') ghostLapStart();
     }
@@ -723,6 +724,7 @@ function animate() {
       let steps = 0;
       while (n2.host.acc >= SIM_DT && steps < 8) {
         n2.host.t += SIM_DT * 1000;
+        n2.host.tick = (n2.host.tick || 0) + 1;
         p2.netOn = true;
         simulateTick(list, hostInputFor, SIM_DT, n2.host.t, {
           racing,
@@ -730,7 +732,7 @@ function animate() {
           obFor: obJuice,
           wallFor: wallJuice,
         });
-        if (racing) n2.broadcast();
+        if (racing && (n2.host.tick & 1) === 0) n2.broadcast();   // 30 Hz on the wire (60 Hz sim stays local)
         n2.host.acc -= SIM_DT;
         steps++;
       }

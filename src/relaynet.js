@@ -185,6 +185,15 @@ export class RelaySession {
   sendPrep(idx, cdMs) { if (this.active && this.code) this._post(this._buf(encPrep(idx, cdMs)), 'HOST'); }
   sendStart(info) { if (this.active && this.code) this._post(this._buf(encStart(info)), 'HOST'); }
   sendFinish(order, laps) { if (this.active && this.code) this._post(this._buf(encFinish(order, laps)), 'HOST'); }
-  sendInput(t, s, drift, use) { if (this.open) this._post(this._buf(encInput(t, s, 0, drift, use)), 'P2'); }
+  sendInput(t, s, drift, use) {
+    if (!this.open) return;
+    const now = performance.now();
+    // 30 Hz on the wire (the host's 250 ms freshness window is far larger):
+    // throttle/steer ride the interval; a drift/use edge is never gated (it
+    // must land in the very tick it happened)
+    if (now - (this._inAt || 0) < 33 && use === this._inUse && drift === this._inDrift) return;
+    this._inAt = now; this._inUse = use; this._inDrift = drift;
+    this._post(this._buf(encInput(t, s, 0, drift, use)), 'P2');
+  }
   sendState(buf) { if (this.active && this.code) this._post(buf, 'HOST'); }   // raw frame, as before
 }

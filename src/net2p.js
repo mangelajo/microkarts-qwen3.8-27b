@@ -37,6 +37,14 @@ export function createNet2p(ctx) {
   const host = { t: 0, acc: 0, enc: null }; // host sim clock (ms) + state encoder (set by game.js startRace)
   let lastNetInput = { throttle: 0, steer: 0, drift: false, use: false, ping: -1, at: 0 };
   let clientRing = null;
+  // adaptive interpolation delay: the relay delivers state frames in bursts
+  // (long-poll tick + HTTP overhead), so a fixed 50 ms buffer is smaller
+  // than the delivery gap and the mirror catches up in visible jumps.
+  // Track the arrival gap and hold the buffer at ~1.5x the recent gap
+  // (clamped 100–350 ms) — the camera lerp + 30 Hz wire absorb the rest.
+  let interpDelayMs = INTERP_DELAY;   // until the first frame arrives
+  let lastStateAt = 0;
+  let lastLagMs = 0;   // how old the sampled snapshot was (the real perceived delay)
   let clientLapSeen = [];
   let clientLapMark = []; // host-sim-ms of each kart's last detected line crossing
   let netStartWall = 0;      // join role: when the host's start frame landed
@@ -112,7 +120,12 @@ export function createNet2p(ctx) {
         // session already decoded the frame: { hostMs, echoPing, karts }
         if (role() !== 'join') return;
         if (!clientRing) return;
-        clientRing.push(st, performance.now());
+        const nowA = performance.now();
+        const gap = lastStateAt ? nowA - lastStateAt : 100;
+        lastStateAt = nowA;
+        const target = Math.max(100, Math.min(350, gap * 1.5 + 30));
+        interpDelayMs = target;   // follow the gap closely (frames are 30 Hz — the buffer is ~2-3 frames)
+        clientRing.push(st, nowA);
         mirrorItemPickups(st);   // boxes are deterministic locally — no wire traffic
         game.net = st;
         clientRaceBookkeeping(st);
@@ -142,6 +155,7 @@ export function createNet2p(ctx) {
     const s = net; net = null;
     if (s && !s.closed) s.close(); // fires onClose → re-enters onPeerLost, guarded by s.closed
     host.acc = 0; lastNetInput.ping = -1;
+    lastStateAt = 0;   // don't carry the drop's gap into the next session's buffer
     if (s && s.role === 'join') {   // joiner lost the link: back to code entry
       setJoinUi('joining');
       joinMsg.textContent = 'CONNECTION LOST — enter the room code again (or re-scan the QR).';
@@ -331,8 +345,12 @@ export function createNet2p(ctx) {
 
   function applyClientState(dt) {
     if (!clientRing || clientRing.size < 1) return;
-    const st = sampleState(clientRing, performance.now() - INTERP_DELAY);
+    const nowA = performance.now();
+    const st = sampleState(clientRing, nowA - interpDelayMs);
     if (!st || !game.net) return;
+    // perceived delay: the sample time vs the newest frame we actually have
+    // (if the buffer exceeds the newest frame, we're extrapolating — lag > 0 beyond the buffer)
+    lastLagMs = interpDelayMs + Math.max(0, (nowA - interpDelayMs) - clientRing.newestAt());
     const list = ctx.racers();
     for (let i = 0; i < list.length && i < st.karts.length; i++) {
       const k = list[i], m = st.karts[i];
@@ -497,6 +515,8 @@ export function createNet2p(ctx) {
     net: () => net,
     input: () => lastNetInput,
     inputNow: (t, s, d, u) => net && net.sendInput && net.sendInput(t, s, d, u),
+    interpDelayMs: () => interpDelayMs,
+    lastLagMs: () => lastLagMs,
     resetClientItems: () => { clientItemSeen = ctx.racers().map(() => false); },
     applyClientState,
     beginHostSession, joinRoom, joinAuto, onPeerLost, refreshLobby, apiBase,

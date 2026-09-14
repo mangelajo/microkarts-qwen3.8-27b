@@ -86,6 +86,6 @@ while (microtime(true) < $deadline) {
             }
         }
     }
-    usleep(200000);
+    usleep(100000);
 }
 echo '{"msgs":[]}';

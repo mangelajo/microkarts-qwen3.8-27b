@@ -28,6 +28,7 @@ export class FrameRing {
   clear() { this.frames.length = 0; }
   get size() { return this.frames.length; }
   newest() { return this.frames.length ? this.frames[this.frames.length - 1].frame : null; }
+  newestAt() { return this.frames.length ? this.frames[this.frames.length - 1].recvT : 0; }
 }
 
 const lerp = (a, b, f) => a + (b - a) * f;

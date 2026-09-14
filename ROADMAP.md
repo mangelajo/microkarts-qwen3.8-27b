@@ -23,7 +23,7 @@ flat tracks stay flat.
 
 - [x] **Online rooms + relay (PHP path)** — shipped as the pure-PHP
   long-poll relay (the cPanel box has no Node; the user chose PHP first,
-  Node later): `api/relay.php` (per-room file queue, 200 ms tick, ≤20 s
+  Node later): `api/relay.php` (per-room file queue, 100 ms tick, ≤20 s
   hold, raw POST bodies <8 KB → base64 batch; the server never decodes
   frames) + `api/rooms.php` (heartbeated lobby). `src/relaynet.js`
   `RelaySession` is a drop-in for the old WebRTC session (same cbs + send
@@ -40,6 +40,19 @@ flat tracks stay flat.
   mock otherwise), `make relaye2e` (two real browser pages race over the
   relay); `make netsim` covers the contract mock round-trip. The Node
   `ws` transport remains the follow-up (cPanel “Setup Node.js® App”).
+  **Netplay smoothness tuned (A):** the original 60 Hz wire + fixed 50 ms
+  client buffer undersized the long-poll delivery clumps, so the joiner’s
+  mirror caught up in visible jumps. Now: state at 30 Hz on the wire
+  (60 Hz sim stays local), input at 30 Hz (drift/item edges never
+  rate-gated), relay tick 200 → 100 ms, and an **adaptive interpolation
+  buffer** — the joiner measures the state-frame arrival gap and holds the
+  buffer at ~1.5× the recent gap (clamped 100–350 ms); a perceived-lag
+  readout (`n2.lastLagMs()`) shows how old the sampled snapshot was. A
+  headless two-browser A/B (same relay, before/after) cut catch-up jumps
+  (Δ > 1.5 u per 50 ms sample) from 13/46 = 28 % to 3/39 = 8 % with the
+  host running ~3× slow — real 60 fps browsers land smoother still.
+  The structural upgrade (per-room Node authoritative sim over WebSocket,
+  symmetric latency, 4-player for free) remains the Phase 9 follow-up.
 - [x] **Global rankings (PHP)** — `api/rank.php` stores a top-5 per track
   (POST name + track + ms, rate-limited 1/10 s per name+track, JSON file)
   and GETs the board; `rankings.js` merges the global entries (name
