@@ -23,7 +23,9 @@ let remote = [];   // [{ ms, d, name }] from rank.php (best effort, non-blocking
 function apiBase() {
   try {
     const m = new URLSearchParams(location.search).get('api');
-    return m ? m.replace(/\/$/, '') : '';
+    if (m) return m.replace(/\/$/, '');
+    // same origin (production): the app's own directory (subdirectory-safe)
+    return location.pathname.replace(/index\.html$/, '').replace(/\/$/, '');
   } catch { return ''; }   // headless: no location — no relay
 }
 

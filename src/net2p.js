@@ -159,7 +159,13 @@ export function createNet2p(ctx) {
 
   const apiBase = () => {
     const m = new URLSearchParams(location.search).get('api');
-    return m ? m.replace(/\/$/, '') : '';   // '' = same origin (production)
+    if (m) return m.replace(/\/$/, '');
+    // same origin (production): the app's own directory — the game sits at
+    // <base>/index.html and the relay at <base>/api/, so a bare '' would
+    // hit the domain root and 404 in a subdirectory deploy (e.g. /microkarts/)
+    try {
+      return location.pathname.replace(/index\.html$/, '').replace(/\/$/, '');
+    } catch { return ''; }   // headless: no location — no relay
   };
 
   function beginHostSession() {
