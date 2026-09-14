@@ -141,10 +141,10 @@ function readDrive(racing) {
   return drive;
 }
 addEventListener('keydown', e => {
+  if (e.target && e.target.isContentEditable) return; // typing a pairing code — before any preventDefault eats the keystroke
   audio.ensureAudio();
   const k = KEYMAP[e.code];
   if (k) { keys[k] = true; e.preventDefault(); }
-  if (e.target && e.target.isContentEditable) return; // typing a pairing code
   if (e.code === 'Enter' || e.code === 'KeyR') primaryAction();
   if (e.code === 'Escape' && game.state === 'finished') toMenu();
   // menu pages (menu state only — no conflict with race keys)
@@ -177,6 +177,7 @@ addEventListener('keydown', e => {
   if (e.code === 'Space') { keys.drift = true; e.preventDefault(); }   // hold to drift
 });
 addEventListener('keyup', e => {
+  if (e.target && e.target.isContentEditable) return;
   const k = KEYMAP[e.code];
   if (k) { keys[k] = false; e.preventDefault(); }
   if (e.code === 'Space') keys.drift = false;

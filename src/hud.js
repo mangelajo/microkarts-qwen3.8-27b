@@ -125,7 +125,12 @@ export function initModePicker(onMode, onJoinSend, onRoster) {
   for (const c of rosterRow.children) {
     c.addEventListener('click', e => { onRoster(c.dataset.roster); e.target.blur(); });
   }
-  el('joinInField').addEventListener('input', () => { joinInField.innerText = joinInField.innerText.trimStart(); });
+  // NOTE: no 'input' handler on joinInField — re-writing innerText per
+  // keystroke resets the caret to the start; joinRoom() trims on submit.
+  // Enter in the field = JOIN (the game key handler ignores editable targets).
+  el('joinInField').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); onJoinSend(); }
+  });
   // phones have no keyboard — the CONTROLS page shows the pull-stick hints
   if (isTouchDevice()) {
     keysEl.innerHTML =
