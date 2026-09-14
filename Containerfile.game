@@ -16,8 +16,7 @@ COPY src/ ./src/
 COPY server/ ./server/
 # the sim modules pull in browser-only scene modules — the server boots with
 # the same loader stub the headless sims use (stub.js + hooks.mjs)
-COPY ai-sim/stub.js ./ai-sim/stub.js
-COPY ai-sim/hooks.mjs ./ai-sim/hooks.mjs
+COPY ai-sim/ ./ai-sim/
 
 EXPOSE 8080
 ENV PORT=8080
