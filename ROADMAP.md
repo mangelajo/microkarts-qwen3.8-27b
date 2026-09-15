@@ -10,13 +10,13 @@ flat tracks stay flat.
 
 - 8 procedural tracks (4 flat, 4 elevated), day/night sky, procedural rain,
   fully synthesized reactive music
-- 1P / 2P over the **Node WebSocket game server** (`server/`: 60 Hz
-  server-authoritative sim per room, 2 human slots + 2 AI fill, connected
+- 1P / 2P / **up to 4P** over the **Node WebSocket game server** (`server/`: 60 Hz
+  server-authoritative sim per room, up to 4 human slots (0..3) + AI fill, connected
   human always owns their kart / dropped human → AI; 4-char
   room code, QR pairing, `?join=` deep link, FIND A RACE lobby;
   wire-slot kart colours, forwarded TRACK to the joiner, fall state
-  over the wire for both devices' floor-hit FX, live 1/2 → 2/2 host
-  screen with a start gate; **smoothness pass: 60 Hz state wire +
+  over the wire for both devices' floor-hit FX, live 1/2 → 2/2 → 4/4 host
+  screen (start at ≥1 player; empty seats become staggered AI); **smoothness pass: 60 Hz state wire +
   trailing tick seq (drop/late detection, backward-compatible) +
   monotonic render-time pacing — the render target can never move
   backward; no-hold extrapolation (the render point advances through
@@ -104,12 +104,12 @@ flat tracks stay flat.
   jumps (28 % of samples); 30 Hz wire + adaptive buffer → 8 % (Δ > 1.5 u
   per 50 ms, headless A/B with a ~3× slow host); the server-authoritative
   path removes the host-side load asymmetry entirely.
-- [ ] **Server-authoritative 4-player race** — the Phase 9 server already
-  runs the room loop, so 4 humans is an extension, not a build: a
-  third `humans` slot (the state frame is length-derived — the wire is
-  already N-kart-ready), per-slot input routing, a 4-seat roster picker
-  (AI fills the rest). No host privileges, no NAT, symmetric latency
-  for all four; the Phase 10 4-player item then becomes an online mode.
+- [x] **Server-authoritative 4-player race** — shipped in Phase 10: the room
+  now holds up to 4 humans (slots 0..3) with per-slot input routing, a
+  4-seat roster picker (AI fills the rest), and the N-kart state frame
+  (length-derived stride, no new fields); a fifth client is kicked. No host
+  privileges, no NAT, symmetric latency for all four; verified by `make
+  wscheck` (4-human room) + a four-browser probe
 
 - [x] **Periodic backward-pull fix — render lerp over sim time, not
   arrival time** — the render point is a sim-clock accumulator and the
@@ -137,20 +137,20 @@ flat tracks stay flat.
   nametags active)
 ## Phase 10 — Four karts, four players
 
-- [ ] **4-player races** — the state frame is already length-derived
-  (`makeStateEncoder(kartN)` / `decodeState(d, kartN)` infer the stride from
-  `byteLength`), and the sim takes an arbitrary kart array with AI fill —
-  so a roster of 1P / 2P / 3P / 4P is an extension, not a redesign:
-  roster picker on the RACE + 2P pages (AI fills empty seats), `kartN` in
-  the start/hello message, per-player input messages (each peer already
-  sends its own input; the host sim applies N of them). Backward
-  compatibility: an old 2P peer joining a 4-kart race sees the first two
-  karts (stride check passes) — `make netsim` covers a 4-kart race, AI
-  fill, and old-peer decode of a 4-kart frame. Results/rankings/ghost/minimap
-  already handle arrays; `posIdx` u8 already supports 4.
-- [ ] **Roster UI** — the 2P page's "2+2" becomes a segmented control
-  (1P / 2P / 3P / 4P, AI fills the rest), persisted like the other menu
-  choices; screens capture all four roster states on phone + desktop.
+- [x] **4-player races** — shipped: the room holds 4 humans (slots 0..3);
+  the WS wire is always 4 karts with the local player at `mySlot()` and AI
+  filling empty seats; the host starts at ≥1 player and the missing seats
+  become a staggered AI grid (`AI_STAGGER`). No new state-frame fields (the
+  frame was already length-derived/N-kart-ready; `START` already carried
+  `karts` + `rosterN`). Backward compat verified in `make netsim`: an old
+  2-kart peer decoding a 4-kart frame reads the first two karts (stride
+  check passes); a 4-human 0-AI race + a 3-human + 1-AI race finish on
+  every track
+- [x] **Roster UI** — shipped: the 2P page has a segmented 1P/2P/3P/4P
+  control (default 2P, the online seat count) and the solo RACE page has one
+  too (default 4P = you + 3 AI; 1P = just you); both persist to
+  `localStorage` (`mkr-online` / `mkr-solo`) and restore on mode switch.
+  `make screens` captures the 2P menu with the roster picker on desktop + phone
 
 ## Phase 11 — World expansion
 

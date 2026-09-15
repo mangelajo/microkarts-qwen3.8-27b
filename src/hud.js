@@ -94,7 +94,7 @@ function trackWrapEl() { return el('trackWrap'); }
 function hazardWrapEl() { return el('hazardWrap'); }
 function itemWrapEl() { return el('itemWrap'); }
 
-let hostRoster = '2ai'; // '2ai' | '1v1' — host-owned, broadcast on start
+let hostRoster = 2; // human seats (1..4) — host-owned, broadcast on start
 /* ---------------- menu pages (RACE / EXTRAS / CONTROLS) ---------------- */
 const menuTabs = el('menuTabs');
 export function initMenuTabs(onTab) {
@@ -112,7 +112,7 @@ export function setMenuPage(p) {
 
 export function setHostRoster(r) {
   hostRoster = r;
-  for (const c of rosterRow.children) c.classList.toggle('sel', c.dataset.roster === r);
+  for (const c of rosterRow.children) c.classList.toggle('sel', String(c.dataset.roster) === String(r));
 }
 export function getHostRoster() { return hostRoster; }
 

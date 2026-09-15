@@ -40,14 +40,12 @@ export class WSSession {
     this.status = 'offline';
     this.connected = false;   // HELLO ok received
     this.code = null;      // room code (assigned by the server on CONNECT 'H')
-    this.slot = -1;        // my kart slot (0 = host, 1 = joiner)
-    this.kartN = 4;        // the server always simulates 4 (2 humans + 2 AI)
+    this.slot = -1;        // my kart slot (0 = host, 1..3 = joiners)
+    this.kartN = 4;        // the server always simulates 4 (humans + AI fill)
     this.rttMs = 0;
     this.peerJoined = false;
     this.name = '';        // my nickname (sent in CONNECT, echoed in HELLO)
-    this.peerName = '';    // the other player's nickname (PEER_JOINED)
-    this.peerSlot = -1;    // the other player's slot (PEER_JOINED)
-    this.names = ['', '']; // slot(0=host,1=joiner) -> nickname, from PEER_JOINED
+    this.names = ['', '', '', '']; // slot(0=host,1..3=joiners) -> nickname (PEER_JOINED)
     this._liveness = null;
   }
 
@@ -74,8 +72,8 @@ export class WSSession {
   open(kind, name, code) {
     this._closed = false; this._intentional = false;
     this.name = name;
-    this.peerName = ''; this.peerSlot = -1; this.peerJoined = false;
-    this.names = ['', ''];
+    this.peerJoined = false;
+    this.names = ['', '', '', ''];
     return new Promise((res) => {
       let settled = false;
       const done = (ok) => {
@@ -150,12 +148,11 @@ export class WSSession {
         this.slot = d[7 + nameLen];
         this.name = name;   // the server's echo is authoritative for my name
         // PEER_JOINED can arrive BEFORE the HELLO (the server sends the 0x82
-        // frames first) — recompute the peer now that we know our own slot
-        {
-          const ps = this.slot >= 0 ? 1 - this.slot : -1;
-          this.peerSlot = ps;
-          this.peerName = ps >= 0 ? (this.names[ps] || '') : '';
-        }
+        // frames first) — re-notify for every already-known peer now that we
+        // know our own slot, so names render in either order
+        for (let s = 0; s < 4; s++)
+          if (s !== this.slot && this.names[s] && this._cbs.peerJoined)
+            this._cbs.peerJoined(s, this.names[s]);
         done(true);
         if (this._cbs.open) this._cbs.open(this.code, name, this.slot);
         return;
@@ -167,14 +164,12 @@ export class WSSession {
           const nl = d[2];
           const nm = d.length > 3 + nl
             ? String.fromCharCode(...d.subarray(3, 3 + nl)) : '';
-          // store by slot (ordering-robust: the joiner also gets its own
-          // name broadcast), then expose the OTHER human as the peer
-          if (slot === 0 || slot === 1) this.names[slot] = nm;
-          const ps = this.slot >= 0 ? 1 - this.slot : -1;
-          this.peerSlot = ps;
-          this.peerName = ps >= 0 ? (this.names[ps] || '') : '';
+          // store by slot (ordering-robust: every client also gets its own
+          // name broadcast) — slots 0..3 (the host + up to three joiners)
+          if (slot >= 0 && slot < 4) this.names[slot] = nm;
         }
-        if (this._cbs.peerJoined) this._cbs.peerJoined();
+        if (this._cbs.peerJoined && d[1] >= 0 && d[1] < 4)
+          this._cbs.peerJoined(d[1], this.names[d[1]]);
         return;
       case 0x81:  // PEER_LEFT — mid-race the kart becomes AI; the room only
         // dissolves when the HOST leaves (that also arrives as a KICK).

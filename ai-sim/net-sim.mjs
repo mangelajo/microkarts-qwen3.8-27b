@@ -841,6 +841,93 @@ for (let ti = 0; ti < TRACKS.length; ti++) {
 }
 setItemsOn(false);
 
+/* ------------------------------------------------------------------ */
+/*  4P host race: 4 human input streams, 0 AI — the new 4-kart online.
+ *  Every seat is a human; the host-authoritative sim must keep all four
+ *  in sync (positions, lap times) and finish on every track.
+ * ------------------------------------------------------------------ */
+console.log('\n== 4P host race (4 humans, 0 AI) ==');
+const GO4 = 3000;
+for (let ti = 0; ti < TRACKS.length; ti++) {
+  const info = selectTrack(ti);
+  setItemsOn(true);
+  const list = ['YOU', 'P2', 'P3', 'P4'].map((who, i) => {
+    const k = new Kart({ isPlayer: who === 'YOU', net: true, name: who, skill: 1 });
+    k.laps = LAPS;
+    const { P, T, Nn } = posAt(GRID[i].u);
+    k.pos.copy(P).addScaledVector(Nn, GRID[i].o);
+    k.heading = Math.atan2(T.x, T.z);
+    k.trackIdx = Math.floor(GRID[i].u * n) % n;
+    k.prevU = GRID[i].u;
+    return k;
+  });
+  let t = 0;
+  while (t < 300 * 1000 && !list.every(k => k.raceDone)) {
+    simulateTick(list, (k, r) => r ? humanPilot(k) : { throttle: 0, steer: 0 },
+      SIM_DT, t, { racing: t >= GO4, crashFor: null, wallFor: () => {} });
+    t += SIM_DT * 1000;
+  }
+  const fin = list.filter(k => k.raceDone).length;
+  mark(fin === 4, `${info.name}: 4P humans all finished (${fin}/4)`);
+  const order = raceOrder(list);
+  mark(order.every((k, i) => k.posIdx === i + 1), `${info.name}: 4P positions consistent`);
+  mark(list.every(k => k.lapTimes.length === LAPS), `${info.name}: 4P lapTimes complete`);
+  console.log(`  ${info.name} 4P: ${fin}/4 finished in ${(t / 1000).toFixed(0)}s`);
+}
+setItemsOn(false);
+
+/* ------------------------------------------------------------------ */
+/*  3P host race: 3 human + 1 AI (AI fills the 4th seat — the roster
+ *  behaviour: the host starts early, the empty seat is an AI).
+ * ------------------------------------------------------------------ */
+console.log('\n== 3P host race (3 humans + 1 AI) ==');
+{
+  const t3d = TRACKS.findIndex(t => t.points.some(p => p.length === 3 && p[1] > 0));
+  for (const ti of [0, t3d >= 0 ? t3d : 1]) {
+    const info = selectTrack(ti);
+    const list = ['YOU', 'P2', 'P3', 'AI3'].map((who, i) => {
+      const k = new Kart({ isPlayer: who === 'YOU', net: who !== 'AI3', name: who, skill: who === 'AI3' ? AI_SKILL[0] : 1 });
+      k.laps = LAPS;
+      const { P, T, Nn } = posAt(GRID[i].u);
+      k.pos.copy(P).addScaledVector(Nn, GRID[i].o);
+      k.heading = Math.atan2(T.x, T.z);
+      k.trackIdx = Math.floor(GRID[i].u * n) % n;
+      k.prevU = GRID[i].u;
+      return k;
+    });
+    let t = 0;
+    while (t < 300 * 1000 && !list.every(k => k.raceDone)) {
+      simulateTick(list, (k, r) => r ? (k.net ? humanPilot(k) : aiControl(k, list)) : { throttle: 0, steer: 0 },
+        SIM_DT, t, { racing: t >= GO4, crashFor: null });
+      t += SIM_DT * 1000;
+    }
+    const fin = list.filter(k => k.raceDone).length;
+    mark(fin === 4, `${info.name}: 3P (3 humans + 1 AI) all finished (${fin}/4)`);
+    console.log(`  ${info.name} 3P: ${fin}/4 finished in ${(t / 1000).toFixed(0)}s`);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Old-peer backward compat: a pre-4P (2-kart, the old 1v1) client
+ *  decodes a 4-kart state frame — it reads the FIRST two karts and the
+ *  header; the stride check passes so no fields shift. (Its trailing-seq
+ *  offset is the 2-kart one, so the seq reads stale — harmless: the header
+ *  + positions + flags, which drive the render, are correct.)
+ * ------------------------------------------------------------------ */
+console.log('\n== old 2-kart peer decodes a 4-kart frame ==');
+{
+  const k4 = [0, 1, 2, 3].map(i => ({ pos: { x: i * 2 + 0.5, y: 0, z: i }, heading: i * 0.5, speed: 10 + i, steerVel: 0, offRoad: false, lapDone: 1, posIdx: i + 1, raceDone: false, item: 0, fellOff: false }));
+  const frame = makeStateEncoder(4)(55555, 9, k4, 7);
+  const d4 = decodeState(frame, 4);
+  mark(d4.karts.length === 4 && Math.abs(d4.karts[3].x - 6.5) < 1e-5 && d4.seq === 7, '4-kart frame decodes all 4 + seq (modern client)');
+  const d2 = decodeState(frame, 2);   // an old 2-kart peer
+  mark(d2.karts.length === 2, 'old peer reads exactly 2 karts from a 4-kart frame');
+  mark(Math.abs(d2.karts[0].x - 0.5) < 1e-5 && Math.abs(d2.karts[0].z) < 1e-5, 'old peer reads kart 0 (first) correctly');
+  mark(Math.abs(d2.karts[1].x - 2.5) < 1e-5 && Math.abs(d2.karts[1].speed - 11) < 1e-5, 'old peer reads kart 1 (second) correctly');
+  mark(d2.hostMs === 55555, 'old peer reads the header (hostMs)');
+  mark(d2.karts[0].lapDone === 1 && d2.karts[0].posIdx === 1, 'old peer reads flags at the right offsets');
+}
+
 console.log(failures === 0 ? `\n== NET-SIM PASS (${TRACKS.length} tracks, wire OK) ==`
                            : `\n== ${failures} NET-SIM FAILURE(S) ==`);
 process.exitCode = failures === 0 ? 0 : 1;

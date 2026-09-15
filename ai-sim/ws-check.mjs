@@ -120,8 +120,14 @@ mark(lobby.length === 1 && lobby[0].code === host.code && lobby[0].state === 'wa
 // join
 const join = await connect('J', 'BRAVO', host.code);
 mark(join.ok === 1 && join.idx === 1 && join.name === 'BRAVO', 'joiner hello, slot 1, name echoed BRAVO');
-const pj = await nextMsg(host.ws, 0x82);
-mark(pj[1] === 1 && decName(pj) === 'BRAVO', 'host got PEER_JOINED (slot 1, name BRAVO)');
+// the host also receives its OWN slot-0 name broadcast (it now gets one
+// 0x82 per connected human, incl. itself) — read until the joiner's slot-1
+let pj = null;
+for (let i = 0; i < 3 && !pj; i++) {
+  const f = await nextMsg(host.ws, 0x82);
+  if (f[1] === 1) pj = f;
+}
+mark(pj !== null && decName(pj) === 'BRAVO', 'host got PEER_JOINED (slot 1, name BRAVO)');
 // the joiner learns the host's name via a targeted PEER_JOINED (slot 0);
 // its own slot-1 broadcast arrives first
 let pjHost = null;
@@ -205,11 +211,57 @@ h2.ws.close();
 const kick = await nextMsg(j2.ws, 0x83);
 mark(kick[1] > 0, 'joiner KICKED when host leaves (waiting room dissolves)');
 
-// room full: a third client tries slot 1
+// 4-player room: 4 humans fill slots 0..3; the host learns each name; the
+// last joiner learns the host's name; /rooms shows players = 4
+const h4 = await connect('H', 'H-4P');
+const j4a = await connect('J', 'J4-A', h4.code);
+const j4b = await connect('J', 'J4-B', h4.code);
+const j4c = await connect('J', 'J4-C', h4.code);
+mark(j4a.ok === 1 && j4b.ok === 1 && j4c.ok === 1, 'three joiners all connected (room holds 4)');
+mark(j4a.idx === 1 && j4b.idx === 2 && j4c.idx === 3, 'joiners got slots 1, 2, 3');
+lobby = await http('/rooms');
+const l4 = lobby.find(r => r.code === h4.code);
+mark(!!l4 && l4.players === 4, '/rooms shows players = 4 (host + 3 joiners)');
+// the host learns each joiner's name (a PEER_JOINED per slot — it also
+// gets its own slot-0 broadcast, which we skip here)
+const names = {};
+const deadline = Date.now() + 5000;
+while (Object.keys(names).length < 3 && Date.now() < deadline) {
+  const f = await nextMsg(h4.ws, 0x82, 2500).catch(() => null);
+  if (!f) break;
+  if (f[1] >= 1 && f[1] <= 3 && !(f[1] in names)) names[f[1]] = decName(f);
+}
+mark(names[1] === 'J4-A' && names[2] === 'J4-B' && names[3] === 'J4-C', 'host learned all three joiner names');
+// the 3rd joiner (slot 3) learns the host's name via a targeted PEER_JOINED (slot 0)
+let pj4host = null;
+for (let i = 0; i < 4 && !pj4host; i++) {
+  const f = await nextMsg(j4c.ws, 0x82);
+  if (f[1] === 0) pj4host = f;
+}
+mark(pj4host !== null && decName(pj4host) === 'H-4P', 'slot-3 joiner learned the host name');
+// a 4-kart state frame reaches the last joiner (stride 29 B/kart, 4 karts)
+h4.ws.send(encTrack(0, 0, 0));
+await sleep(150);
+h4.ws.send(encStart(4, 3, grid));
+const s4 = await nextMsg(j4c.ws, 0x20);
+mark(s4.length >= 7 + 4 * 29 + 2, 'slot-3 joiner got a 4-kart state frame (stride 29)');
+// clean up the 4P room
+j4c.ws.close(); j4b.ws.close(); j4a.ws.close(); h4.ws.close();
+await sleep(300);
+lobby = await http('/rooms');
+mark(!lobby.some(r => r.code === h4.code), '4P room pruned when everyone leaves');
+
+// room full: the cap is 4 humans (the host + three joiners); a fourth
+// joiner is rejected
 const h3 = await connect('H', 'HOST3');
 const j3a = await connect('J', 'J3A', h3.code);
 const j3b = await connect('J', 'J3B', h3.code);
-mark(j3a.ok === 1 && j3b.ok === 0, 'second joiner KICKED (room full)');
+const j3c = await connect('J', 'J3C', h3.code);
+const j3d = await connect('J', 'J3D', h3.code);
+mark(j3a.ok === 1 && j3b.ok === 1 && j3c.ok === 1, 'three joiners fit (host + 3 = 4, slots 0..3)');
+mark(j3d.ok === 0, 'fourth joiner KICKED (room full)');
+// clean up
+j3c.ws.close(); j3b.ws.close(); j3a.ws.close(); h3.ws.close();
 
 } finally {
   srv.kill();

@@ -81,7 +81,7 @@ export function createNet2p(ctx) {
       onPeerJoined: () => {
         if (role() === 'host') {
           if (net && net.isWS) net.sendTrack(getTrackIdx(), getObstaclesOn(), getItemOn());
-          updateHostPlayers(2, true);
+          updateHostPlayers(connectedCount(), true);
         } else if (role() === 'join') {
           setJoinWaiting();   // the joiner just learned the host's name
         }
@@ -265,19 +265,34 @@ export function createNet2p(ctx) {
     const v = (e.value !== undefined ? e.value : (e.innerText || '')).trim().replace(/\s+/g, ' ').slice(0, 12);
     return v;
   };
-  const peerRealName = () => (net && net.peerName) ? net.peerName : '';
-  // wire slot -> display name: self / the other human's nickname / AI-N
+  // the host is slot 0 — its nickname (PEER_JOINED / HELLO echo)
+  const hostName = () => (net && net.names && net.names[0]) || '';
+  // host roster = the number of human seats (1..4); empty seats become AI
+  const hostM = () => Math.max(1, Math.min(4, (game.roster | 0) || 2));
+  const connectedCount = () => {
+    let n = 0;
+    if (net && net.names) for (let s = 0; s < 4; s++) if (net.names[s]) n++;
+    return n;
+  };
+  // the connected humans, by slot order (the host screen shows who is in)
+  const connectedNames = () => {
+    const out = [];
+    if (net && net.names)
+      for (let s = 0; s < 4; s++) if (net.names[s]) out.push(s === mySlot() ? 'YOU' : net.names[s]);
+    return out;
+  };
+  // wire slot -> display name: self / a connected human's nickname / AI-N
   const nameOfSlot = (idx, html) => {
     const my = mySlot();
     if (idx === my) return html ? '<b>YOU</b>' : 'YOU';
-    if (idx === 0 || idx === 1)
-      return (net && net.names && net.names[idx]) || (idx === 1 ? 'P2' : 'P1');
+    const nm = (net && net.names && net.names[idx]);
+    if (nm) return nm;
     return 'AI-' + (idx + 1);
   };
   function setJoinWaiting() {
     const w = el('joinWait');
     if (!w) return;
-    const hn = peerRealName();   // for the joiner the peer is the host (slot 0)
+    const hn = hostName();   // the joiner waits for the host (slot 0)
     w.textContent = hn
       ? 'CONNECTED — waiting for ' + hn + ' (the host) to pick a track + press START…'
       : 'CONNECTED — waiting for the host to pick a track + press START…';
@@ -307,7 +322,7 @@ export function createNet2p(ctx) {
       startBtn.textContent = 'START RACE';
       hostMsg.textContent = 'COULD NOT REACH THE MULTIPLAYER SERVER — check the connection (or ?ws=ws://host:port/ws). Solo still works.';
     }, 8000);
-    net.open('H', getNick() || 'P1').then(ok => {
+    net.open('H', getNick() || '').then(ok => {
       helloDone = true; clearTimeout(hostHelloTimer);
       if (!ok) {
         startBtn.textContent = 'START RACE';
@@ -317,7 +332,7 @@ export function createNet2p(ctx) {
       hostCode.textContent = net.code;
       startBtn.textContent = 'START RACE';   // gated until a joiner is in (hostReady)
       try { drawQr(el('hostCodeQr'), location.origin + location.pathname + '?join=' + net.code); el('hostCodeQr').classList.remove('hidden'); } catch { /* QR is optional decoration */ }
-      hostMsg.textContent = 'PLAYERS 1/2 — send this room code to player 2 (or let them scan the QR).';
+      hostMsg.textContent = 'PLAYERS 1/' + hostM() + ' — send the room code (or the QR). Empty seats become AI.';
       // live player count: the /rooms endpoint carries the room's player total,
       // so the screen shows 1/2 → 2/2 even if the PEER_JOINED frame is lost
       if (hostPoll) clearInterval(hostPoll);
@@ -333,16 +348,18 @@ export function createNet2p(ctx) {
   }
 
   function updateHostPlayers(n, fromFrame) {
-    if (n >= 2) {
-      if (!hostReady) {
-        hostReady = true;
-        startBtn.textContent = 'START RACE';
-        audio.beep(1180);
-      }
-      hostMsg.textContent = 'P2 CONNECTED' + (peerRealName() ? ': ' + peerRealName() : '') + ' — ready. Pick a track, then press START RACE.';
-    } else {
-      hostMsg.textContent = 'PLAYERS ' + n + '/2 — waiting for a joiner… send the code (or the QR).';
+    n = Math.max(1, n);   // at minimum the host (me) is here
+    const m = hostM();
+    if (n >= 1 && !hostReady) {   // the host can always start (empty seats → AI)
+      hostReady = true;
+      startBtn.textContent = 'START RACE';
+      audio.beep(1180);
     }
+    const names = connectedNames();
+    const who = names.length ? ' — ' + names.join(', ') : '';
+    hostMsg.textContent = 'PLAYERS ' + n + '/' + m + who + (n >= m
+      ? ' — everyone is in. Pick a track, then press START RACE.'
+      : ' — you can start now (empty seats become AI).');
     if (fromFrame) hostCode.textContent = net ? net.code : hostCode.textContent; // frame path: ensure the code is on screen
   }
 
@@ -384,7 +401,7 @@ export function createNet2p(ctx) {
     }
     el('joinBtn').disabled = true;
     joinMsg.textContent = 'Joining room ' + code + '…';
-    net.open('J', getNick() || 'P2', code).then(ok => {
+    net.open('J', getNick() || '', code).then(ok => {
       el('joinBtn').disabled = false;
       if (!ok) { joinMsg.textContent = 'COULD NOT REACH THE SERVER — check your connection (or ?ws=ws://host:port/ws).'; return; }
       el('joinCodeEcho').textContent = code;
@@ -435,7 +452,7 @@ export function createNet2p(ctx) {
   function clientStart(info) {
     ctx.ensureP2();
     clientItemSeen = ctx.racers().map(() => false);
-    game.roster = info.karts === 2 ? '1v1' : '2ai';
+    game.roster = Math.max(1, Math.min(4, (info.rosterN | 0) || 4));
     ctx.syncRosterVisibility();
     for (const k of ctx.racers()) { k.laps = info.laps; }
     for (let i = 0; i < ctx.racers().length; i++) {
@@ -613,7 +630,7 @@ export function createNet2p(ctx) {
     }
     lastClientSp = Math.abs(sk.speed);
     game.raceTime = st.hostMs / 1000;
-    const you = list.length - 2; // client "you" = p2; updateHud reads the last kart
+    const you = wsMode() ? mySlot() : list.length - 2; // WS: my wire slot (0..3); legacy: last-but-one
     const lapStartMs = clientLapMark[you] || COUNTDOWN_MS; // host clock: GO at cdMs
     // updateHud reads the LAST kart as "you" — in WS mode the self vessel
     // is racers()[mySlot()] (player on both devices), p2 mirrors the peer
@@ -688,10 +705,20 @@ export function createNet2p(ctx) {
     m => {
       if (game.state === 'racing' || game.state === 'countdown') return;
       setMode(m);
+      // restore this mode's persisted roster (solo = total karts, online = human seats)
+      let r = 2;
+      try {
+        r = m === 'solo'
+          ? Math.max(1, Math.min(4, parseInt(localStorage.getItem('mkr-solo'), 10) || 4))
+          : Math.max(1, Math.min(4, parseInt(localStorage.getItem('mkr-online'), 10) || 2));
+      } catch { /* private mode */ }
+      game.roster = r;
+      setHostRoster(r);
       if (m === 'solo') {
         if (game.netMode === 2) onPeerLost();
         game.netMode = 0;
         startBtn.textContent = 'START RACE';
+        ctx.syncRosterVisibility();
       } else if (m === 'host') {
         startBtn.textContent = 'START RACE';
         game.netMode = 2;
@@ -699,10 +726,16 @@ export function createNet2p(ctx) {
         ctx.syncRosterVisibility();
       } else if (m === 'join') {
         beginJoinSession();
+        ctx.syncRosterVisibility();
       }
     },
     joinRoom,
-    r => { game.roster = r; setHostRoster(r); if (game.netMode === 2) ctx.syncRosterVisibility(); },
+    r => {
+      game.roster = Math.max(1, Math.min(4, parseInt(r, 10) || 2));
+      setHostRoster(game.roster);
+      try { localStorage.setItem('mkr-online', String(game.roster)); } catch { /* private mode */ }
+      if (game.netMode === 2) ctx.syncRosterVisibility();
+    },
   );
 
   // ?join=CODE (scanned on P2's phone): select JOIN mode, create the
@@ -718,6 +751,7 @@ export function createNet2p(ctx) {
     role, selfKart, host, broadcast,
     wsMode, mySlot,
     nameOfSlot: (idx, html) => nameOfSlot(idx, html),
+    connectedCount: () => connectedCount(),
     hostReady: () => hostReady,
     netReady: () => !!(net && net.isWS && net.connected && hostReady),
     net: () => net,

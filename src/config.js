@@ -102,7 +102,7 @@ export function turnFactor(s) {
 export const game = {
   state: 'menu',        // menu | countdown | racing | finished
   laps: LAPS,           // laps for the current race (2P host broadcasts via start frame)
-  roster: '2ai',        // 2P roster: '2ai' = 2 humans + 2 AI · '1v1' = humans only
+  roster: 4,            // a number 1..4 — solo: total karts (you + AI) · 2P: human seats (AI fills the rest)
   raceStart: 0,
   raceTime: 0,
   cdText: -1,

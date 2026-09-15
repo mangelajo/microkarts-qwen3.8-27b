@@ -31,7 +31,7 @@ import {
   initHazardPicker, setHazard, getHazardOn, loadHazardPref,
   initItemPicker, setItem, getItemOn, loadItemPref,
   initWeatherPicker, setWeatherChip,
-  initMenuTabs, setMenuPage,
+  initMenuTabs, setMenuPage, setHostRoster,
   hudRankNudge,
 } from './hud.js';
 import * as audio from './audio.js';
@@ -70,18 +70,28 @@ function ensureP2() {
   return p2;
 }
 
-/* 2P active order: [AZURE, MATCHA, P2, you] (2ai) or [P2, you] (1v1);
-   solo: [AZURE, MATCHA, PLUMP, you]. Wire order = this array, player last. */
+/* Roster (a number 1..4):
+   • solo (netMode !== 2): total karts = the player + (n-1) AI
+   • WS 2P: human seats (the host + joiners); AI fills the rest of the 4-kart grid
+   Wire order = this array; in WS the player sits at racers()[mySlot()]. */
 function racers() {
-  if (game.netMode !== 2) return karts.filter(k => k !== p2); // solo: 3 AI + you (p2 stays hidden)
-  if (n2.wsMode()) {
-    // WS: the wire order is [slot0, slot1, AI, AI] — each device's own
-    // vessel must sit at racers()[mySlot()] so selfKart() lines up with
-    // the server's kart order (host → player first, joiner → p2 first)
-    const humans = n2.mySlot() === 1 ? [p2, player] : [player, p2];
-    return game.roster === '1v1' ? humans : humans.concat(karts[0], karts[1]);
+  const n = Math.max(1, Math.min(4, (game.roster | 0) || 4));
+  if (game.netMode !== 2) {
+    // solo: the player + (n-1) AI, player last (the HUD reads the last kart)
+    const ai = [karts[0], karts[1], karts[2]].slice(0, n - 1);
+    return ai.concat(player);
   }
-  return game.roster === '1v1' ? [p2, player] : [karts[0], karts[1], p2, player];
+  if (n2.wsMode()) {
+    // WS: wire order [slot0, slot1, slot2, slot3]; my own vessel sits at mySlot
+    const me = n2.mySlot();
+    const others = [p2, karts[0], karts[1], karts[2]].filter(Boolean); // p2, AI0..AI2
+    const out = new Array(4);
+    let oi = 0;
+    for (let s = 0; s < 4; s++) { out[s] = (s === me) ? player : others[oi++]; }
+    return out;
+  }
+  // LAN 2P (legacy, one keyboard, two humans): always 2 humans + 2 AI
+  return [karts[0], karts[1], p2, player];
 }
 
 // karts outside the active roster (e.g. unused AI in 1v1) are hidden
@@ -91,18 +101,54 @@ function syncRosterVisibility() {
   el('nCars').textContent = String(active.length);
 }
 
+// The AI stagger (WS): an AI launches further back, offset toward the centre,
+// so its launch doesn't rear-end a human's kart before the player can steer.
+// Slots 2/3 match the original 2P values; slot 1 is new (a 4P AI in seat 2).
+const AI_STAGGER = { 1: { u: 0.97, o: 1.0 }, 2: { u: 0.97, o: -1.0 }, 3: { u: 0.955, o: 1.0 } };
+// The connected human seats (WS host). Humans occupy slots 0..(n-1) — the
+// server hands joiners the next free slot, so the connected set is contiguous.
+function humansIn() {
+  if (!n2.wsMode()) return 0;
+  const names = n2.net() && n2.net().names;
+  let n = 0;
+  if (names) for (let s = 0; s < 4; s++) if (names[s]) n++;
+  return Math.max(1, n);
+}
+// the grid cell for wire slot s (WS: humans in the front, AI staggered back)
+function gridForSlot(s) {
+  if (n2.wsMode() && s >= humansIn()) return AI_STAGGER[s] || GRID[s];
+  return GRID[s];
+}
+
 function resetKarts() {
-  const order = game.netMode !== 2 ? [karts[0], player, karts[1], karts[2]]
-    : game.roster === '1v1' ? [player, p2]
-                            : [player, p2, karts[0], karts[1]];   // humans in the front row
-  order.forEach((k, i) => {
-    // WS: same staggered AI grid as the frame (startRace sends it) so the
-    // host's countdown mirror matches the joiner's — LAN/solo unchanged.
-    const g = n2.wsMode() && i >= 2
-      ? (i === 2 ? { u: 0.97, o: -1.0 } : { u: 0.955, o: 1.0 })
-      : GRID[i];
-    k.laps = game.laps; k.placeAt(g.u, g.o);
-  });
+  if (n2.wsMode()) {
+    // WS: wire order (racers() is already in slot order 0..3); the AI (slot
+    // >= humansIn) launches staggered — matches the wire grid startRace sends,
+    // so the host's countdown mirror equals the joiner's.
+    const list = racers();
+    for (let s = 0; s < list.length; s++) {
+      const g = gridForSlot(s);
+      list[s].laps = game.laps; list[s].placeAt(g.u, g.o);
+    }
+    syncRosterVisibility();
+    return;
+  }
+  if (game.netMode !== 2) {
+    // solo: the player keeps its traditional GRID[1] start; the AI take
+    // GRID[0/2/3] (as many as the roster has) — the 4-kart case is unchanged
+    const n = Math.max(1, Math.min(4, (game.roster | 0) || 4));
+    const ai = [karts[0], karts[1], karts[2]].slice(0, n - 1);
+    const placed = [];
+    if (ai[0]) placed.push([ai[0], GRID[0]]);
+    placed.push([player, GRID[1]]);
+    if (ai[1]) placed.push([ai[1], GRID[2]]);
+    if (ai[2]) placed.push([ai[2], GRID[3]]);
+    for (const [k, g] of placed) { k.laps = game.laps; k.placeAt(g.u, g.o); }
+    syncRosterVisibility();
+    return;
+  }
+  // LAN 2P (legacy): 2 humans in the front row, 2 AI in the back row
+  [player, p2, karts[0], karts[1]].forEach((k, i) => { k.laps = game.laps; k.placeAt(GRID[i].u, GRID[i].o); });
   syncRosterVisibility();
 }
 
@@ -329,16 +375,13 @@ function startRace() {
     const list = racers();
     n2.net().sendPrep(getTrackIdx(), COUNTDOWN_MS); // client syncs countdown first (ordered channel)
     n2.net().sendStart({
-      karts: list.length, laps: LAPS, rosterN: list.length,
+      karts: list.length, laps: LAPS,
+      rosterN: Math.max(1, Math.min(4, (game.roster | 0) || 4)),
       steerFlip: false, simDt: SIM_DT,
-      grid: list.flatMap(k => {
-        const slot = gridSlot(k);
-        // WS: stagger the AI row (further back, offset toward the centre).
-        // A same-lane start has the AI's launch rear-end the human's kart
-        // before the player can steer; the local (LAN/solo) grid is unchanged.
-        const g = n2.wsMode() && slot >= 2
-          ? (slot === 2 ? { u: 0.97, o: -1.0 } : { u: 0.955, o: 1.0 })
-          : GRID[slot];
+      grid: list.flatMap((k, s) => {
+        // WS: humans in the front, AI staggered back (gridForSlot). The local
+        // (LAN/solo) grid is unchanged (gridSlot by kart identity).
+        const g = n2.wsMode() ? gridForSlot(s) : GRID[gridSlot(k)];
         return [g.u, g.o];
       }),
     });
@@ -351,11 +394,10 @@ function startRace() {
   pulseHint();               // show the "PULL TO DRIVE" cue (no-op on non-touch)
 }
 
-// grid slot per kart — must match resetKarts()' placement order
+// grid slot per kart (non-WS only — WS uses the wire index s via gridForSlot)
 function gridSlot(k) {
   if (game.netMode !== 2) return k === player ? 1 : k === karts[0] ? 0 : k === karts[1] ? 2 : 3;
-  if (game.roster === '1v1') return k === player ? 0 : 1;
-  return k === player ? 0 : k === p2 ? 1 : k === karts[0] ? 2 : 3;
+  return k === player ? 0 : k === p2 ? 1 : k === karts[0] ? 2 : 3; // LAN 2P
 }
 
 function finishRace() {
@@ -581,6 +623,29 @@ try {
     });
   }
 } catch { /* private mode / headless */ }
+/* ------------------------------------------------------------------ *
+ *  Roster — solo (total karts = you + AI, mkr-solo, default 4) and
+ *  online (human seats, mkr-online, default 2). The default mode is solo,
+ *  so the initial game.roster is the solo roster; each mode's picker
+ *  restores its own saved value on switch (see the mode callback in net2p).
+ * ------------------------------------------------------------------ */
+function clampRoster(v, d) { v = parseInt(v, 10); return Math.max(1, Math.min(4, isNaN(v) ? d : v)); }
+try {
+  const soloRow = el('soloRosterRow');
+  if (soloRow) for (const c of soloRow.children)
+    c.addEventListener('click', () => {
+      game.roster = clampRoster(c.dataset.roster, 4);
+      for (const x of soloRow.children) x.classList.toggle('sel', x === c);
+      try { localStorage.setItem('mkr-solo', String(game.roster)); } catch { /* private mode */ }
+      syncRosterVisibility(); c.blur();
+    });
+  const soloV = clampRoster(localStorage.getItem('mkr-solo'), 4);
+  const onlineV = clampRoster(localStorage.getItem('mkr-online'), 2);
+  if (soloRow) for (const x of soloRow.children) x.classList.toggle('sel', parseInt(x.dataset.roster, 10) === soloV);
+  game.roster = soloV;              // the default mode is solo
+  setHostRoster(onlineV);          // the online picker shows its saved value
+} catch { /* private mode / headless */ }
+
 function toggleMap() {
   mmOn = !mmOn;
   try { localStorage.setItem('mkr-map', mmOn ? '1' : '0'); } catch { /* private mode */ }

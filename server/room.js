@@ -7,6 +7,12 @@
  *  Reuses the SAME pure sim modules the headless gates run
  *  (make sim): selectTrack + Kart + simulateTick + aiControl.
  *
+ *  Roster: up to 4 human slots (0..3); AI fills the rest of the 4-kart
+ *  grid. The first connection is the host (slot 0, UI rights: track +
+ *  START); the next three are joiners (slots 1..3). A kart whose slot has
+ *  a connected human is human-driven; the rest are AI (per-slot input
+ *  routing below). Empty room → dissolve + prune.
+ *
  *  Wire (binary, type byte first — values from src/net.js where a
  *  client encoder/decoder already exists):
  *    client → server
@@ -143,42 +149,6 @@ export function createRoom(code, ownerName) {
     if (ws.readyState === 1) ws.send(d.buffer);
   };
 
-  // CONNECT: u8 kind, u8 nameLen, name, [4B code]
-  room.attach = (ws, d, kind) => {
-    const nameLen = d[2];
-    const name = str(d, 3, nameLen);
-    const off = 3 + nameLen;
-    const code = kind === 'J' ? str(d, off, 4) : room.code;
-    if (kind === 'H') {
-      room.owner = name;
-      room.humans.set(ws, { slot: 0, name });
-      for (const [ws2] of room.humans)
-        if (ws2 !== ws) room.sendPeer(ws2, 0, name);   // an existing joiner learns the host
-    } else {
-      if ([...room.humans.values()].some(v => v.slot === 1)) {
-        const hd = new Uint8Array(2);
-        hd[0] = 0x41; hd[1] = 0;   // HELLO ok=0
-        if (ws.readyState === 1) ws.send(hd.buffer);
-        room.kick(ws, 'ROOM FULL');
-        return false;
-      }
-      room.humans.set(ws, { slot: 1, name });
-      room.announceJoin(1, name);                // → the host learns the joiner
-      const host = [...room.humans.values()].find(v => v.slot === 0);
-      if (host) room.sendPeer(ws, 0, host.name); // → the joiner learns the host
-    }
-    // HELLO: ok, code(4), nameLen, name, myIdx
-    const slot = room.humans.get(ws).slot;
-    const hd = new Uint8Array(2 + 4 + 1 + name.length + 1);
-    hd[0] = 0x41; hd[1] = 1;
-    for (let i = 0; i < 4; i++) hd[2 + i] = code.charCodeAt(i);
-    let o = 6; hd[o] = name.length; o += 1;
-    for (let i = 0; i < name.length; i++) hd[o + i] = name.charCodeAt(i);
-    hd[o + name.length] = slot;
-    ws.send(hd.buffer);
-    return true;
-  };
-
   room.announceJoin = (slot, name) => {
     const d = new Uint8Array(3 + 1 + name.length);
     d[0] = 0x82; d[1] = slot; d[2] = name.length;
@@ -217,6 +187,51 @@ export function createRoom(code, ownerName) {
       if (ws.readyState === 1) { room.kick(ws, 'HOST LEFT'); ws.close(); }
     }
     room.humans.clear();
+  };
+
+  // a full client frame (ws is bound by index.js)
+  const MAX_HUMANS = 4;   // slots 0..3 (AI fills the rest of the 4-kart grid)
+  const freeSlot = () => {
+    const taken = new Set([...room.humans.values()].map(v => v.slot));
+    for (let s = 1; s < MAX_HUMANS; s++) if (!taken.has(s)) return s;
+    return -1;
+  };
+  // CONNECT: u8 kind, u8 nameLen, name, [4B code]
+  room.attach = (ws, d, kind) => {
+    const nameLen = d[2];
+    let name = str(d, 3, nameLen);
+    const off = 3 + nameLen;
+    const code = kind === 'J' ? str(d, off, 4) : room.code;
+    let slot;
+    if (kind === 'H') {
+      // the host creates the room — slot 0 (a second 'H' into an occupied
+      // room is rejected; index.js normally hands 'H' a fresh room)
+      room.owner = name;
+      slot = [...room.humans.values()].some(v => v.slot === 0) ? -1 : 0;
+    } else {
+      slot = freeSlot();   // the next free seat (1..3); -1 when all 4 are taken
+    }
+    if (slot === -1) {
+      const hd = new Uint8Array(2);
+      hd[0] = 0x41; hd[1] = 0;   // HELLO ok=0
+      if (ws.readyState === 1) ws.send(hd.buffer);
+      room.kick(ws, 'ROOM FULL');
+      return false;
+    }
+    if (!name) name = 'P' + (slot + 1);   // nameless joiners get a distinct default (P2/P3/P4)
+    room.humans.set(ws, { slot, name });
+    room.announceJoin(slot, name);   // → everyone (incl. self) learns this player
+    for (const [ws2, h2] of room.humans)   // → the new player learns everyone else
+      if (ws2 !== ws) room.sendPeer(ws, h2.slot, h2.name);
+    // HELLO: ok, code(4), nameLen, name, myIdx
+    const hd = new Uint8Array(2 + 4 + 1 + name.length + 1);
+    hd[0] = 0x41; hd[1] = 1;
+    for (let i = 0; i < 4; i++) hd[2 + i] = code.charCodeAt(i);
+    let o = 6; hd[o] = name.length; o += 1;
+    for (let i = 0; i < name.length; i++) hd[o + i] = name.charCodeAt(i);
+    hd[o + name.length] = slot;
+    ws.send(hd.buffer);
+    return true;
   };
 
   // a full client frame (ws is bound by index.js)

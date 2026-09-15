@@ -18,7 +18,7 @@ broken shape):
 ```bash
 make imports # static import-graph check (browser-only modules included)
 make sim     # AI drivers on every track
-make netsim  # wire round-trips + 2P race sims on every track
+make netsim  # wire round-trips + 2P/3P/4P host race sims on every track + old-peer decode
 make wscheck # a WS client drives the real game server (start → race → finish)
 make wse2e   # two real browser pages race over the server (full loop)
 make serve   # local full stack on ONE port: static + /ws multiplayer +
@@ -146,7 +146,7 @@ take in the catalogue. All track shapes are validated headlessly.
   the lobby ("FIND A RACE"); the joiner types the code (or scans the QR —
   `?join=CODE` auto-fills + connects). **The server is the single sim
   authority**: each room runs the 60 Hz `simulateTick` loop in Node (the same
-  pure-JS sim modules the headless sims use), with 2 human slots + 2 AI fill;
+  pure-JS sim modules the headless sims use), with up to 4 human slots + AI fill;
   both humans are pure renderers — input goes to the server at 60 Hz (a
   drift/item edge is never rate-gated), the server broadcasts state at
   60 Hz (with a trailing u16 tick **seq** the client uses for drop/late
@@ -190,6 +190,28 @@ take in the catalogue. All track shapes are validated headlessly.
   create/join, start, state, input → control, PING/PONG, finish, kick,
   dissolve) and by `make wse2e` (two real browser pages race over the
   server — the full production loop)
+- **4-player online races + a roster picker** — the 2P tab now has a
+  **1P / 2P / 3P / 4P** picker (the online seat count, default 2) and the
+  solo **RACE** page has one too (default 4P = you + 3 AI; 1P = just you).
+  A server room now holds **up to 4 humans** (slots 0..3 — the host + three
+  joiners); a fifth client is kicked with “ROOM FULL”. The host can start
+  with **≥ 1** connected player and **empty seats become AI** (a staggered AI
+  grid, `AI_STAGGER`, so the AI launch can't rear-end a human), so 2P/3P
+  rooms race with the missing seats filled by AI. The WS wire is **always
+  4 karts**: the local player sits at `mySlot()` (its assigned slot) and the
+  other three vessels are the other connected humans / AI, in wire order. **No
+  new state-frame fields** — the frame was already length-derived and N-kart
+  ready, and `START` already carried `karts` + `rosterN`. **Backward
+  compat**: an old 2-kart peer (the old 1v1) decoding a 4-kart frame reads the
+  first two karts (the stride check still passes — no fields shift), and an old
+  2P/2ai client (already 4-kart) decodes all four. Nameless joiners get a
+  distinct per-slot default from the server (P2/P3/P4) so the host screen isn't
+  three “P2”s. Both pickers persist to `localStorage` (`mkr-solo` / `mkr-online`)
+  and are restored on mode switch. Verified by `make netsim` (a 4-human 0-AI
+  host race on every track + a 3-human + 1-AI race + an old 2-kart peer
+  decoding a 4-kart frame), `make wscheck` (a 4-human room fills slots 0..3 and
+  the fifth client is kicked), `make wse2e`, and a four-browser probe (all four
+  reach `racing`, each at its own wire slot, mirrored server speed, 4 nametags)
 - **Room auto-cleanup** — when the last player leaves, the room is dissolved
   and removed from the server's room map (previously a disconnected room
   lived on forever — its 60 Hz loop kept running after both players left). A
@@ -427,12 +449,12 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/touch.js`    | Mobile "pull" joystick: first finger seeds a virtual stick, drag = drive vector |
 | `src/textures.js` | Procedural canvas textures (wood table, sea, …) |
 | `src/net.js`      | 2P wire protocol (u8 frame enc/dec) — pure, no transport; also the client↔server protocol (CONNECT/HELLO 0x41, PEER_JOINED 0x82, PEER_LEFT 0x81, KICK 0x83, PING/PONG 0x70/0x71) |
-| `src/wsnet.js`    | WS transport (`WSSession`): WebSocket connect + binary frame dispatch (ArrayBuffer), 60 Hz input rate gate (drift/item edges never gated), PING/PONG RTT, connect timeout — `?ws=URL` override, same-origin `/ws` otherwise |
+| `src/wsnet.js`    | WS transport (`WSSession`): WebSocket connect + binary frame dispatch (ArrayBuffer), 60 Hz input rate gate (drift/item edges never gated), PING/PONG RTT, connect timeout — `?ws=URL` override, same-origin `/ws` otherwise; a 4-slot name array (0..3) + HELLO re-notifies already-known peers once the slot is set |
 | `server/index.js` | **The game server** (Node, one container, one port): static files + `/ws` (WebSocket) + `/rooms` lobby (reports `players`, host included) + `/health`; CONNECT → create/join room, host leave dissolves, room-full kick, `/rooms` + `/health` |
-| `server/room.js`  | Per-room **server-authoritative sim**: the 60 Hz `simulateTick` loop (same pure-JS sim modules), 2 human slots + 2 AI fill, 60 Hz state broadcast (trailing tick seq), **connected human always owns the kart** (no input = parked; only a *dropped* human becomes AI), host drop / last player leaves → dissolve (+ prune from the map), name broadcast (HELLO + PEER_JOINED incl. a targeted one to the joiner), force-finish hook (`WS_TEST=1`) |
+| `server/room.js`  | Per-room **server-authoritative sim**: the 60 Hz `simulateTick` loop (same pure-JS sim modules), **4 human slots (0..3) + AI fill** (a fifth client is kicked “ROOM FULL”; nameless joiners get a per-slot default name), 60 Hz state broadcast (trailing tick seq), **connected human always owns the kart** (no input = parked; only a *dropped* human becomes AI), host drop / last player leaves → dissolve (+ prune from the map), name broadcast (HELLO + PEER_JOINED incl. a targeted one to the joiner), force-finish hook (`WS_TEST=1`) |
 | `src/interp.js`   | Client-side interpolation ring + sampler (adaptive delay via `net2p`, angular wrap; `newestAt()` feeds the perceived-lag readout) |
 | `src/game.js`     | Game state machine: karts, input, race lifecycle, cameras, the `animate()` loop — in WS mode both humans render the server's state (solo + LAN-host sim otherwise) — boots the `net2p` session |
-| `src/net2p.js`    | 2P net orchestration: `WSSession` host/join lifecycle, room code + QR, lobby (FIND A RACE), client render mirror (interp, lap/finish bookkeeping, item-pickup mirror), nickname plumbing (send + slot→name map for results/labels) |
+| `src/net2p.js`    | 2P/4P net orchestration: `WSSession` host/join lifecycle, room code + QR, lobby (FIND A RACE), the online **roster picker** (1P..4P, default 2) + `mySlot()` (the local player sits at its assigned wire slot; empty seats become AI), client render mirror (interp, lap/finish bookkeeping, item-pickup mirror), nickname plumbing (send + slot→name map for results/labels) |
 | `src/nametag.js`  | 3D name tags above the karts (WS 2P): billboarded canvas-sprite pills showing YOU / the other player's nickname / AI-3 / AI-4 (hidden in solo); the texture redraws only when the label changes |
 | `src/hud.js`      | DOM HUD + overlays, 2P mode/roster pickers + net panels |
 | `src/minimap.js`  | HUD minimap: track outline + racer dots + heading arrow |
@@ -447,7 +469,7 @@ take in the catalogue. All track shapes are validated headlessly.
 | `ai-sim/watch.mjs`  | `make simwatch` — re-runs the AI bench on every change in `src/` + `ai-sim/` |
 | `ai-sim/screens.mjs` | `make screens` — Playwright render check: boots the game in headless Chromium (desktop + phone), captures menu/2P/countdown/race + a night-track race, fails on any page JS error |
 | `ai-sim/qr-check.mjs` | `make qrcheck` — QR encoder gate: structural checks + full zigzag/RS decode (7 versions × 8 masks) + exact-matrix fixture |
-| `ai-sim/ws-check.mjs` | `make wscheck` — the WS client drives the real server: health, lobby, create/join, start, state, input → control, PING/PONG, finish, kick, host-left dissolve |
+| `ai-sim/ws-check.mjs` | `make wscheck` — the WS client drives the real server: health, lobby, create/join, start, state, input → control, PING/PONG, finish, kick, host-left dissolve, a 4-human room (slots 0..3) + fifth-client kick |
 | `ai-sim/ws-e2e.mjs`  | `make wse2e` — two real browser pages (Playwright) race over the server: create → type code → countdown → both pages `state=racing` → server-driven kart speed on both |
 | `Containerfile.game` | **The single-container deploy**: Node 20 slim + `ws` + the game — static files + `/ws` + `/rooms` + `/health` on one port (zero-config multiplayer: the client at `http://host/` dials same-origin `/ws`) |
 | `Containerfile.web` + `deploy/nginx.conf` + `docker-compose.yml` | The optional two-container variant: Nginx front (static + `/ws` proxy) → the game container |

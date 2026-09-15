@@ -234,6 +234,15 @@
       <div class="trk-label">TRACK</div>
       <div class="trk-row" id="trackRow"></div>
     </div>
+    <div class="trk" id="soloRosterWrap">
+      <div class="trk-label">RACE ROSTER — YOU + AI</div>
+      <div class="trk-row" id="soloRosterRow" style="justify-content:center">
+        <button type="button" class="tchip" data-roster="1">1P</button>
+        <button type="button" class="tchip" data-roster="2">2P</button>
+        <button type="button" class="tchip" data-roster="3">3P</button>
+        <button type="button" class="tchip sel" data-roster="4">4P</button>
+      </div>
+    </div>
       </div>
       <div id="pageMulti" class="hidden">
     <div class="trk" id="modeWrap">
@@ -255,9 +264,11 @@
         <div class="ncode" id="hostCode" title="Click to copy">—</div>
         <canvas id="hostCodeQr" class="qr hidden"></canvas>
         <div class="sub" id="hostMsg">Waiting for player 2…</div>
-        <div class="trk-row" id="rosterRow" style="justify-content:center">
-          <button type="button" class="tchip sel" data-roster="2ai">2 HUMANS + 2 AI</button>
-          <button type="button" class="tchip" data-roster="1v1">1 v 1</button>
+        <div class="trk-row" id="rosterRow" style="justify-content:center; margin-bottom:12px">
+          <button type="button" class="tchip" data-roster="1">1P</button>
+          <button type="button" class="tchip sel" data-roster="2">2P</button>
+          <button type="button" class="tchip" data-roster="3">3P</button>
+          <button type="button" class="tchip" data-roster="4">4P</button>
         </div>
       </div>
       <div id="joinPanel" style="display:none">

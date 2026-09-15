@@ -73,7 +73,7 @@ const httpSrv = http.createServer(async (req, res) => {
         host: r.owner,
         track: r.trackIdx,
         state: r.state,
-        players: r.humans.size,   // host included — the host screen shows 1/2 → 2/2
+        players: r.humans.size,   // host included — the host screen shows 1/2 → 4/4
       })));
     }
     if (u.pathname === '/ws-test-finish') {
