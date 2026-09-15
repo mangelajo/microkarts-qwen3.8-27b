@@ -37,15 +37,18 @@ export function createNet2p(ctx) {
   const host = { t: 0, acc: 0, enc: null }; // host sim clock (ms) + state encoder (set by game.js startRace)
   let lastNetInput = { throttle: 0, steer: 0, drift: false, use: false, ping: -1, at: 0 };
   let clientRing = null;
-  // adaptive interpolation delay (p95 jitter + asymmetric adaptation).
-  // The old law chased the *last* inter-frame gap (clamp(gap*1.5+30,100,350))
-  // — on the internet gaps swing (33→120→33 ms) and the render point
-  // oscillated: freeze, nudge, freeze — the "glitchy" feel. New law:
-  //   * p95 of the last ~40 gaps sets the target floor
-  //   * starving (render point ahead of the newest data) → +25 ms/frame (fast)
-  //   * otherwise shrink 2 ms/frame toward the floor (slow)
-  //   * a seq gap (a frame was dropped/late) → +33 ms preemptively
-  let interpDelayMs = INTERP_DELAY;   // until the first frame arrives
+  // render-time pacing (no rewinds — the old law moved the render target
+  // directly with the delay, so every delay change (the 2 ms/frame shrink,
+  // the +25 starvation step) slid the sampled moment BACK — the cart
+  // advanced, moved back, advanced, moved back). Now:
+  //   * renderT = the sampled moment, monotonic non-decreasing
+  //   * targetDelay = the p95-jitter desired buffer — it only moves the
+  //     CLAMPS (fast-forward bound, hold bound), never the target itself
+  //   * behind the desired delay → bounded 3× fast-forward (a slide)
+  //   * starved (past the newest frame) → hold at newest + 80 ms
+  //     (sampleState extrapolates within that window)
+  let renderT = 0;                 // 0 = not seeded (first frame seeds it)
+  let targetDelay = INTERP_DELAY;  // desired buffer, p95-adapted (60–350 ms)
   let lastStateAt = 0;
   let gapHist = [];                  // recent inter-frame gaps (ms)
   let lastSeq = null;               // last state-frame tick seq (u16)
@@ -95,7 +98,7 @@ export function createNet2p(ctx) {
         if (prep.trackIdx !== getTrackIdx()) setTrack(prep.trackIdx); // mirror the host's pick
         netStartWall = performance.now();
         clientRing = new FrameRing(24);
-        gapHist.length = 0; lastSeq = null;
+        gapHist.length = 0; lastSeq = null; renderT = 0;
         clientLapSeen = ctx.racers().map(() => 0);
         clientLapMark = ctx.racers().map(() => 0);
         game.raceStart = netStartWall + prep.cdMs;
@@ -132,23 +135,24 @@ export function createNet2p(ctx) {
         const nowA = performance.now();
         const gap = lastStateAt ? nowA - lastStateAt : 100;
         lastStateAt = nowA;
-        // --- adaptive buffer (see the interpDelayMs declaration) ---
+        // --- adaptive target buffer (moves the clamps, never the render time) ---
         gapHist.push(gap); if (gapHist.length > 40) gapHist.shift();
         if (st.seq != null) {
           if (lastSeq != null) {
             const d = (st.seq - lastSeq) & 0xffff;   // u16 distance (handles wrap)
-            if (d > 1 && d < 0x8000) interpDelayMs = Math.min(350, interpDelayMs + 33);
+            if (d > 1 && d < 0x8000) targetDelay = Math.min(350, targetDelay + 33);
           }
           lastSeq = st.seq;
         }
-        if (nowA - interpDelayMs > clientRing.newestAt()) {
-          interpDelayMs = Math.min(350, interpDelayMs + 25);   // starving — grow fast
-        } else {
+        if (renderT > 0 && renderT > clientRing.newestAt() + 80) {
+          targetDelay = Math.min(350, targetDelay + 25);   // starving — widen fast
+        } else if (gapHist.length > 4) {
           const s = gapHist.slice().sort((a, b) => a - b);
           const p95 = s[Math.min(s.length - 1, Math.floor(s.length * 0.95))];
           const floor = Math.max(60, Math.min(350, p95 * 1.2 + 15));
-          interpDelayMs = Math.max(floor, interpDelayMs - 2);  // shrink slowly
+          targetDelay = Math.max(floor, targetDelay - 2);  // drift slowly back
         }
+        if (!renderT) renderT = nowA - targetDelay;   // seed on the first frame
         clientRing.push(st, nowA);
         mirrorItemPickups(st);   // boxes are deterministic locally — no wire traffic
         game.net = st;
@@ -199,7 +203,7 @@ export function createNet2p(ctx) {
     if (s && !s.closed) s.close(); // fires onClose → re-enters onPeerLost, guarded by s.closed
     host.acc = 0; lastNetInput.ping = -1;
     lastStateAt = 0;   // don't carry the drop's gap into the next session's buffer
-    gapHist.length = 0; lastSeq = null;
+    gapHist.length = 0; lastSeq = null; renderT = 0;
     if (s && s.role === 'join') {   // joiner lost the link: back to code entry
       setJoinUi('joining');
       joinMsg.textContent = 'CONNECTION LOST — enter the room code again (or re-scan the QR).';
@@ -405,7 +409,7 @@ export function createNet2p(ctx) {
     }
     game.laps = info.laps;
     clientRing = new FrameRing(24);
-    gapHist.length = 0; lastSeq = null;
+    gapHist.length = 0; lastSeq = null; renderT = 0;
     lastClientSp = 0;
     clientLapSeen = ctx.racers().map(() => 0);
     clientLapMark = ctx.racers().map(() => 0);
@@ -463,11 +467,31 @@ export function createNet2p(ctx) {
   function applyClientState(dt) {
     if (!clientRing || clientRing.size < 1) return;
     const nowA = performance.now();
-    const st = sampleState(clientRing, nowA - interpDelayMs);
+    // --- monotonic render-time pacing (the cart can never rewind) ---
+    // dt is bounded: a backgrounded tab (a 1 s dt) must slide forward, not
+    // jump — an unbounded step would let renderT run past newest+80 and the
+    // hold clamp below would slide it BACK.
+    const step = Math.min(dt * 1000, 100);
+    const newest = clientRing.newestAt();
+    if (renderT <= 0) renderT = newest - targetDelay;   // (re)seed
+    else {
+      const desired = newest - targetDelay;
+      if (renderT < desired) {
+        // buffer deeper than the target: catch up at 3× real time (a slide)
+        renderT = Math.min(desired, renderT + step * 3);
+      } else if (renderT > newest) {
+        // starved: hold inside the extrapolation window (no advance, no slide back)
+        if (renderT > newest + 80) renderT = newest + 80;
+      } else {
+        // normal: real-time advance, capped inside the extrapolation window
+        // (so the starved hold below can never slide the target back)
+        renderT = Math.min(renderT + step, newest + 80);
+      }
+    }
+    const st = sampleState(clientRing, renderT);
     if (!st || !game.net) return;
-    // perceived delay: the sample time vs the newest frame we actually have
-    // (if the buffer exceeds the newest frame, we're extrapolating — lag > 0 beyond the buffer)
-    lastLagMs = interpDelayMs + Math.max(0, (nowA - interpDelayMs) - clientRing.newestAt());
+    // perceived delay: how old the sampled snapshot is on the arrival clock
+    lastLagMs = Math.max(0, nowA - renderT);
     const list = ctx.racers();
     for (let i = 0; i < list.length && i < st.karts.length; i++) {
       const k = list[i], m = st.karts[i];
@@ -644,7 +668,7 @@ export function createNet2p(ctx) {
     net: () => net,
     input: () => lastNetInput,
     inputNow: (t, s, d, u) => net && net.sendInput && net.sendInput(t, s, d, u),
-    interpDelayMs: () => interpDelayMs,
+    interpDelayMs: () => clientRing ? Math.max(0, clientRing.newestAt() - renderT) : 0,   // live buffer depth (the probe + HUD read this)
     lastLagMs: () => lastLagMs,
     resetClientItems: () => { clientItemSeen = ctx.racers().map(() => false); },
     applyClientState,
