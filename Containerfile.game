@@ -20,4 +20,8 @@ COPY ai-sim/ ./ai-sim/
 
 EXPOSE 8080
 ENV PORT=8080
+# the build's git commit (CI passes it; local builds show "dev") — /health
+# exposes it so the deployed version is checkable over the wire
+ARG GIT_SHA=""
+ENV GIT_SHA=${GIT_SHA}
 CMD ["node", "--import", "file:///app/ai-sim/stub.js", "/app/server/index.js"]

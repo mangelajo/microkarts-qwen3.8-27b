@@ -66,7 +66,7 @@ const forceFinish = room => {
 const httpSrv = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://localhost');
   try {
-    if (u.pathname === '/health') return json(res, 200, { ok: true, rooms: rooms.size, test: WS_TEST });
+    if (u.pathname === '/health') return json(res, 200, { ok: true, rooms: rooms.size, test: WS_TEST, commit: process.env.GIT_SHA || 'dev' });
     if (u.pathname === '/rooms') {
       return json(res, 200, [...rooms.values()].filter(r => !r.closed).map(r => ({
         code: r.code,

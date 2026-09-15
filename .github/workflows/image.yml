@@ -37,6 +37,7 @@ jobs:
       - name: Build + push
         run: |
           docker build \
+            --build-arg GIT_SHA=${{ github.sha }} \
             -f Containerfile.game \
             -t "ghcr.io/${{ github.repository_owner }}/microkarts:latest" \
             -t "ghcr.io/${{ github.repository_owner }}/microkarts:sha-${{ github.sha }}" \

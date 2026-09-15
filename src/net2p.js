@@ -483,19 +483,18 @@ export function createNet2p(ctx) {
     const step = Math.min(dt * 1000, 100);
     const newest = clientRing.newestAt();
     if (renderT <= 0) renderT = newest - targetDelay;   // (re)seed
-    else {
-      const desired = newest - targetDelay;
-      if (renderT < desired) {
-        // buffer deeper than the target: catch up at 3× real time (a slide)
-        renderT = Math.min(desired, renderT + step * 3);
-      } else if (renderT > newest) {
-        // starved: hold inside the extrapolation window (no advance, no slide back)
-        if (renderT > newest + 80) renderT = newest + 80;
-      } else {
-        // normal: real-time advance, capped inside the extrapolation window
-        // (so the starved hold below can never slide the target back)
-        renderT = Math.min(renderT + step, newest + 80);
-      }
+    else if (renderT > newest) {
+      // starved: hold inside the extrapolation window (no advance, no slide back)
+      if (renderT > newest + 80) renderT = newest + 80;
+    } else {
+      // PROPORTIONAL catch-up (replaces the 3× fast-forward — the 3× pulse was
+      // the last visible glitch: buffer fills at a steady rate, drains in a
+      // 3× flash, repeats at a stable period = "advance, pause, advance").
+      // Now a deep buffer drains gradually: the extra advance is 3% of the
+      // excess per frame (a 200 ms excess ≈ +6 ms/frame ≈ 1.35× real time —
+      // a nearly invisible acceleration that decays as the buffer empties).
+      const excess = Math.max(0, newest - targetDelay - renderT);
+      renderT = Math.min(renderT + step + excess * 0.03, newest + 80);
     }
     const st = sampleState(clientRing, renderT);
     if (!st || !game.net) return;
