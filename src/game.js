@@ -670,6 +670,24 @@ const menuLook = new THREE.Vector3(0, 0, 5);
    stopped arriving). 5 s rolling max. */
 let lastLoopT = 0, rafMax = 0, rafMaxAt = 0;
 
+/* freeze detector: any single rAF gap > 300 ms announces itself with a loud
+   banner (visible in a normal screen recording) + logs to window.__mkr.freezes
+   with the NET/BUF/EXT values at that instant. A big RAF = main thread stalled;
+   a small RAF + big NET = frames stopped arriving. This is the one datum that
+   settles whether the stutter is the client's render loop or the network. */
+function announceFreeze(g) {
+  window.__mkr = window.__mkr || {};
+  window.__mkr.freezes = window.__mkr.freezes || [];
+  const nd = n2.netDebug ? n2.netDebug() : null;
+  window.__mkr.freezes.push({ t: Date.now(), gap: Math.round(g), net: nd ? nd.netMax : -1, buf: nd ? nd.bufMs : -1, ext: nd ? nd.extMs : -1, vis: document.visibilityState });
+  const fz = document.getElementById('freezeBanner');
+  if (!fz) return;
+  fz.textContent = `FREEZE ${(g / 1000).toFixed(1)}s — NET ${nd ? nd.netMax.toFixed(0) : '?'}ms · RAF ${g.toFixed(0)}ms · BUF ${nd ? nd.bufMs.toFixed(0) : '?'}ms · EXT ${nd ? nd.extMs.toFixed(0) : '?'}ms`;
+  fz.style.opacity = '1';
+  clearTimeout(animate._fzT);
+  animate._fzT = setTimeout(() => { fz.style.opacity = '0'; }, 4000);
+}
+
 function animate() {
   requestAnimationFrame(animate);
   const rafNow = performance.now();
@@ -677,6 +695,7 @@ function animate() {
     const g = rafNow - lastLoopT;
     if (rafNow - rafMaxAt > 5000) { rafMax = 0; rafMaxAt = rafNow; }
     rafMax = Math.max(rafMax, g);
+    if (g > 300 && typeof window !== 'undefined') announceFreeze(g);
   }
   lastLoopT = rafNow;
   game.dt = Math.min(clock.getDelta(), 0.05);

@@ -50,6 +50,7 @@
   #mutes { bottom:18px; left:176px; display:flex; gap:14px; pointer-events:none; }
   #buildTag { bottom:20px; left:14px; font-size:10px; letter-spacing:2px; color:#d8b07f; opacity:.55; pointer-events:none; }
   #netDebug { top:126px; right:20px; z-index:7; font-size:10px; letter-spacing:1px; color:#8fd0ff; opacity:.8; display:none; pointer-events:none; }
+  #freezeBanner { position:fixed; top:38%; left:50%; transform:translateX(-50%); z-index:50; font-size:26px; font-weight:700; letter-spacing:2px; color:#ff5a4a; text-shadow:0 0 18px rgba(255,60,40,.9), 0 2px 6px #000; opacity:0; transition:opacity .25s; pointer-events:none; }
   #muteMusic, #muteSfx { font-size:12px; letter-spacing:2px; color:#d8b07f; cursor:pointer; pointer-events:auto; opacity:.75; }
   #muteMusic.on, #muteSfx.on { color:#ff9d6b; opacity:1; }
 
@@ -209,6 +210,7 @@
 <div class="hud" id="mutes"><span id="muteMusic" title="Music on/off (M)">MUSIC</span><span id="muteSfx" title="SFX on/off (N)">SFX</span></div>
 <div class="hud" id="buildTag"></div>
 <div id="netDebug"></div>
+<div id="freezeBanner"></div>
 <div class="hud" id="countdown"></div>
 
 <div id="overlay">
