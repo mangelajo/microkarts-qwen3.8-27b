@@ -18,6 +18,7 @@ export function initTrackEditor(trackIdx, note) {
   noteEl = note;
   viewC = canvas.width / 2;
   viewScale = (canvas.width / 2 - 14) / RANGE;
+  curIdx = trackIdx;   // sync the module index to the initial track (hit/draw agree)
   canvas.addEventListener('pointerdown', e => {
     const p = pt(e);
     dragging = hit(p.x, p.y);
@@ -26,12 +27,17 @@ export function initTrackEditor(trackIdx, note) {
   canvas.addEventListener('pointermove', e => {
     if (dragging < 0) return;
     const p = pt(e);
-    const t = TRACKS[trackIdx].points;
-    t[dragging] = [Math.max(-125, Math.min(125, p.x)), 0, Math.max(-125, Math.min(125), p.y)];
-    scheduleRebuild(trackIdx);
+    const t = TRACKS[currentIdx()].points;
+    // pt() is center-relative PIXELS; the point is a WORLD coord, so divide by
+    // viewScale (the draw/hit path multiplies world by viewScale — keep them
+    // consistent, or the dragged point jumps viewScale× away from the cursor).
+    t[dragging] = [Math.max(-125, Math.min(125, p.x / viewScale)), 0, Math.max(-125, Math.min(125, p.y / viewScale))];
+    scheduleRebuild(currentIdx());
   });
-  canvas.addEventListener('pointerup', () => { dragging = -1; });
-  draw(trackIdx);
+  canvas.addEventListener('pointerup', () => {
+    if (dragging >= 0) { dragging = -1; draw(currentIdx()); }   // re-draw so the point greys out
+  });
+  draw(curIdx);
 }
 
 function pt(e) {

@@ -152,6 +152,16 @@ flat tracks stay flat.
   flat tracks are unaffected (the flat invariant stays bit-identical);
   `make netsim` covers launch / airtime / re-stick.
 
+- [x] **Track editor drag fix** — the EDIT-tab point drag had two bugs: the
+  pointer position (center-relative *pixels*) was written to the point's
+  *world* coord without dividing by `viewScale` (so a dragged point jumped
+  `viewScale×` away from the cursor and couldn't be grabbed back), and the
+  y-clamp was `Math.max(-125, Math.min(125), p.y)` (a missing paren made
+  `Math.min(125)` a no-op, forcing `y=125` on almost any drag). The drag
+  now converts pixels→world via `/viewScale` (matching the draw/hit path),
+  the clamp is correct, the drag/hit/index all use the live `curIdx`, and
+  `pointerup` re-draws so the point greys out. Verified headless
+  (Playwright drag: the point lands within 3 px of the cursor)
 ## Phase 12 — Modes
 
 - [ ] **Time trial** — a TIME TRIAL button on the RACE page: 1 lap,

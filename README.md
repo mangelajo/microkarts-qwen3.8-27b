@@ -277,7 +277,10 @@ take in the catalogue. All track shapes are validated headlessly.
   (same `buildTrack` path — corners, pads, puddles, scenery all follow).
   `src/trackedit.js` (browser-only); **solo + session-only** (not
   persisted; a 2P peer would build the un-edited track from the track idx).
-  RESET restores the factory points; RACE IT starts the race on the edit
+  RESET restores the factory points; RACE IT starts the race on the edit.
+  The drag is pixel→world `viewScale`-correct (a dragged point lands
+  under the cursor, not `viewScale×` away) and the point greys out on
+  release
 - **Replays** — the sim is 100% deterministic from inputs (all game RNG is
   seeded), so a replay is the player's recorded input stream re-fed to a
   fresh race: `src/replay.js` records the drive input each race (capped at
