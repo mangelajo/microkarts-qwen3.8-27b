@@ -29,7 +29,11 @@ flat tracks stay flat.
   60 Hz input + fresh-buffer-per-frame encoder (no ws send-queue
   aliasing)** — measured over the real internet: server tick clean
   (p95 18 ms, zero gaps >300 ms in 3,707 frames), zero rendered-
-  position rewinds, no periodic drain pulse; `/health` exposes the
+  position rewinds, no periodic drain pulse, **render lerp over sim
+  time (`hostMs`) not arrival time — the render point is a sim-clock
+  accumulator, so the car is always 100% speed and a late frame no
+  longer drops it to 16% / pulls it backward (the periodic backward
+  pull fix)**; `/health` exposes the
   build's git commit), deployed as one container — static + `/ws`
   + `/rooms` on a single port (zero-config multiplayer). WebRTC/LAN and
   the PHP relay paths removed
@@ -103,6 +107,15 @@ flat tracks stay flat.
   (AI fills the rest). No host privileges, no NAT, symmetric latency
   for all four; the Phase 10 4-player item then becomes an online mode.
 
+- [x] **Periodic backward-pull fix — render lerp over sim time, not
+  arrival time** — the render point is a sim-clock accumulator and the
+  lerp brackets on `hostMs` (a uniform 16 ms axis), so the car renders
+  at 100% speed always; a 100 ms late frame (the ~1.15 s-periodic real
+  delivery gap) no longer spreads one frame's motion over the whole gap
+  (16% speed → reads as a backward pull on a corner). Verified with a
+  synthetic 100 ms-late-frame probe: sampled speed min = max = median =
+  1.00×, zero backward samples (headless, `ai-sim`), plus the flat
+  tracks stay bit-identical (`make sim`)
 ## Phase 10 — Four karts, four players
 
 - [ ] **4-player races** — the state frame is already length-derived

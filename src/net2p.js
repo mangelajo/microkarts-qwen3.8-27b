@@ -100,7 +100,7 @@ export function createNet2p(ctx) {
         if (role() !== 'join' && !wsMode()) return;
         if (prep.trackIdx !== getTrackIdx()) setTrack(prep.trackIdx); // mirror the host's pick
         netStartWall = performance.now();
-        clientRing = new FrameRing(24);
+        clientRing = new FrameRing(30);
         gapHist.length = 0; lastSeq = null; renderT = 0; lastGrowAt = 0; gap10Max = 0; gap10MaxN = 0; extRunMs = 0;
         clientLapSeen = ctx.racers().map(() => 0);
         clientLapMark = ctx.racers().map(() => 0);
@@ -156,7 +156,7 @@ export function createNet2p(ctx) {
           }
           lastSeq = st.seq;
         }
-        if (renderT > 0 && renderT > clientRing.newestAt() + 300 && canGrow) {
+        if (renderT > 0 && renderT > clientRing.newestHostMs() + 300 && canGrow) {
           targetDelay = Math.min(350, targetDelay + 25); lastGrowAt = nowA2;   // starving — widen fast
         } else if (gapHist.length > 4) {
           const s = gapHist.slice().sort((a, b) => a - b);
@@ -165,13 +165,13 @@ export function createNet2p(ctx) {
           const step = targetDelay - floor > 100 ? 8 : 2;   // faster drain when far above
           targetDelay = Math.max(floor, targetDelay - step);
         }
-        if (!renderT) renderT = nowA - targetDelay;   // seed on the first frame
-        else if (renderT > clientRing.newestAt() + 500) {
+        if (!renderT) renderT = clientRing.newestHostMs() - targetDelay;   // seed on the first frame (sim clock)
+        else if (renderT > clientRing.newestHostMs() + 500) {
           // a real stall (the render point ran > 500 ms into the
           // extrapolation, which sampleState clamps at 200 ms — the cart
           // would sit frozen for the catch-up): re-seed to the target
           // delay — a single controlled jump beats a 1.7 s freeze
-          renderT = nowA - targetDelay;
+          renderT = clientRing.newestHostMs() - targetDelay;
         }
         clientRing.push(st, nowA);
         mirrorItemPickups(st);   // boxes are deterministic locally — no wire traffic
@@ -428,7 +428,7 @@ export function createNet2p(ctx) {
         ctx.racers()[i].setColor(PAL[i][0], PAL[i][1]);
     }
     game.laps = info.laps;
-    clientRing = new FrameRing(24);
+    clientRing = new FrameRing(30);
     gapHist.length = 0; lastSeq = null; renderT = 0; lastGrowAt = 0; gap10Max = 0; gap10MaxN = 0; extRunMs = 0;
     lastClientSp = 0;
     clientLapSeen = ctx.racers().map(() => 0);
@@ -486,7 +486,6 @@ export function createNet2p(ctx) {
 
   function applyClientState(dt) {
     if (!clientRing || clientRing.size < 1) return;
-    const nowA = performance.now();
     // --- monotonic render-time pacing (the cart can never rewind) ---
     // dt is bounded at 2× nominal (33 ms): a hitching render loop (a busy
     // main thread, a backgrounded tab) must slide forward over the next
@@ -494,8 +493,8 @@ export function createNet2p(ctx) {
     // not jump — a 100 ms one-frame advance was the last visible pulse
     // (a 6× flash the moment the loop caught up).
     const step = Math.min(dt * 1000, 33);
-    const newest = clientRing.newestAt();
-    if (renderT <= 0) renderT = newest - targetDelay;   // (re)seed
+    const newestSim = clientRing.newestHostMs();
+    if (renderT <= 0) renderT = newestSim - targetDelay;   // (re)seed on the sim clock
     else {
       // PROPORTIONAL catch-up (replaces the 3× fast-forward — the 3× pulse was
       // the last visible glitch: buffer fills at a steady rate, drains in a
@@ -511,14 +510,14 @@ export function createNet2p(ctx) {
       // Extrapolating keeps the cart at its last velocity across the gap,
       // so the real frame lands on top of the guess: continuous motion.
       // renderT is strictly monotonic (it never slides back).
-      const excess = Math.max(0, newest - targetDelay - renderT);
+      const excess = Math.max(0, newestSim - targetDelay - renderT);
       renderT += step + Math.min(excess * 0.03, 33);
-      extRunMs = Math.max(0, renderT - newest);
+      extRunMs = Math.max(0, renderT - newestSim);
     }
     const st = sampleState(clientRing, renderT);
     if (!st || !game.net) return;
     // perceived delay: how old the sampled snapshot is on the arrival clock
-    lastLagMs = Math.max(0, nowA - renderT);
+    lastLagMs = Math.max(0, newestSim - renderT);
     const list = ctx.racers();
     for (let i = 0; i < list.length && i < st.karts.length; i++) {
       const k = list[i], m = st.karts[i];
@@ -695,8 +694,8 @@ export function createNet2p(ctx) {
     net: () => net,
     input: () => lastNetInput,
     inputNow: (t, s, d, u) => net && net.sendInput && net.sendInput(t, s, d, u),
-    interpDelayMs: () => clientRing ? Math.max(0, clientRing.newestAt() - renderT) : 0,   // live buffer depth (the probe + HUD read this)
-    netDebug: () => ({ netMax: gap10Max, netMaxN: gap10MaxN, bufMs: clientRing ? Math.max(0, clientRing.newestAt() - renderT) : 0, extMs: extRunMs }),
+    interpDelayMs: () => clientRing ? Math.max(0, clientRing.newestHostMs() - renderT) : 0,   // live buffer depth (the probe + HUD read this)
+    netDebug: () => ({ netMax: gap10Max, netMaxN: gap10MaxN, bufMs: clientRing ? Math.max(0, clientRing.newestHostMs() - renderT) : 0, extMs: extRunMs }),
     lastLagMs: () => lastLagMs,
     resetClientItems: () => { clientItemSeen = ctx.racers().map(() => false); },
     applyClientState,

@@ -29,6 +29,7 @@ export class FrameRing {
   get size() { return this.frames.length; }
   newest() { return this.frames.length ? this.frames[this.frames.length - 1].frame : null; }
   newestAt() { return this.frames.length ? this.frames[this.frames.length - 1].recvT : 0; }
+  newestHostMs() { return this.frames.length ? (this.frames[this.frames.length - 1].frame.hostMs || 0) : 0; }
 }
 
 const lerp = (a, b, f) => a + (b - a) * f;
@@ -61,39 +62,36 @@ function extrapolate(k, dt) {
  * frame the sample is based on (client HUD + lap timing).
  * null if no frames yet.
  */
-export function sampleState(ring, targetRecvT) {
+export function sampleState(ring, targetSimT) {
   const frames = ring.frames;
   if (!frames.length) return null;
 
-  // find the two frames that bracket the target
+  // Bracket by SIM time (hostMs) — the axis is a uniform 16 ms, so the car
+  // renders at 100% speed always; arrival jitter is absorbed by the buffer.
+  // (Lerp over arrival time spread one frame's motion across the whole gap =
+  // 16% speed during a 100 ms late frame = the periodic backward pull.)
   let before = null, after = null;
   for (let i = frames.length - 1; i >= 0; i--) {
-    const { frame, recvT } = frames[i];
-    if (recvT <= targetRecvT) { before = { frame, recvT }; break; }
-    after = { frame, recvT };
+    const frame = frames[i].frame;
+    const hm = frame.hostMs || 0;
+    if (hm <= targetSimT) { before = frame; break; }
+    after = frame;
   }
-  if (!before) before = { frame: frames[0].frame, recvT: frames[0].recvT };
+  if (!before) before = frames[0].frame;   // target before the oldest → clamp
 
-  const out = before.frame.karts.map(k => ({ ...k }));
-  // host sim-clock of the sampled moment: interpolate between the bracketing
-  // frames (NOT the ring's oldest frame — that made the client HUD/lap clock
-  // lag by up to a full ring), or extend past the newest while extrapolating
-  let hostMs;
-  if (after) {
-    const span = Math.max(after.recvT - before.recvT, 1);
-    const f = Math.min(1, (targetRecvT - before.recvT) / span);
-    hostMs = lerp(before.frame.hostMs, after.frame.hostMs, f);
+  const out = before.karts.map(k => ({ ...k }));
+  if (after && after !== before) {
+    const a = before, b = after;
+    const span = Math.max((b.hostMs || 0) - (a.hostMs || 0), 1);
+    const f = Math.max(0, Math.min(1, (targetSimT - (a.hostMs || 0)) / span));
     for (let i = 0; i < out.length; i++) {
-      const a = before.frame.karts[i], b = after.frame.karts[i];
-      const s = sampleRat(a, b, f);
+      const s = sampleRat(a.karts[i], b.karts[i], f);
       out[i] = { ...out[i], ...s };
     }
   } else {
-    // target is past the newest frame: extrapolate (bounded — karts top
-    // out at ~30 u/s, so 200 ms of guessing is ~6 u; snap next real frame)
-    const dt = Math.min(0.2, (targetRecvT - before.recvT) / 1000);
-    hostMs = (before.frame.hostMs || 0) + dt * 1000;
+    // past the newest → extrapolate (bounded); clamped at the oldest → none
+    const dt = Math.min(0.2, Math.max(0, (targetSimT - (before.hostMs || 0)) / 1000));
     if (dt > 0) for (const k of out) extrapolate(k, dt);
   }
-  return { hostMs, karts: out };
+  return { hostMs: targetSimT, karts: out };
 }

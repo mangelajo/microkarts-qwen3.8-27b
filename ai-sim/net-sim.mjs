@@ -309,15 +309,15 @@ console.log('\n== interpolation ==');
   const ring = new FrameRing();
   ring.push({ hostMs: 3000, karts: [kart(0, 0, 0, 20)] }, 0);   // t=0
   ring.push({ hostMs: 3050, karts: [kart(1, 0, 0, 20)] }, 50);  // t=50
-  let s = sampleState(ring, 25);
+  let s = sampleState(ring, 3025);   // midpoint on the SIM axis (3000→3050)
   mark(s && Math.abs(s.karts[0].x - 0.5) < 1e-9, `interp midpoint (got ${s && s.karts[0].x})`);
-  s = sampleState(ring, 40);
-  mark(Math.abs(s.karts[0].x - 0.8) < 1e-9, `interp past-newest (got ${s.karts[0].x})`);
+  s = sampleState(ring, 3040);
+  mark(Math.abs(s.karts[0].x - 0.8) < 1e-9, `interp near-newest (got ${s.karts[0].x})`);
   mark(sampleState(new FrameRing(), 10) === null, 'empty ring → null');
-  s = sampleState(ring, 25);
-  mark(s.hostMs === 3025, `sampleState hostMs interpolates between frames (got ${s.hostMs}, want 3025)`);
-  // past the newest frame: hostMs extrapolates with the same dt as the karts
-  s = sampleState(ring, 70);
+  s = sampleState(ring, 3025);
+  mark(s.hostMs === 3025, `sampleState hostMs is the sampled sim-time (got ${s.hostMs}, want 3025)`);
+  // past the newest frame: hostMs = the target, kart extrapolates by the same dt
+  s = sampleState(ring, 3070);
   mark(Math.abs(s.hostMs - 3070) < 1e-6, `sampleState hostMs extrapolates (got ${s.hostMs}, want 3070)`);
   // the old bug: hostMs came from the ring's OLDEST frame — with a 3-frame
   // ring sampled between frames 2 and 3, that lagged by a full 50 ms
@@ -325,8 +325,8 @@ console.log('\n== interpolation ==');
   ring3.push({ hostMs: 1000, karts: [kart(0, 0, 0, 0)] }, 0);
   ring3.push({ hostMs: 1050, karts: [kart(0, 0, 0, 0)] }, 50);
   ring3.push({ hostMs: 1100, karts: [kart(0, 0, 0, 0)] }, 100);
-  s = sampleState(ring3, 75);
-  mark(Math.abs(s.hostMs - 1075) < 1e-6, `hostMs is the bracketing frame, not the oldest (got ${s.hostMs}, want 1075)`);
+  s = sampleState(ring3, 1075);
+  mark(Math.abs(s.hostMs - 1075) < 1e-6, `hostMs is the target, not the oldest (got ${s.hostMs}, want 1075)`);
   mark(sampleState(new FrameRing(), 10) === null, 'empty ring → null');
   // heading wrap: -170°→+170° should cross ±180, not go the long way round
   const r = sampleRat({ x: 0, z: 0, heading: -2.967, speed: 0, steerVel: 0 }, { x: 0, z: 0, heading: 2.967, speed: 0, steerVel: 0 }, 0.5);

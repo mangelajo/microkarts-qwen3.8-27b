@@ -157,7 +157,12 @@ take in the catalogue. All track shapes are validated headlessly.
   200 ms extrapolation so the next frame lands on top of the guess with
   no arrival flash; a deep buffer drains proportionally at ~1.35× max —
   never a 3× flash; per-frame advance capped at 2× nominal so a
-  hitching main thread slides over a few frames) + a PING/PONG RTT
+  hitching main thread slides over a few frames). The render lerp is
+  over **simulation time (`hostMs`), not arrival time** — the render
+  point is a sim-clock accumulator, so the car renders at 100% speed
+  always and a late frame (the ~1.15 s-periodic 100 ms delivery gap)
+  no longer drops it to 16% speed / pulls it backward on a corner;
+  the buffer absorbs the jitter. A PING/PONG RTT
   readout. `/health` exposes the build's git commit (CI-injected) so the
   deployed version is checkable over the wire. Input ownership is explicit: a **connected human always owns
   their kart** (no key input = a parked kart — the server never drives it),

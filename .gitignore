@@ -6,3 +6,6 @@ screens/
 .*.swp
 .swp
 Modelfile
+
+# QEMU/Chromium headless crash dumps (never commit)
+*.core
