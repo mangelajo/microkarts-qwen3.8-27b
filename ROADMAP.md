@@ -16,7 +16,13 @@ flat tracks stay flat.
   room code, QR pairing, `?join=` deep link, FIND A RACE lobby;
   wire-slot kart colours, forwarded TRACK to the joiner, fall state
   over the wire for both devices' floor-hit FX, live 1/2 → 2/2 host
-  screen with a start gate), deployed as one container — static + `/ws`
+  screen with a start gate; **smoothness pass: 60 Hz state wire +
+  trailing tick seq (drop/late detection, backward-compatible) +
+  p95-jitter adaptive buffer (grow-fast/shrink-slow, 60–350 ms) +
+  60 Hz input + fresh-buffer-per-frame encoder (no ws send-queue
+  aliasing)** — measured over the real internet: buffer settles at
+  p95 with a 60 ms floor (was 100 ms) and no more gap-chasing
+  oscillation), deployed as one container — static + `/ws`
   + `/rooms` on a single port (zero-config multiplayer). WebRTC/LAN and
   the PHP relay paths removed
 - Drift → boost → pads + perfect drift; 4 item-box rewards (turbo / timed

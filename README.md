@@ -147,10 +147,13 @@ take in the catalogue. All track shapes are validated headlessly.
   `?join=CODE` auto-fills + connects). **The server is the single sim
   authority**: each room runs the 60 Hz `simulateTick` loop in Node (the same
   pure-JS sim modules the headless sims use), with 2 human slots + 2 AI fill;
-  both humans are pure renderers — input goes to the server at 30 Hz (a
-  drift/item edge is never rate-gated), the server broadcasts state at 30 Hz,
-  and the client renders through an **adaptive interpolation buffer** (holds
-  ~1.5× the recent arrival gap, clamped 100–350 ms) + a PING/PONG RTT
+  both humans are pure renderers — input goes to the server at 60 Hz (a
+  drift/item edge is never rate-gated), the server broadcasts state at
+  60 Hz (with a trailing u16 tick **seq** the client uses for drop/late
+  detection — legacy frames decode with `seq = undefined`, old clients
+  ignore the trailing bytes), and the client renders through a **p95-jitter
+  adaptive interpolation buffer** (grows fast on starvation, shrinks slowly
+  toward `p95×1.2+15`, 60–350 ms floor/cap) + a PING/PONG RTT
   readout. Input ownership is explicit: a **connected human always owns
   their kart** (no key input = a parked kart — the server never drives it),
   and a **dropped** human's kart is silently AI-driven (the race
@@ -391,9 +394,9 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/touch.js`    | Mobile "pull" joystick: first finger seeds a virtual stick, drag = drive vector |
 | `src/textures.js` | Procedural canvas textures (wood table, sea, …) |
 | `src/net.js`      | 2P wire protocol (u8 frame enc/dec) — pure, no transport; also the client↔server protocol (CONNECT/HELLO 0x41, PEER_JOINED 0x82, PEER_LEFT 0x81, KICK 0x83, PING/PONG 0x70/0x71) |
-| `src/wsnet.js`    | WS transport (`WSSession`): WebSocket connect + binary frame dispatch (ArrayBuffer), 30 Hz input rate gate (drift/item edges never gated), PING/PONG RTT, connect timeout — `?ws=URL` override, same-origin `/ws` otherwise |
+| `src/wsnet.js`    | WS transport (`WSSession`): WebSocket connect + binary frame dispatch (ArrayBuffer), 60 Hz input rate gate (drift/item edges never gated), PING/PONG RTT, connect timeout — `?ws=URL` override, same-origin `/ws` otherwise |
 | `server/index.js` | **The game server** (Node, one container, one port): static files + `/ws` (WebSocket) + `/rooms` lobby (reports `players`, host included) + `/health`; CONNECT → create/join room, host leave dissolves, room-full kick, `/rooms` + `/health` |
-| `server/room.js`  | Per-room **server-authoritative sim**: the 60 Hz `simulateTick` loop (same pure-JS sim modules), 2 human slots + 2 AI fill, 30 Hz state broadcast, **connected human always owns the kart** (no input = parked; only a *dropped* human becomes AI), host drop → dissolve, force-finish hook (`WS_TEST=1`) |
+| `server/room.js`  | Per-room **server-authoritative sim**: the 60 Hz `simulateTick` loop (same pure-JS sim modules), 2 human slots + 2 AI fill, 60 Hz state broadcast (trailing tick seq), **connected human always owns the kart** (no input = parked; only a *dropped* human becomes AI), host drop → dissolve, force-finish hook (`WS_TEST=1`) |
 | `src/interp.js`   | Client-side interpolation ring + sampler (adaptive delay via `net2p`, angular wrap; `newestAt()` feeds the perceived-lag readout) |
 | `src/game.js`     | Game state machine: karts, input, race lifecycle, cameras, the `animate()` loop — in WS mode both humans render the server's state (solo + LAN-host sim otherwise) — boots the `net2p` session |
 | `src/net2p.js`    | 2P net orchestration: `WSSession` host/join lifecycle, room code + QR, lobby (FIND A RACE), client render mirror (interp, lap/finish bookkeeping, item-pickup mirror) |
