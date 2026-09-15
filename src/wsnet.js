@@ -44,6 +44,10 @@ export class WSSession {
     this.kartN = 4;        // the server always simulates 4 (2 humans + 2 AI)
     this.rttMs = 0;
     this.peerJoined = false;
+    this.name = '';        // my nickname (sent in CONNECT, echoed in HELLO)
+    this.peerName = '';    // the other player's nickname (PEER_JOINED)
+    this.peerSlot = -1;    // the other player's slot (PEER_JOINED)
+    this.names = ['', '']; // slot(0=host,1=joiner) -> nickname, from PEER_JOINED
     this._liveness = null;
   }
 
@@ -69,6 +73,9 @@ export class WSSession {
    * kind 'H' = create a room (server assigns the code), 'J' = join by code. */
   open(kind, name, code) {
     this._closed = false; this._intentional = false;
+    this.name = name;
+    this.peerName = ''; this.peerSlot = -1; this.peerJoined = false;
+    this.names = ['', ''];
     return new Promise((res) => {
       let settled = false;
       const done = (ok) => {
@@ -141,12 +148,32 @@ export class WSSession {
         const nameLen = d[6];
         const name = d.length > 7 + nameLen ? String.fromCharCode(...d.subarray(7, 7 + nameLen)) : '';
         this.slot = d[7 + nameLen];
+        this.name = name;   // the server's echo is authoritative for my name
+        // PEER_JOINED can arrive BEFORE the HELLO (the server sends the 0x82
+        // frames first) — recompute the peer now that we know our own slot
+        {
+          const ps = this.slot >= 0 ? 1 - this.slot : -1;
+          this.peerSlot = ps;
+          this.peerName = ps >= 0 ? (this.names[ps] || '') : '';
+        }
         done(true);
         if (this._cbs.open) this._cbs.open(this.code, name, this.slot);
         return;
       }
-      case 0x82:  // PEER_JOINED
+      case 0x82:  // PEER_JOINED: slot, nameLen, name
         this.peerJoined = true;
+        {
+          const slot = d[1];
+          const nl = d[2];
+          const nm = d.length > 3 + nl
+            ? String.fromCharCode(...d.subarray(3, 3 + nl)) : '';
+          // store by slot (ordering-robust: the joiner also gets its own
+          // name broadcast), then expose the OTHER human as the peer
+          if (slot === 0 || slot === 1) this.names[slot] = nm;
+          const ps = this.slot >= 0 ? 1 - this.slot : -1;
+          this.peerSlot = ps;
+          this.peerName = ps >= 0 ? (this.names[ps] || '') : '';
+        }
         if (this._cbs.peerJoined) this._cbs.peerJoined();
         return;
       case 0x81:  // PEER_LEFT — mid-race the kart becomes AI; the room only

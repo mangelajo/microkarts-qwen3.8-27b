@@ -190,6 +190,26 @@ take in the catalogue. All track shapes are validated headlessly.
   create/join, start, state, input → control, PING/PONG, finish, kick,
   dissolve) and by `make wse2e` (two real browser pages race over the
   server — the full production loop)
+- **Room auto-cleanup** — when the last player leaves, the room is dissolved
+  and removed from the server's room map (previously a disconnected room
+  lived on forever — its 60 Hz loop kept running after both players left). A
+  finished room the host lingers in (to re-race) persists, then is pruned
+  when the last player leaves; a host leaving pre-race still kicks the
+  remaining joiner. `make wscheck` asserts the full lifecycle (both leave →
+  the room is gone from `/rooms`; a finished room lingers at 1 player)
+- **Nicknames** — each player sets a name in the 2P menu (persisted in
+  `localStorage`, ≤ 12 chars). It rides the EXISTING `CONNECT` frame (no
+  wire change — old and new clients interoperate; an old client simply
+  doesn't show the name). The server echoes it in `HELLO` and broadcasts it
+  in `PEER_JOINED`, plus a targeted `PEER_JOINED` to the joiner for the
+  host, so both sides learn each other's name. The name appears in the host's
+  “P2 CONNECTED: <name>” line, the joiner's “waiting for <host>” banner, the
+  results (slot → name), and is drawn **in 3D above the kart during the
+  race** (billboarded canvas sprites, `src/nametag.js` — YOU / nickname /
+  AI-3 / AI-4; hidden in solo). The joiner's “waiting” is a prominent
+  message (not a repurposed button). Verified by `make wse2e` (no JS errors)
+  and a two-browser probe (host sees the joiner's name, joiner sees the
+  host's, nametags visible mid-race)
 - **QR pairing** — the room code can be scanned instead of typed: the 2P menu
   tab shows a big canvas QR (280 px) encoding the join URL (`…?join=CODE`), and
   opening the join URL on any device
@@ -409,10 +429,11 @@ take in the catalogue. All track shapes are validated headlessly.
 | `src/net.js`      | 2P wire protocol (u8 frame enc/dec) — pure, no transport; also the client↔server protocol (CONNECT/HELLO 0x41, PEER_JOINED 0x82, PEER_LEFT 0x81, KICK 0x83, PING/PONG 0x70/0x71) |
 | `src/wsnet.js`    | WS transport (`WSSession`): WebSocket connect + binary frame dispatch (ArrayBuffer), 60 Hz input rate gate (drift/item edges never gated), PING/PONG RTT, connect timeout — `?ws=URL` override, same-origin `/ws` otherwise |
 | `server/index.js` | **The game server** (Node, one container, one port): static files + `/ws` (WebSocket) + `/rooms` lobby (reports `players`, host included) + `/health`; CONNECT → create/join room, host leave dissolves, room-full kick, `/rooms` + `/health` |
-| `server/room.js`  | Per-room **server-authoritative sim**: the 60 Hz `simulateTick` loop (same pure-JS sim modules), 2 human slots + 2 AI fill, 60 Hz state broadcast (trailing tick seq), **connected human always owns the kart** (no input = parked; only a *dropped* human becomes AI), host drop → dissolve, force-finish hook (`WS_TEST=1`) |
+| `server/room.js`  | Per-room **server-authoritative sim**: the 60 Hz `simulateTick` loop (same pure-JS sim modules), 2 human slots + 2 AI fill, 60 Hz state broadcast (trailing tick seq), **connected human always owns the kart** (no input = parked; only a *dropped* human becomes AI), host drop / last player leaves → dissolve (+ prune from the map), name broadcast (HELLO + PEER_JOINED incl. a targeted one to the joiner), force-finish hook (`WS_TEST=1`) |
 | `src/interp.js`   | Client-side interpolation ring + sampler (adaptive delay via `net2p`, angular wrap; `newestAt()` feeds the perceived-lag readout) |
 | `src/game.js`     | Game state machine: karts, input, race lifecycle, cameras, the `animate()` loop — in WS mode both humans render the server's state (solo + LAN-host sim otherwise) — boots the `net2p` session |
-| `src/net2p.js`    | 2P net orchestration: `WSSession` host/join lifecycle, room code + QR, lobby (FIND A RACE), client render mirror (interp, lap/finish bookkeeping, item-pickup mirror) |
+| `src/net2p.js`    | 2P net orchestration: `WSSession` host/join lifecycle, room code + QR, lobby (FIND A RACE), client render mirror (interp, lap/finish bookkeeping, item-pickup mirror), nickname plumbing (send + slot→name map for results/labels) |
+| `src/nametag.js`  | 3D name tags above the karts (WS 2P): billboarded canvas-sprite pills showing YOU / the other player's nickname / AI-3 / AI-4 (hidden in solo); the texture redraws only when the label changes |
 | `src/hud.js`      | DOM HUD + overlays, 2P mode/roster pickers + net panels |
 | `src/minimap.js`  | HUD minimap: track outline + racer dots + heading arrow |
 | `src/ghost.js`    | Best-lap `localStorage` store + ghost-kart playback |

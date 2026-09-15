@@ -152,6 +152,8 @@ export function createRoom(code, ownerName) {
     if (kind === 'H') {
       room.owner = name;
       room.humans.set(ws, { slot: 0, name });
+      for (const [ws2] of room.humans)
+        if (ws2 !== ws) room.sendPeer(ws2, 0, name);   // an existing joiner learns the host
     } else {
       if ([...room.humans.values()].some(v => v.slot === 1)) {
         const hd = new Uint8Array(2);
@@ -161,7 +163,9 @@ export function createRoom(code, ownerName) {
         return false;
       }
       room.humans.set(ws, { slot: 1, name });
-      room.announceJoin(1, name);
+      room.announceJoin(1, name);                // → the host learns the joiner
+      const host = [...room.humans.values()].find(v => v.slot === 0);
+      if (host) room.sendPeer(ws, 0, host.name); // → the joiner learns the host
     }
     // HELLO: ok, code(4), nameLen, name, myIdx
     const slot = room.humans.get(ws).slot;
@@ -183,6 +187,15 @@ export function createRoom(code, ownerName) {
       if (ws.readyState === 1) ws.send(d.buffer);
   };
 
+  // targeted single-recipient PEER_JOINED — the broadcast above reaches the
+  // host, but the joiner also needs the host's name (not just its own)
+  room.sendPeer = (ws, slot, name) => {
+    const d = new Uint8Array(3 + 1 + name.length);
+    d[0] = 0x82; d[1] = slot; d[2] = name.length;
+    for (let i = 0; i < name.length; i++) d[3 + i] = name.charCodeAt(i);
+    if (ws.readyState === 1) ws.send(d.buffer);
+  };
+
   room.detach = (ws) => {
     const h = room.humans.get(ws);
     if (!h) return;
@@ -190,7 +203,11 @@ export function createRoom(code, ownerName) {
     room.humans.delete(ws);
     const d = new Uint8Array([0x81, h.slot]);
     room.announce(d);
-    if (h.slot === 0 && room.state === 'waiting') room.dissolve();  // host left pre-race
+    // an EMPTY room is always garbage: both left (at any point) or the host left
+    // pre-race (leaving a lone joiner — that also dissolves + kicks the joiner).
+    // A finished room the host lingers in (to re-race) is NOT empty → survives.
+    if (room.humans.size === 0 || (h.slot === 0 && room.state === 'waiting'))
+      room.dissolve();
   };
 
   room.dissolve = () => {

@@ -137,6 +137,7 @@ wss.on('connection', ws => {
   });
   ws.on('close', () => {
     if (ws._room && !ws._room.closed) ws._room.detach(ws);
+    if (ws._room && ws._room.closed) rooms.delete(ws._room.code);   // prune dissolved
   });
 });
 

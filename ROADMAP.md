@@ -35,8 +35,12 @@ flat tracks stay flat.
   longer drops it to 16% / pulls it backward (the periodic backward
   pull fix)**; `/health` exposes the
   build's git commit), deployed as one container — static + `/ws`
-  + `/rooms` on a single port (zero-config multiplayer). WebRTC/LAN and
-  the PHP relay paths removed
+  + `/rooms` on a single port (zero-config multiplayer); **empty rooms
+  auto-dissolve + prune from the map (a finished room the host lingers
+  in persists for re-race), and nicknames ride the existing CONNECT/
+  HELLO/PEER_JOINED frames (no wire change) — shown on the host/joiner
+  status, the results, and drawn in 3D above the kart in-race**.
+  WebRTC/LAN and the PHP relay paths removed
 - Drift → boost → pads + perfect drift; 4 item-box rewards (turbo / timed
   rubber / wall / sticky candy); sugar hazards; corner deltas
 - Ghost + top-5 rankings; replays; daily challenge; 5-tab menu incl. track
@@ -116,6 +120,21 @@ flat tracks stay flat.
   synthetic 100 ms-late-frame probe: sampled speed min = max = median =
   1.00×, zero backward samples (headless, `ai-sim`), plus the flat
   tracks stay bit-identical (`make sim`)
+- [x] **Room auto-cleanup + nicknames + status UX** — an empty room is now
+  dissolved *and* pruned from the server's room map (previously a
+  disconnected room lived on forever — its 60 Hz loop kept running after
+  both players left); a finished room the host lingers in (to re-race)
+  persists, then is pruned when the last player leaves. Nicknames: each
+  player sets a name (persisted, ≤ 12 chars) that rides the EXISTING
+  `CONNECT` frame (**no wire change** — old/new clients interoperate), is
+  echoed in `HELLO`, broadcast in `PEER_JOINED` (plus a targeted frame to
+  the joiner for the host), and shows in the host's “P2 CONNECTED: <name>”
+  line, the joiner's prominent “waiting for <host>” message (no longer a
+  repurposed button), the results (slot → name), and is drawn **in 3D above
+  the kart during the race** (billboarded canvas sprites, `src/nametag.js`).
+  `make wscheck` asserts the name exchange (ALFA/BRAVO) + the full room
+  lifecycle; `make wse2e` keeps the full loop green (no JS errors with the
+  nametags active)
 ## Phase 10 — Four karts, four players
 
 - [ ] **4-player races** — the state frame is already length-derived

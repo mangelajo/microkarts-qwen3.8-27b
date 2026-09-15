@@ -7,6 +7,7 @@ import {
 } from './config.js';
 import { renderer, scene, camera, updateDust, dustForKart } from './scene.js';
 import { makeExplosions } from './explosion.js';
+import { makeNameTags } from './nametag.js';
 import { initMinimap, setMinimapVisible, updateMinimap, resizeMinimap } from './minimap.js';
 import { Kart } from './kart.js';
 import { aiControl, setWindOn } from './ai.js';
@@ -270,6 +271,12 @@ try {
     setMenuPage('multi'); // show the pairing UI (code pre-filled, connect in flight)
   }
 } catch { /* non-URL host (file://) */ }
+
+/* 3D name tags — WS 2P: the other player's nickname floats above their kart
+   (and "YOU" above yours; AI-3/AI-4 for the AI). Solo: hidden. Billboarded
+   canvas sprites, repositioned above the kart each frame. */
+const nameTags = makeNameTags(racers, (i) => n2.wsMode() ? n2.nameOfSlot(i, false) : '');
+nameTags.addAll(scene);
 
 /* ------------------------------------------------------------------ *
  *  Race lifecycle
@@ -563,6 +570,17 @@ try { if (localStorage.getItem('mkr-map') === '0') mmOn = false; } catch { /* pr
 initMinimap();
 initGhost(getTrackIdx());
 rankInit();   // top-5 best-lap board (rankings.js)
+// nickname (the multi page's #nickIn) — persisted across reloads
+try {
+  const _nickIn = el('nickIn');
+  if (_nickIn) {
+    const _savedName = localStorage.getItem('mkr-name');
+    if (_savedName) _nickIn.value = _savedName;
+    _nickIn.addEventListener('input', () => {
+      try { localStorage.setItem('mkr-name', _nickIn.value.trim().slice(0, 12)); } catch { /* private mode */ }
+    });
+  }
+} catch { /* private mode / headless */ }
 function toggleMap() {
   mmOn = !mmOn;
   try { localStorage.setItem('mkr-map', mmOn ? '1' : '0'); } catch { /* private mode */ }
@@ -901,6 +919,7 @@ function animate() {
       if (finished >= list.length && game.raceOverAt === 0) game.raceOverAt = clockMs + 1200;
     }
     for (const k of list) k.sync(dt);
+    nameTags.update();   // 3D name tags follow the karts (WS 2P only)
     game.raceTime = Math.max(0, (clockMs - game.raceStart) / 1000);
     if (game.state !== 'finished') {
       updateHud(game.raceTime, Math.max(0, (clockMs - player.lapStart) / 1000), list);
@@ -945,7 +964,7 @@ function animate() {
 
 /* Read-only E2E hook for the Playwright gates (no-op in headless Node). */
 if (typeof window !== 'undefined') {
-  window.__mkr = { game, n2, player: () => player, racers: () => racers(), build: '' };
+  window.__mkr = { game, n2, player: () => player, racers: () => racers(), nameTags, build: '' };
   // BUILD tag: which server build is this page talking to (the /health commit
   // is CI-injected). A stale client build used to run old code silently after a
   // deploy — the tag makes a one-glance "am I on the latest?" check possible.

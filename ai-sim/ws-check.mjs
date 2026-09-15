@@ -52,6 +52,7 @@ const conn = () => new Promise((res, rej) => {
   ws.on('error', rej);
 });
 const drainMsg = (ws, type) => { for (let i = ws._buf.length - 1; i >= 0; i--) if (ws._buf[i][0] === type) ws._buf.splice(i, 1); };
+const decName = f => new TextDecoder().decode(f.subarray(3, 3 + f[2]));
 const nextMsg = (ws, type, timeout = 5000) => new Promise((res, rej) => {
   // already delivered? (splice it out so later reads don't get stale frames)
   for (let i = 0; i < ws._buf.length; i++) {
@@ -110,17 +111,25 @@ mark(h.ok === true && h.rooms === 0, 'health ok, 0 rooms');
 let lobby = await http('/rooms');
 mark(lobby.length === 0, 'lobby empty');
 
-// create room (host)
-const host = await connect('H', 'HOSTY');
-mark(host.ok === 1, `hello ok, code ${host.code}`);
+// create room (host) — real nicknames to verify the name exchange
+const host = await connect('H', 'ALFA');
+mark(host.ok === 1 && host.name === 'ALFA', `hello ok, code ${host.code}, name echoed ALFA`);
 lobby = await http('/rooms');
 mark(lobby.length === 1 && lobby[0].code === host.code && lobby[0].state === 'waiting', 'lobby shows the room (waiting)');
 
 // join
-const join = await connect('J', 'JOINR', host.code);
-mark(join.ok === 1 && join.idx === 1, 'joiner hello, slot 1');
+const join = await connect('J', 'BRAVO', host.code);
+mark(join.ok === 1 && join.idx === 1 && join.name === 'BRAVO', 'joiner hello, slot 1, name echoed BRAVO');
 const pj = await nextMsg(host.ws, 0x82);
-mark(pj[1] === 1, 'host got PEER_JOINED (slot 1)');
+mark(pj[1] === 1 && decName(pj) === 'BRAVO', 'host got PEER_JOINED (slot 1, name BRAVO)');
+// the joiner learns the host's name via a targeted PEER_JOINED (slot 0);
+// its own slot-1 broadcast arrives first
+let pjHost = null;
+for (let i = 0; i < 2 && !pjHost; i++) {
+  const f = await nextMsg(join.ws, 0x82);
+  if (f[1] === 0) pjHost = f;
+}
+mark(pjHost !== null && decName(pjHost) === 'ALFA', 'joiner learned the host name (slot 0, ALFA)');
 
 // track pick
 host.ws.send(encTrack(2, 1, 0));
@@ -177,6 +186,16 @@ mark(fin[2] >= 0 && fin[2] < 4, 'FINISH order[0] valid');
 join.ws.close();
 const pl = await nextMsg(host.ws, 0x81);
 mark(pl[1] === 1, 'host got PEER_LEFT (slot 1)');
+
+// the finished room lingers while the host stays (to re-race) — players 1
+lobby = await http('/rooms');
+const linger = lobby.find(r => r.code === host.code);
+mark(!!linger && linger.players === 1, 'finished room lingers while the host stays (players 1)');
+// the host also leaves → the empty room is dissolved + pruned from the lobby
+host.ws.close();
+await sleep(400);
+lobby = await http('/rooms');
+mark(!lobby.some(r => r.code === host.code), 'empty room pruned when the last player leaves');
 
 // host leaves → joiner... (joiner is gone) — new pair for the dissolve test
 const h2 = await connect('H', 'HOST2');

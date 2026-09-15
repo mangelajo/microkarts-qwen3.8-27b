@@ -102,6 +102,10 @@
   .conn-dot { width:14px; height:14px; border-radius:50%; background:#7fe39b; flex:none;
     box-shadow:0 0 8px #7fe39b; animation: connBlink 1.2s ease-in-out infinite; }
   .conn-txt { display:flex; flex-direction:column; gap:2px; }
+  #joinWait { font-size:18px; font-weight:700; letter-spacing:1px; color:#eaf0f8; line-height:1.3; }
+  .nick { font-size:15px; letter-spacing:1px; background:rgba(30,20,12,.85); border:1px solid #5a4a30;
+    color:#eaf0f8; border-radius:8px; padding:9px 12px; width:100%; box-sizing:border-box; margin-top:8px; }
+  .nick:focus { border-color:#ffd07a; outline:none; }
   @keyframes connBlink { 0%,100% { opacity:1; } 50% { opacity:.35; } }
   @keyframes connGlow { 0%,100% { border-color:rgba(120,220,140,.55); } 50% { border-color:rgba(120,220,140,.9); } }
   .btn.sm { font-size:13px; padding:9px 20px; }
@@ -241,6 +245,10 @@
       </div>
     </div>
     <div class="sub" id="multiHint">PICK A MODE — HOST THE RACE, OR JOIN WITH THE HOST'S CODE</div>
+    <div class="trk" id="nickWrap">
+      <div class="trk-label">YOUR NAME — SHOWN TO THE OTHER PLAYER</div>
+      <input type="text" class="nick" id="nickIn" maxlength="12" placeholder="P1" autocomplete="off" spellcheck="false" />
+    </div>
     <div class="net hidden" id="netPanel">
       <div id="hostPanel">
         <div class="trk-label">ROOM CODE — SHARE IT (OR P2 SCANS THE QR)</div>
@@ -257,7 +265,8 @@
           <div class="conn-dot"></div>
           <div class="conn-txt">
             <div class="trk-label">CONNECTED — room <span id="joinCodeEcho">—</span></div>
-            <div class="sub">waiting for the host to pick the track + press START…</div>
+            <div id="joinWait">WAITING FOR THE HOST TO START…</div>
+            <div class="sub">the host picks the track + presses START</div>
           </div>
         </div>
         <div id="joinJoinRow">
