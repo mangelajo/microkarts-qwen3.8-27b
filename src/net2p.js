@@ -477,10 +477,12 @@ export function createNet2p(ctx) {
     if (!clientRing || clientRing.size < 1) return;
     const nowA = performance.now();
     // --- monotonic render-time pacing (the cart can never rewind) ---
-    // dt is bounded: a backgrounded tab (a 1 s dt) must slide forward, not
-    // jump — an unbounded step would let renderT run past newest+80 and the
-    // hold clamp below would slide it BACK.
-    const step = Math.min(dt * 1000, 100);
+    // dt is bounded at 2× nominal (33 ms): a hitching render loop (a busy
+    // main thread, a backgrounded tab) must slide forward over the next
+    // few frames (the proportional drain below picks up the remainder),
+    // not jump — a 100 ms one-frame advance was the last visible pulse
+    // (a 6× flash the moment the loop caught up).
+    const step = Math.min(dt * 1000, 33);
     const newest = clientRing.newestAt();
     if (renderT <= 0) renderT = newest - targetDelay;   // (re)seed
     else if (renderT > newest) {
@@ -494,7 +496,7 @@ export function createNet2p(ctx) {
       // excess per frame (a 200 ms excess ≈ +6 ms/frame ≈ 1.35× real time —
       // a nearly invisible acceleration that decays as the buffer empties).
       const excess = Math.max(0, newest - targetDelay - renderT);
-      renderT = Math.min(renderT + step + excess * 0.03, newest + 80);
+      renderT = Math.min(renderT + step + Math.min(excess * 0.03, 33), newest + 80);
     }
     const st = sampleState(clientRing, renderT);
     if (!st || !game.net) return;
