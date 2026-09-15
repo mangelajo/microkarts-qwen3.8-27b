@@ -152,7 +152,7 @@ export function createNet2p(ctx) {
           }
           lastSeq = st.seq;
         }
-        if (renderT > 0 && renderT > clientRing.newestAt() + 80 && canGrow) {
+        if (renderT > 0 && renderT > clientRing.newestAt() + 300 && canGrow) {
           targetDelay = Math.min(350, targetDelay + 25); lastGrowAt = nowA2;   // starving — widen fast
         } else if (gapHist.length > 4) {
           const s = gapHist.slice().sort((a, b) => a - b);
@@ -162,6 +162,13 @@ export function createNet2p(ctx) {
           targetDelay = Math.max(floor, targetDelay - step);
         }
         if (!renderT) renderT = nowA - targetDelay;   // seed on the first frame
+        else if (renderT > clientRing.newestAt() + 500) {
+          // a real stall (the render point ran > 500 ms into the
+          // extrapolation, which sampleState clamps at 200 ms — the cart
+          // would sit frozen for the catch-up): re-seed to the target
+          // delay — a single controlled jump beats a 1.7 s freeze
+          renderT = nowA - targetDelay;
+        }
         clientRing.push(st, nowA);
         mirrorItemPickups(st);   // boxes are deterministic locally — no wire traffic
         game.net = st;
@@ -485,18 +492,23 @@ export function createNet2p(ctx) {
     const step = Math.min(dt * 1000, 33);
     const newest = clientRing.newestAt();
     if (renderT <= 0) renderT = newest - targetDelay;   // (re)seed
-    else if (renderT > newest) {
-      // starved: hold inside the extrapolation window (no advance, no slide back)
-      if (renderT > newest + 80) renderT = newest + 80;
-    } else {
+    else {
       // PROPORTIONAL catch-up (replaces the 3× fast-forward — the 3× pulse was
       // the last visible glitch: buffer fills at a steady rate, drains in a
       // 3× flash, repeats at a stable period = "advance, pause, advance").
-      // Now a deep buffer drains gradually: the extra advance is 3% of the
+      // A deep buffer drains gradually: the extra advance is 3% of the
       // excess per frame (a 200 ms excess ≈ +6 ms/frame ≈ 1.35× real time —
       // a nearly invisible acceleration that decays as the buffer empties).
+      //
+      // NO HOLD when starved: the render point keeps advancing (the sample
+      // extrapolates, bounded at 200 ms inside sampleState). Holding was
+      // the arrival flash — the cart froze during a delivery gap, then
+      // jumped the whole gap's motion the instant the next frame landed.
+      // Extrapolating keeps the cart at its last velocity across the gap,
+      // so the real frame lands on top of the guess: continuous motion.
+      // renderT is strictly monotonic (it never slides back).
       const excess = Math.max(0, newest - targetDelay - renderT);
-      renderT = Math.min(renderT + step + Math.min(excess * 0.03, 33), newest + 80);
+      renderT += step + Math.min(excess * 0.03, 33);
     }
     const st = sampleState(clientRing, renderT);
     if (!st || !game.net) return;
