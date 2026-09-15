@@ -52,6 +52,7 @@ export function createNet2p(ctx) {
   let lastStateAt = 0;
   let gapHist = [];                  // recent inter-frame gaps (ms)
   let lastSeq = null;               // last state-frame tick seq (u16)
+  let lastGrowAt = 0;              // cooldown for targetDelay growth
   let lastLagMs = 0;   // how old the sampled snapshot was (the real perceived delay)
   let clientLapSeen = [];
   let clientLapMark = []; // host-sim-ms of each kart's last detected line crossing
@@ -98,7 +99,7 @@ export function createNet2p(ctx) {
         if (prep.trackIdx !== getTrackIdx()) setTrack(prep.trackIdx); // mirror the host's pick
         netStartWall = performance.now();
         clientRing = new FrameRing(24);
-        gapHist.length = 0; lastSeq = null; renderT = 0;
+        gapHist.length = 0; lastSeq = null; renderT = 0; lastGrowAt = 0;
         clientLapSeen = ctx.racers().map(() => 0);
         clientLapMark = ctx.racers().map(() => 0);
         game.raceStart = netStartWall + prep.cdMs;
@@ -137,20 +138,28 @@ export function createNet2p(ctx) {
         lastStateAt = nowA;
         // --- adaptive target buffer (moves the clamps, never the render time) ---
         gapHist.push(gap); if (gapHist.length > 40) gapHist.shift();
+        // grow is rate-limited (500 ms cooldown) so one normal 60 Hz gap
+        // doesn't pin the target at the cap; a single missed frame (d = 2)
+        // is already covered by any 60 ms+ buffer, so only d ≥ 3 grows.
+        const nowA2 = performance.now();
+        const canGrow = nowA2 - lastGrowAt > 500;
         if (st.seq != null) {
           if (lastSeq != null) {
             const d = (st.seq - lastSeq) & 0xffff;   // u16 distance (handles wrap)
-            if (d > 1 && d < 0x8000) targetDelay = Math.min(350, targetDelay + 33);
+            if (d >= 3 && d < 0x8000 && canGrow) {
+              targetDelay = Math.min(350, targetDelay + 15); lastGrowAt = nowA2;
+            }
           }
           lastSeq = st.seq;
         }
-        if (renderT > 0 && renderT > clientRing.newestAt() + 80) {
-          targetDelay = Math.min(350, targetDelay + 25);   // starving — widen fast
+        if (renderT > 0 && renderT > clientRing.newestAt() + 80 && canGrow) {
+          targetDelay = Math.min(350, targetDelay + 25); lastGrowAt = nowA2;   // starving — widen fast
         } else if (gapHist.length > 4) {
           const s = gapHist.slice().sort((a, b) => a - b);
           const p95 = s[Math.min(s.length - 1, Math.floor(s.length * 0.95))];
           const floor = Math.max(60, Math.min(350, p95 * 1.2 + 15));
-          targetDelay = Math.max(floor, targetDelay - 2);  // drift slowly back
+          const step = targetDelay - floor > 100 ? 8 : 2;   // faster drain when far above
+          targetDelay = Math.max(floor, targetDelay - step);
         }
         if (!renderT) renderT = nowA - targetDelay;   // seed on the first frame
         clientRing.push(st, nowA);
@@ -203,7 +212,7 @@ export function createNet2p(ctx) {
     if (s && !s.closed) s.close(); // fires onClose → re-enters onPeerLost, guarded by s.closed
     host.acc = 0; lastNetInput.ping = -1;
     lastStateAt = 0;   // don't carry the drop's gap into the next session's buffer
-    gapHist.length = 0; lastSeq = null; renderT = 0;
+    gapHist.length = 0; lastSeq = null; renderT = 0; lastGrowAt = 0;
     if (s && s.role === 'join') {   // joiner lost the link: back to code entry
       setJoinUi('joining');
       joinMsg.textContent = 'CONNECTION LOST — enter the room code again (or re-scan the QR).';
@@ -409,7 +418,7 @@ export function createNet2p(ctx) {
     }
     game.laps = info.laps;
     clientRing = new FrameRing(24);
-    gapHist.length = 0; lastSeq = null; renderT = 0;
+    gapHist.length = 0; lastSeq = null; renderT = 0; lastGrowAt = 0;
     lastClientSp = 0;
     clientLapSeen = ctx.racers().map(() => 0);
     clientLapMark = ctx.racers().map(() => 0);
