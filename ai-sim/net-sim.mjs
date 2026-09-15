@@ -244,6 +244,17 @@ console.log('\n== boost pads: layout + chain model ==');
   // the fall state rides in the off-road byte (2 = fell): WS clients use it
   // for the floor-hit explosion + HUD; old peers see a plain off-road flag
   mark(k2.fellOff === true && k2.offRoad === true, 'state frame round-trips fellOff (floor-hit FX over the wire)');
+  // trailing tick seq (60 Hz wire): the modern encoder always writes it
+  // (default 0); only a *legacy peer's* frame lacks it → undefined
+  mark(d.seq === 0, 'state seq defaults to 0 (modern encoder)');
+  const d2 = decodeState(makeStateEncoder(2)(987654, 17, fake, 42), 2);
+  mark(d2.seq === 42, 'state round-trips the trailing tick seq');
+  mark(Math.abs(d2.karts[0].x - 1.5) < 1e-5 && d2.hostMs === 987654, 'new frame (with seq) still decodes the prefix');
+  // backward compat: a pre-seq (legacy) frame — the new decoder reads the
+  // prefix, seq = undefined; old decoders ignore the trailing 2 bytes
+  const legacy = new Uint8Array(enc(987654, 17, fake)).slice(0, -2);
+  const dl = decodeState(legacy.buffer, 2);
+  mark(dl.seq === undefined && dl.hostMs === 987654 && Math.abs(dl.karts[0].x - 1.5) < 1e-5, 'legacy state frame (no seq) decodes — old peers keep working');
 }
 {
   // legacy: a pre-item peer sends 28-byte karts (no item) — decode item = 0

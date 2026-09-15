@@ -38,7 +38,15 @@ const http = (p) => fetch(`${BASE}${p}`).then(r => r.json());
 const conn = () => new Promise((res, rej) => {
   const ws = new WebSocket(WS);
   ws._buf = [];   // buffer every frame — nextMsg may be registered after delivery
-  const tap = (data) => ws._buf.push(new Uint8Array(data));
+  ws._waitingFor = null;
+  const tap = (data) => {
+    const u = new Uint8Array(data);
+    // a nextMsg 'h' handler is waiting for this type: it will resolve the
+    // frame itself — don't buffer a second copy (double-bookkeeping made
+    // the next nextMsg read the same frame twice)
+    if (ws._waitingFor !== null && u[0] === ws._waitingFor) return;
+    ws._buf.push(u);
+  };
   ws.on('message', tap);
   ws.on('open', () => res(ws));
   ws.on('error', rej);
@@ -49,12 +57,13 @@ const nextMsg = (ws, type, timeout = 5000) => new Promise((res, rej) => {
   for (let i = 0; i < ws._buf.length; i++) {
     if (ws._buf[i][0] === type) return res(ws._buf.splice(i, 1)[0]);
   }
-  const to = setTimeout(() => { ws.off('message', h); rej(new Error(`timeout waiting for 0x${type.toString(16)}`)); }, timeout);
+  const to = setTimeout(() => { ws.off('message', h); ws._waitingFor = null; rej(new Error(`timeout waiting for 0x${type.toString(16)}`)); }, timeout);
   const h = (data) => {
     const d = new Uint8Array(data);
     if (d[0] !== type) return;
-    clearTimeout(to); ws.off('message', h); res(d);
+    clearTimeout(to); ws.off('message', h); ws._waitingFor = null; res(d);
   };
+  ws._waitingFor = type;
   ws.on('message', h);
 });
 const connect = async (kind, name, code) => {
@@ -129,11 +138,15 @@ mark(new DataView(prep.buffer).getUint32(2) === 3000, 'PREP echo received (cdMs 
 const stEcho = await nextMsg(host.ws, 0x03);
 mark(stEcho[1] === 4 && stEcho[2] === 3, 'START echo: 4 karts, 3 laps');
 
-// state frames at 30 Hz (countdown, karts parked on the grid)
+// state frames at 60 Hz (countdown, karts parked on the grid)
 const s0 = await nextMsg(join.ws, 0x20);
 const v0 = new DataView(s0.buffer);
 mark(v0.getFloat32(7) < 0.01, 'state frame: kart0 x ≈ grid (countdown parked)');
-mark(s0.length >= 7 + 4 * 29, 'state frame stride = 29 B/kart');
+mark(s0.length >= 7 + 4 * 29 + 2, 'state frame stride = 29 B/kart + trailing seq');
+const s1b = await nextMsg(join.ws, 0x20);
+const seq0 = new DataView(s0.buffer).getUint16(7 + 4 * 29);
+const seq1 = new DataView(s1b.buffer).getUint16(7 + 4 * 29);
+mark(seq1 !== seq0, 'state frames carry an incrementing tick seq (client gap detection)');
 
 // input → the joiner's kart (slot 1) accelerates (the loop outlasts the 3.7 s
 // countdown so the final frame is well into racing)

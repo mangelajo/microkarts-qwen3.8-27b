@@ -75,6 +75,7 @@ export function createRoom(code, ownerName) {
     });
     room.t = 0;
     room.tick = 0;
+    room.seq = 0;
     room.raceDoneAt = Array.from({ length: info.karts }, () => 0);
     room.enc = makeStateEncoder(info.karts);
   };
@@ -116,8 +117,11 @@ export function createRoom(code, ownerName) {
         room.announce(new Uint8Array(encFinish(order, room.raceDoneAt)).buffer);
       }
     }
-    if ((room.tick & 1) === 0) {           // 30 Hz on the wire
-      const buf = room.enc(room.t, 0, room.karts);
+    if (room.state === 'countdown' || room.state === 'racing' || room.state === 'finished') {
+      // 60 Hz on the wire (the 30 Hz gate made internet jitter visible —
+      // ~7 KB/s with 4 karts, trivial). seq = tick, trailing in the frame.
+      room.seq = (room.seq + 1) & 0xffff;
+      const buf = room.enc(room.t, 0, room.karts, room.seq);
       room.announce(buf);
     }
   };

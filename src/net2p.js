@@ -37,13 +37,18 @@ export function createNet2p(ctx) {
   const host = { t: 0, acc: 0, enc: null }; // host sim clock (ms) + state encoder (set by game.js startRace)
   let lastNetInput = { throttle: 0, steer: 0, drift: false, use: false, ping: -1, at: 0 };
   let clientRing = null;
-  // adaptive interpolation delay: the relay delivers state frames in bursts
-  // (long-poll tick + HTTP overhead), so a fixed 50 ms buffer is smaller
-  // than the delivery gap and the mirror catches up in visible jumps.
-  // Track the arrival gap and hold the buffer at ~1.5x the recent gap
-  // (clamped 100–350 ms) — the camera lerp + 30 Hz wire absorb the rest.
+  // adaptive interpolation delay (p95 jitter + asymmetric adaptation).
+  // The old law chased the *last* inter-frame gap (clamp(gap*1.5+30,100,350))
+  // — on the internet gaps swing (33→120→33 ms) and the render point
+  // oscillated: freeze, nudge, freeze — the "glitchy" feel. New law:
+  //   * p95 of the last ~40 gaps sets the target floor
+  //   * starving (render point ahead of the newest data) → +25 ms/frame (fast)
+  //   * otherwise shrink 2 ms/frame toward the floor (slow)
+  //   * a seq gap (a frame was dropped/late) → +33 ms preemptively
   let interpDelayMs = INTERP_DELAY;   // until the first frame arrives
   let lastStateAt = 0;
+  let gapHist = [];                  // recent inter-frame gaps (ms)
+  let lastSeq = null;               // last state-frame tick seq (u16)
   let lastLagMs = 0;   // how old the sampled snapshot was (the real perceived delay)
   let clientLapSeen = [];
   let clientLapMark = []; // host-sim-ms of each kart's last detected line crossing
@@ -89,7 +94,8 @@ export function createNet2p(ctx) {
         if (role() !== 'join' && !wsMode()) return;
         if (prep.trackIdx !== getTrackIdx()) setTrack(prep.trackIdx); // mirror the host's pick
         netStartWall = performance.now();
-        clientRing = new FrameRing();
+        clientRing = new FrameRing(24);
+        gapHist.length = 0; lastSeq = null;
         clientLapSeen = ctx.racers().map(() => 0);
         clientLapMark = ctx.racers().map(() => 0);
         game.raceStart = netStartWall + prep.cdMs;
@@ -126,8 +132,23 @@ export function createNet2p(ctx) {
         const nowA = performance.now();
         const gap = lastStateAt ? nowA - lastStateAt : 100;
         lastStateAt = nowA;
-        const target = Math.max(100, Math.min(350, gap * 1.5 + 30));
-        interpDelayMs = target;   // follow the gap closely (frames are 30 Hz — the buffer is ~2-3 frames)
+        // --- adaptive buffer (see the interpDelayMs declaration) ---
+        gapHist.push(gap); if (gapHist.length > 40) gapHist.shift();
+        if (st.seq != null) {
+          if (lastSeq != null) {
+            const d = (st.seq - lastSeq) & 0xffff;   // u16 distance (handles wrap)
+            if (d > 1 && d < 0x8000) interpDelayMs = Math.min(350, interpDelayMs + 33);
+          }
+          lastSeq = st.seq;
+        }
+        if (nowA - interpDelayMs > clientRing.newestAt()) {
+          interpDelayMs = Math.min(350, interpDelayMs + 25);   // starving — grow fast
+        } else {
+          const s = gapHist.slice().sort((a, b) => a - b);
+          const p95 = s[Math.min(s.length - 1, Math.floor(s.length * 0.95))];
+          const floor = Math.max(60, Math.min(350, p95 * 1.2 + 15));
+          interpDelayMs = Math.max(floor, interpDelayMs - 2);  // shrink slowly
+        }
         clientRing.push(st, nowA);
         mirrorItemPickups(st);   // boxes are deterministic locally — no wire traffic
         game.net = st;
@@ -178,6 +199,7 @@ export function createNet2p(ctx) {
     if (s && !s.closed) s.close(); // fires onClose → re-enters onPeerLost, guarded by s.closed
     host.acc = 0; lastNetInput.ping = -1;
     lastStateAt = 0;   // don't carry the drop's gap into the next session's buffer
+    gapHist.length = 0; lastSeq = null;
     if (s && s.role === 'join') {   // joiner lost the link: back to code entry
       setJoinUi('joining');
       joinMsg.textContent = 'CONNECTION LOST — enter the room code again (or re-scan the QR).';
@@ -382,7 +404,8 @@ export function createNet2p(ctx) {
         ctx.racers()[i].setColor(PAL[i][0], PAL[i][1]);
     }
     game.laps = info.laps;
-    clientRing = new FrameRing();
+    clientRing = new FrameRing(24);
+    gapHist.length = 0; lastSeq = null;
     lastClientSp = 0;
     clientLapSeen = ctx.racers().map(() => 0);
     clientLapMark = ctx.racers().map(() => 0);

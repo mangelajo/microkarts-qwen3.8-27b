@@ -73,9 +73,13 @@ export function decInput(d) {
     drift: (flags & 1) !== 0, use: (flags & 2) !== 0 };
 }
 export function makeStateEncoder(kartN) {
-  const buf = new ArrayBuffer(1 + 4 + 2 + kartN * KART_BYTES);
-  const v = new DataView(buf); v.setUint8(0, T_STATE);
-  return (hostMs, echoPing, karts) => {
+  // a FRESH buffer per call: the ws send queue holds a reference, so a
+  // shared buffer would be overwritten by the next tick before the
+  // previous frame flushed (frames delivered with the *next* tick's
+  // contents — visible as duplicated/stale state over the wire).
+  return (hostMs, echoPing, karts, seq = 0) => {
+    const buf = new ArrayBuffer(1 + 4 + 2 + kartN * KART_BYTES + 2);
+    const v = new DataView(buf); v.setUint8(0, T_STATE);
     v.setUint32(1, hostMs & 0xffffffff); v.setUint16(5, echoPing & 0xffff);
     let o = 7;
     for (let i = 0; i < karts.length; i++) {
@@ -92,6 +96,7 @@ export function makeStateEncoder(kartN) {
       v.setUint8(o, k.raceDone ? 1 : 0); o += 1;
       v.setUint8(o, k.item ?? 0); o += 1;
     }
+    v.setUint16(7 + kartN * KART_BYTES, seq & 0xffff);   // trailing — old decoders read the prefix and ignore the tail
     return buf;
   };
 }
@@ -123,7 +128,10 @@ export function decodeState(d, kartN) {
     karts[i].item = stride === KART_BYTES ? v.getUint8(o + 24 + f) : 0;
     o += stride;
   }
-  return { hostMs: v.getUint32(1), echoPing: v.getUint16(5), karts };
+  const tail = 7 + kartN * stride;
+  // trailing seq (60 Hz wire): absent on legacy frames → undefined
+  const seq = v.byteLength >= tail + 2 ? v.getUint16(tail) : undefined;
+  return { hostMs: v.getUint32(1), echoPing: v.getUint16(5), karts, seq };
 }
 export function encFinish(order, finalLapsMs) {
   const n = order.length;

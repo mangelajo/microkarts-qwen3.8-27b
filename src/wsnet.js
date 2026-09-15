@@ -178,9 +178,15 @@ export class WSSession {
         return;
       }
       case T_STATE:  // 0x20 — decode before the cb (the n2 contract is decoded st)
-        // the frame is length-derived (1 + 4 + 2 + kartN*29): 1v1 races send
-        // 2-kart frames, so never trust a cached kartN for the stride
-        if (this._cbs.state) this._cbs.state(decodeState(d, Math.max(1, (d.byteLength - 7) / 29)));
+        // the frame is length-derived: modern = 7 + kartN*29 + 2 (trailing
+        // seq), legacy = 7 + kartN*29 (no seq). 1v1 races send 2-kart
+        // frames, so never trust a cached kartN for the stride.
+        {
+          const modern = (d.byteLength - 9) % 29 === 0 && d.byteLength >= 9 + 29;
+          const kartN = modern ? (d.byteLength - 9) / 29
+            : Math.max(1, Math.floor((d.byteLength - 7) / 29));
+          if (this._cbs.state) this._cbs.state(decodeState(d, kartN));
+        }
         return;
       case T_FINISH: {  // 0x30
         if (this._cbs.finish) this._cbs.finish(decFinish(d));
@@ -195,11 +201,11 @@ export class WSSession {
     }
   }
 
-  /** 30 Hz rate gate with drift/use edge bypass — same contract as the relay. */
+  /** 60 Hz rate gate with drift/use edge bypass — same contract as the relay. */
   sendInput(throttle, steer, drift, use) {
     if (!this.connected || !this._ws || this._ws.readyState !== 1) return;
     const now = performance.now();
-    if (now - this._inAt < 33 && !!use === this._inUse && !!drift === this._inDrift) return;
+    if (now - this._inAt < 16 && !!use === this._inUse && !!drift === this._inDrift) return;
     this._inAt = now; this._inUse = !!use; this._inDrift = !!drift;
     this._ws.send(encInput(throttle, steer, 0, drift, use));
   }
