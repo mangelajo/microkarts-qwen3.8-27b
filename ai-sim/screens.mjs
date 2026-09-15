@@ -62,13 +62,12 @@ try { await listen(PORT); } catch { await listen(0); }   // PORT busy -> OS pick
 const PORT_ACTUAL = server.address().port;
 console.log(`screens: serving ${ROOT} at http://localhost:${PORT_ACTUAL}`);
 const browser = await chromium.launch({
-  args: [
-    // CI runners (ubuntu-latest) + Docker: these three are the usual
-    // headless-chromium killers (sandbox / shared-memory / GPU).
-    '--no-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-gpu',
-  ],
+  // CI runners (ubuntu-latest) + containers: the chromium *sandbox* is
+  // the usual headless killer (GPU process error 1002 / dbus noise).
+  // chromiumSandbox:false is the playwright-native switch; the raw flags
+  // cover the rest (shared memory + GPU).
+  chromiumSandbox: false,
+  args: ['--disable-dev-shm-usage', '--disable-gpu'],
 });
 
 let failed = false;

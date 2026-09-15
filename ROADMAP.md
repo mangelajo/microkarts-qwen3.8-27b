@@ -18,11 +18,16 @@ flat tracks stay flat.
   over the wire for both devices' floor-hit FX, live 1/2 → 2/2 host
   screen with a start gate; **smoothness pass: 60 Hz state wire +
   trailing tick seq (drop/late detection, backward-compatible) +
-  p95-jitter adaptive buffer (grow-fast/shrink-slow, 60–350 ms) +
-  60 Hz input + fresh-buffer-per-frame encoder (no ws send-queue
-  aliasing)** — measured over the real internet: buffer settles at
-  p95 with a 60 ms floor (was 100 ms) and no more gap-chasing
-  oscillation), deployed as one container — static + `/ws`
+  monotonic render-time pacing — the render target can never move
+  backward (the old delay-chasing law slid the sampled moment back on
+  every delay change = the advance/rewind sawtooth); the p95-jitter
+  buffer only moves the clamps (3× bounded catch-up, newest+80 hold),
+  60 ms floor; growth is rate-limited so normal 60 Hz bursts don't pin
+  the target at the cap; 60 Hz input + fresh-buffer-per-frame encoder
+  (no ws send-queue aliasing)** — measured over the real internet:
+  zero rendered-position rewinds in 2,400 samples, buffer settles at
+  the p95 floor (~130 ms on a bursty connection) with no oscillation),
+  deployed as one container — static + `/ws`
   + `/rooms` on a single port (zero-config multiplayer). WebRTC/LAN and
   the PHP relay paths removed
 - Drift → boost → pads + perfect drift; 4 item-box rewards (turbo / timed
