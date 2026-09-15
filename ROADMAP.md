@@ -19,15 +19,18 @@ flat tracks stay flat.
   screen with a start gate; **smoothness pass: 60 Hz state wire +
   trailing tick seq (drop/late detection, backward-compatible) +
   monotonic render-time pacing — the render target can never move
-  backward (the old delay-chasing law slid the sampled moment back on
-  every delay change = the advance/rewind sawtooth); the p95-jitter
-  buffer only moves the clamps (3× bounded catch-up, newest+80 hold),
-  60 ms floor; growth is rate-limited so normal 60 Hz bursts don't pin
-  the target at the cap; 60 Hz input + fresh-buffer-per-frame encoder
-  (no ws send-queue aliasing)** — measured over the real internet:
-  zero rendered-position rewinds in 2,400 samples, buffer settles at
-  the p95 floor (~130 ms on a bursty connection) with no oscillation),
-  deployed as one container — static + `/ws`
+  backward; no-hold extrapolation (the render point advances through
+  delivery gaps on the bounded 200 ms extrapolation, so the arrival
+  flash — cart freezes then jumps the gap's motion — is gone);
+  proportional catch-up drain (a deep buffer drains at ~1.35× max,
+  decaying to 1× — no 3× fast-forward pulse); per-frame advance
+  capped at 2× nominal (a hitching main thread slides over a few
+  frames, never a 6× flash); re-seed after >500 ms of real stall;
+  60 Hz input + fresh-buffer-per-frame encoder (no ws send-queue
+  aliasing)** — measured over the real internet: server tick clean
+  (p95 18 ms, zero gaps >300 ms in 3,707 frames), zero rendered-
+  position rewinds, no periodic drain pulse; `/health` exposes the
+  build's git commit), deployed as one container — static + `/ws`
   + `/rooms` on a single port (zero-config multiplayer). WebRTC/LAN and
   the PHP relay paths removed
 - Drift → boost → pads + perfect drift; 4 item-box rewards (turbo / timed

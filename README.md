@@ -151,10 +151,15 @@ take in the catalogue. All track shapes are validated headlessly.
   drift/item edge is never rate-gated), the server broadcasts state at
   60 Hz (with a trailing u16 tick **seq** the client uses for drop/late
   detection — legacy frames decode with `seq = undefined`, old clients
-  ignore the trailing bytes), and the client renders through a **p95-jitter
-  adaptive interpolation buffer** (grows fast on starvation, shrinks slowly
-  toward `p95×1.2+15`, 60–350 ms floor/cap) + a PING/PONG RTT
-  readout. Input ownership is explicit: a **connected human always owns
+  ignore the trailing bytes), and the client renders through **monotonic
+  render-time pacing with no-hold extrapolation** (the render point can
+  never move backward; it advances through delivery gaps on the bounded
+  200 ms extrapolation so the next frame lands on top of the guess with
+  no arrival flash; a deep buffer drains proportionally at ~1.35× max —
+  never a 3× flash; per-frame advance capped at 2× nominal so a
+  hitching main thread slides over a few frames) + a PING/PONG RTT
+  readout. `/health` exposes the build's git commit (CI-injected) so the
+  deployed version is checkable over the wire. Input ownership is explicit: a **connected human always owns
   their kart** (no key input = a parked kart — the server never drives it),
   and a **dropped** human's kart is silently AI-driven (the race
   continues); a host drop dissolves the room (the joiner is kicked back to
