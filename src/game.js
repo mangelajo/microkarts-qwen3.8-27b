@@ -665,8 +665,20 @@ function snapChaseCam(dt) {
 const clock = new THREE.Clock();
 const menuLook = new THREE.Vector3(0, 0, 5);
 
+/* main-thread health: the rAF gap (a big gap = the tab's main thread was
+   busy — the whole page froze; a small gap + a big NET gap = the frames
+   stopped arriving). 5 s rolling max. */
+let lastLoopT = 0, rafMax = 0, rafMaxAt = 0;
+
 function animate() {
   requestAnimationFrame(animate);
+  const rafNow = performance.now();
+  if (lastLoopT) {
+    const g = rafNow - lastLoopT;
+    if (rafNow - rafMaxAt > 5000) { rafMax = 0; rafMaxAt = rafNow; }
+    rafMax = Math.max(rafMax, g);
+  }
+  lastLoopT = rafNow;
   game.dt = Math.min(clock.getDelta(), 0.05);
   const dt = game.dt;
   const now = performance.now();
@@ -678,6 +690,20 @@ function animate() {
   tickScenery(now * 0.001);   // crystals pulse, beacon rotates, buoys bob
   const list = racers();
   const role = n2.role();
+  // netplay debug line (1 Hz DOM update): NET = worst state-frame arrival gap
+  // over the last 10 s on THIS browser's WS path (Traefik included), RAF =
+  // worst main-thread frame gap over 5 s, BUF = live buffer depth, EXT = how
+  // far the render point is extrapolating past the newest frame.
+  // A whole-page freeze shows as big RAF; a kart-only freeze as big NET.
+  if (role && now - (animate._dbgAt || 0) > 1000) {
+    animate._dbgAt = now;
+    const d = n2.netDebug ? n2.netDebug() : null;
+    const elD = document.getElementById('netDebug');
+    if (elD && d) {
+      elD.style.display = '';
+      elD.textContent = `NET ${d.netMax.toFixed(0)}ms${d.netMaxN > 2 ? ' x' + d.netMaxN : ''} · RAF ${rafMax.toFixed(0)}ms · BUF ${d.bufMs.toFixed(0)}ms · EXT ${d.extMs.toFixed(0)}ms`;
+    } else if (elD) elD.style.display = 'none';
+  }
   // reactive props (cosmetic): a kart near a roadside prop spins/wobbles it —
   // runs before the sim step, so contact is one frame behind (imperceptible)
   tickProps(dt, list);

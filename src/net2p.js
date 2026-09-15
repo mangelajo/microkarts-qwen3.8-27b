@@ -51,6 +51,8 @@ export function createNet2p(ctx) {
   let targetDelay = INTERP_DELAY;  // desired buffer, p95-adapted (60–350 ms)
   let lastStateAt = 0;
   let gapHist = [];                  // recent inter-frame gaps (ms)
+  let gap10Max = 0, gap10MaxN = 0, gap10At = 0;   // 10 s rolling worst (the debug line)
+  let extRunMs = 0;               // render point ahead of the newest frame (extrapolation)
   let lastSeq = null;               // last state-frame tick seq (u16)
   let lastGrowAt = 0;              // cooldown for targetDelay growth
   let lastLagMs = 0;   // how old the sampled snapshot was (the real perceived delay)
@@ -99,7 +101,7 @@ export function createNet2p(ctx) {
         if (prep.trackIdx !== getTrackIdx()) setTrack(prep.trackIdx); // mirror the host's pick
         netStartWall = performance.now();
         clientRing = new FrameRing(24);
-        gapHist.length = 0; lastSeq = null; renderT = 0; lastGrowAt = 0;
+        gapHist.length = 0; lastSeq = null; renderT = 0; lastGrowAt = 0; gap10Max = 0; gap10MaxN = 0; extRunMs = 0;
         clientLapSeen = ctx.racers().map(() => 0);
         clientLapMark = ctx.racers().map(() => 0);
         game.raceStart = netStartWall + prep.cdMs;
@@ -138,6 +140,8 @@ export function createNet2p(ctx) {
         lastStateAt = nowA;
         // --- adaptive target buffer (moves the clamps, never the render time) ---
         gapHist.push(gap); if (gapHist.length > 40) gapHist.shift();
+        if (nowA - gap10At > 10000) { gap10Max = 0; gap10MaxN = 0; gap10At = nowA; }
+        if (gap > gap10Max) { gap10Max = gap; gap10MaxN = 1; } else if (Math.abs(gap - gap10Max) < 2) gap10MaxN++;
         // grow is rate-limited (500 ms cooldown) so one normal 60 Hz gap
         // doesn't pin the target at the cap; a single missed frame (d = 2)
         // is already covered by any 60 ms+ buffer, so only d ≥ 3 grows.
@@ -219,7 +223,7 @@ export function createNet2p(ctx) {
     if (s && !s.closed) s.close(); // fires onClose → re-enters onPeerLost, guarded by s.closed
     host.acc = 0; lastNetInput.ping = -1;
     lastStateAt = 0;   // don't carry the drop's gap into the next session's buffer
-    gapHist.length = 0; lastSeq = null; renderT = 0; lastGrowAt = 0;
+    gapHist.length = 0; lastSeq = null; renderT = 0; lastGrowAt = 0; gap10Max = 0; gap10MaxN = 0; extRunMs = 0;
     if (s && s.role === 'join') {   // joiner lost the link: back to code entry
       setJoinUi('joining');
       joinMsg.textContent = 'CONNECTION LOST — enter the room code again (or re-scan the QR).';
@@ -425,7 +429,7 @@ export function createNet2p(ctx) {
     }
     game.laps = info.laps;
     clientRing = new FrameRing(24);
-    gapHist.length = 0; lastSeq = null; renderT = 0; lastGrowAt = 0;
+    gapHist.length = 0; lastSeq = null; renderT = 0; lastGrowAt = 0; gap10Max = 0; gap10MaxN = 0; extRunMs = 0;
     lastClientSp = 0;
     clientLapSeen = ctx.racers().map(() => 0);
     clientLapMark = ctx.racers().map(() => 0);
@@ -509,6 +513,7 @@ export function createNet2p(ctx) {
       // renderT is strictly monotonic (it never slides back).
       const excess = Math.max(0, newest - targetDelay - renderT);
       renderT += step + Math.min(excess * 0.03, 33);
+      extRunMs = Math.max(0, renderT - newest);
     }
     const st = sampleState(clientRing, renderT);
     if (!st || !game.net) return;
@@ -691,6 +696,7 @@ export function createNet2p(ctx) {
     input: () => lastNetInput,
     inputNow: (t, s, d, u) => net && net.sendInput && net.sendInput(t, s, d, u),
     interpDelayMs: () => clientRing ? Math.max(0, clientRing.newestAt() - renderT) : 0,   // live buffer depth (the probe + HUD read this)
+    netDebug: () => ({ netMax: gap10Max, netMaxN: gap10MaxN, bufMs: clientRing ? Math.max(0, clientRing.newestAt() - renderT) : 0, extMs: extRunMs }),
     lastLagMs: () => lastLagMs,
     resetClientItems: () => { clientItemSeen = ctx.racers().map(() => false); },
     applyClientState,
