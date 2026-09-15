@@ -48,6 +48,7 @@
   #minimap .mm-label { font-size:9px; letter-spacing:3px; color:#d8b07f; }
   #minimap.hidden { display:none; }
   #mutes { bottom:18px; left:176px; display:flex; gap:14px; pointer-events:none; }
+  #buildTag { bottom:20px; left:14px; font-size:10px; letter-spacing:2px; color:#d8b07f; opacity:.55; pointer-events:none; }
   #muteMusic, #muteSfx { font-size:12px; letter-spacing:2px; color:#d8b07f; cursor:pointer; pointer-events:auto; opacity:.75; }
   #muteMusic.on, #muteSfx.on { color:#ff9d6b; opacity:1; }
 
@@ -205,6 +206,7 @@
 <div class="hud" id="minimap"><canvas id="minimapCanvas" width="132" height="132"></canvas><div class="mm-label">MAP</div></div>
 <div id="netStatus"></div>
 <div class="hud" id="mutes"><span id="muteMusic" title="Music on/off (M)">MUSIC</span><span id="muteSfx" title="SFX on/off (N)">SFX</span></div>
+<div class="hud" id="buildTag"></div>
 <div class="hud" id="countdown"></div>
 
 <div id="overlay">

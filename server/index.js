@@ -90,7 +90,7 @@ const httpSrv = http.createServer(async (req, res) => {
     const buf = await readFile(file);
     res.writeHead(200, {
       'Content-Type': TYPES[extname(file)] || 'application/octet-stream',
-      'Cache-Control': 'no-cache',
+      'Cache-Control': 'no-store',   // never cache — a stale client build silently runs old code after a deploy
     });
     res.end(buf);
   } catch (e) {

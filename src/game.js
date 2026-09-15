@@ -899,6 +899,17 @@ function animate() {
 }
 
 /* Read-only E2E hook for the Playwright gates (no-op in headless Node). */
-if (typeof window !== 'undefined') window.__mkr = { game, n2, player: () => player, racers: () => racers() };
+if (typeof window !== 'undefined') {
+  window.__mkr = { game, n2, player: () => player, racers: () => racers(), build: '' };
+  // BUILD tag: which server build is this page talking to (the /health commit
+  // is CI-injected). A stale client build used to run old code silently after a
+  // deploy — the tag makes a one-glance "am I on the latest?" check possible.
+  fetch('/health').then(r => r.json())
+    .then(h => {
+      window.__mkr.build = (h.commit || 'dev').slice(0, 7);
+      const t = document.getElementById('buildTag');
+      if (t) t.textContent = 'BUILD ' + window.__mkr.build;
+    }).catch(() => {});
+}
 
 animate();
